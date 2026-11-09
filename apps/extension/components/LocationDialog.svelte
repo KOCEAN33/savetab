@@ -2,6 +2,7 @@
   import { copyItems, moveItems, type Id, type Item, type ListView } from '@savetab/core';
   import { touchRecent } from '@/lib/recent';
   import { act, chooser } from '@/lib/ui.svelte';
+  import { t, tn } from '@/lib/i18n';
 
   let { view }: { view: ListView } = $props();
 
@@ -14,9 +15,9 @@
   }
 
   function label(item: Item): string {
-    if (item.kind === 'folder') return item.title || 'Untitled folder';
+    if (item.kind === 'folder') return item.title || t('untitledFolder');
     const n = view.tabs(item.id).length;
-    return item.title || `${n} ${n === 1 ? 'tab' : 'tabs'}`;
+    return item.title || tn('tabCount', n);
   }
 
   /** Tabs go into groups. Groups and folders go into folders, never into themselves. */
@@ -24,7 +25,7 @@
     if (!chooser.mode) return [];
     const tabsOnly = chooser.ids.every((id) => view.get(id)?.kind === 'tab');
     const moving = new Set(chooser.ids);
-    const out: Target[] = tabsOnly ? [] : [{ id: null, path: 'All tabs' }];
+    const out: Target[] = tabsOnly ? [] : [{ id: null, path: t('allTabs') }];
     const walk = (parentId: Id | null, prefix: string) => {
       for (const item of view.children(parentId)) {
         if (item.kind === 'tab' || moving.has(item.id)) continue;
@@ -67,15 +68,15 @@
   }
 </script>
 
-<dialog class="dialog" bind:this={dialog} aria-label={chooser.mode === 'copy' ? 'Copy to' : 'Move to'} onclose={close}>
-  <h2 class="section-title">{chooser.mode === 'copy' ? 'Copy to' : 'Move to'}</h2>
-  <input type="text" aria-label="Find a location" placeholder="Find a location" bind:value={query} />
+<dialog class="dialog" bind:this={dialog} aria-label={chooser.mode === 'copy' ? t('copyTo') : t('moveTo')} onclose={close}>
+  <h2 class="section-title">{chooser.mode === 'copy' ? t('copyTo') : t('moveTo')}</h2>
+  <input type="text" aria-label={t('findLocation')} placeholder={t('findLocation')} bind:value={query} />
   <ul class="dialog-list">
     {#each targets as t (t.id ?? '')}
       <li><button class="link-button" onclick={() => choose(t.id)}>{t.path}</button></li>
     {:else}
-      <li class="meta">No matching location.</li>
+      <li class="meta">{t('noLocation')}</li>
     {/each}
   </ul>
-  <button class="button" onclick={close}>Cancel</button>
+  <button class="button" onclick={close}>{t('cancel')}</button>
 </dialog>

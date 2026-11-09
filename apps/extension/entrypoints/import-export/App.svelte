@@ -3,6 +3,7 @@
   import { browser } from 'wxt/browser';
   import { exportText, importGroups, ListView, parseImportText, type ItemRecord } from '@savetab/core';
   import { db, transact } from '@/lib/db';
+  import { t, tn } from '@/lib/i18n';
 
   const records = liveQuery(() => db.items.toArray());
 
@@ -11,6 +12,8 @@
     return exportText(view.groups(null).map((g) => view.tabs(g.id).map((t) => ({ url: t.url, title: view.title(t) }))));
   });
 
+  const importHint = t('importHint').split('{format}');
+
   let input = $state('');
   let result = $state('');
 
@@ -18,30 +21,30 @@
     const groups = parseImportText(input);
     const count = groups.reduce((n, g) => n + g.length, 0);
     if (count === 0) {
-      result = 'No links found. Each line needs a URL with its protocol, such as https://example.com | Title';
+      result = t('noLinksFound');
       return;
     }
     await transact((tx) => importGroups(tx, groups.map((g) => g.map((t) => ({ ...t, favIconUrl: '' })))));
-    result = `Imported ${count} ${count === 1 ? 'tab' : 'tabs'} in ${groups.length} ${groups.length === 1 ? 'group' : 'groups'}.`;
+    result = t('imported', { tabs: tn('tabCount', count), groups: tn('groupCount', groups.length) });
     input = '';
   }
 </script>
 
 <main>
   <header class="page-header">
-    <h1 class="page-total">Import / Export</h1>
-    <nav class="page-nav"><a class="link-button" href={browser.runtime.getURL('/onetab.html')}>Back to savetab</a></nav>
+    <h1 class="page-total">{t('importExportTitle')}</h1>
+    <nav class="page-nav"><a class="link-button" href={browser.runtime.getURL('/onetab.html')}>{t('backToSavetab')}</a></nav>
   </header>
 
-  <h2 class="section-title">Export</h2>
-  <p class="meta">This list can be imported into savetab or OneTab on this or another computer.</p>
-  <textarea class="text-block" readonly aria-label="Exported links" value={exported}></textarea>
+  <h2 class="section-title">{t('exportTitle')}</h2>
+  <p class="meta">{t('exportHint')}</p>
+  <textarea class="text-block" readonly aria-label={t('exportedLinks')} value={exported}></textarea>
 
-  <h2 class="section-title">Import</h2>
-  <p class="meta">One link per line as <code>URL | Title</code>. A blank line starts a new group.</p>
-  <textarea class="text-block" aria-label="Links to import" bind:value={input} oninput={() => (result = '')}></textarea>
+  <h2 class="section-title">{t('importTitle')}</h2>
+  <p class="meta">{importHint[0]}<code>URL | Title</code>{importHint[1]}</p>
+  <textarea class="text-block" aria-label={t('linksToImport')} bind:value={input} oninput={() => (result = '')}></textarea>
   <p class="row">
-    <button class="button button-primary" onclick={runImport}>Import</button>
+    <button class="button button-primary" onclick={runImport}>{t('import')}</button>
     <span role="status">{result}</span>
   </p>
 </main>

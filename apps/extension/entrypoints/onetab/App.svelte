@@ -26,6 +26,7 @@
   import { touchRecent } from '@/lib/recent';
   import { navigate } from '@/lib/keynav';
   import { editing, keys } from '@/lib/ui.svelte';
+  import { t, tn } from '@/lib/i18n';
   import FolderRow from '@/components/FolderRow.svelte';
   import GroupView from '@/components/GroupView.svelte';
   import LocationDialog from '@/components/LocationDialog.svelte';
@@ -169,16 +170,16 @@
 
   <main bind:this={mainEl}>
     <header class="page-header">
-      <h1 class="page-total">Total: {total} {total === 1 ? 'tab' : 'tabs'}</h1>
+      <h1 class="page-total">{tn('pageTotal', total)}</h1>
       <nav class="page-nav">
         <button class="link-button" onclick={() => (mode = mode === 'tasks' ? 'list' : 'tasks')}>
-          {mode === 'tasks' ? 'Back to list' : `Tasks (${pendingCount} pending, ${tasks.length - pendingCount} done)`}
+          {mode === 'tasks' ? t('backToList') : t('tasksLink', { pending: pendingCount, done: tasks.length - pendingCount })}
         </button>
         <button class="link-button" onclick={() => (mode = mode === 'trash' ? 'list' : 'trash')}>
-          {mode === 'trash' ? 'Back to list' : `Trash (${view.trashed.length})`}
+          {mode === 'trash' ? t('backToList') : t('trashLink', { n: view.trashed.length })}
         </button>
-        <a class="link-button" href={browser.runtime.getURL('/import-export.html')}>Import / Export</a>
-        <button class="link-button" onclick={() => browser.runtime.openOptionsPage()}>Options</button>
+        <a class="link-button" href={browser.runtime.getURL('/import-export.html')}>{t('importExport')}</a>
+        <button class="link-button" onclick={() => browser.runtime.openOptionsPage()}>{t('options')}</button>
       </nav>
     </header>
 
@@ -200,18 +201,18 @@
       {/each}
     {:else}
       <div class="folder-bar">
-        <nav class="breadcrumb" aria-label="Breadcrumb">
-          <button class="link-button" onclick={() => open(null)}>All tabs</button>
+        <nav class="breadcrumb" aria-label={t('breadcrumb')}>
+          <button class="link-button" onclick={() => open(null)}>{t('allTabs')}</button>
           {#each trail as f (f.id)}
             <span class="meta">/</span>
             <button class="link-button" aria-current={f.id === folder ? 'page' : undefined} onclick={() => open(f)}
-              >{f.title || 'Untitled folder'}</button
+              >{f.title || t('untitledFolder')}</button
             >
           {/each}
         </nav>
-        <button class="link-button" onclick={newFolder}>New folder</button>
+        <button class="link-button" onclick={newFolder}>{t('newFolder')}</button>
         <select
-          aria-label="Sort groups"
+          aria-label={t('sortGroups')}
           value=""
           onchange={(e) => {
             const [key, dir] = e.currentTarget.value.split(':') as [SortKey, string];
@@ -219,15 +220,15 @@
             void run((tx) => sortGroups(tx, folder, key, dir === 'reverse'));
           }}
         >
-          <option value="" disabled>Sort groups</option>
-          <option value="title:">A-Z</option>
-          <option value="title:reverse">Z-A</option>
-          <option value="created:">Recently created</option>
-          <option value="created:reverse">Least recently created</option>
-          <option value="modified:">Recently modified</option>
-          <option value="modified:reverse">Least recently modified</option>
-          <option value="accessed:">Recently accessed</option>
-          <option value="accessed:reverse">Least recently accessed</option>
+          <option value="" disabled>{t('sortGroups')}</option>
+          <option value="title:">{t('sortTitle')}</option>
+          <option value="title:reverse">{t('sortTitleReverse')}</option>
+          <option value="created:">{t('sortCreated')}</option>
+          <option value="created:reverse">{t('sortCreatedReverse')}</option>
+          <option value="modified:">{t('sortModified')}</option>
+          <option value="modified:reverse">{t('sortModifiedReverse')}</option>
+          <option value="accessed:">{t('sortAccessed')}</option>
+          <option value="accessed:reverse">{t('sortAccessedReverse')}</option>
         </select>
       </div>
 
@@ -235,9 +236,7 @@
 
       {#if items.length === 0}
         <p class="empty meta">
-          {folder
-            ? 'This folder is empty. Drag a group onto it in the folder column.'
-            : 'When you have several tabs open, click the savetab icon in your browser toolbar. Your open tabs will appear here.'}
+          {folder ? t('emptyFolder') : t('emptyList')}
         </p>
       {/if}
 
@@ -257,19 +256,19 @@
       </div>
 
       {#if pageCount > 1}
-        <nav class="pager" aria-label="Pages">
+        <nav class="pager" aria-label={t('pages')}>
           {#if pageStart > 0}
-            <button class="link-button" onclick={() => (page = pageStart / PAGE_SIZE - 1)}>Previous {PAGE_SIZE}</button>
+            <button class="link-button" onclick={() => (page = pageStart / PAGE_SIZE - 1)}>{t('previousPage', { n: PAGE_SIZE })}</button>
           {/if}
-          <span class="meta">{pageStart + 1}-{pageStart + items.length} of {children.length}</span>
+          <span class="meta">{t('pageRange', { from: pageStart + 1, to: pageStart + items.length, total: children.length })}</span>
           {#if nextCount > 0}
-            <button class="link-button" onclick={() => (page = pageStart / PAGE_SIZE + 1)}>Next {nextCount}</button>
+            <button class="link-button" onclick={() => (page = pageStart / PAGE_SIZE + 1)}>{t('nextPage', { n: nextCount })}</button>
           {/if}
         </nav>
       {/if}
 
       <div class="drop-new-group" class:hidden={!draggingTab}>
-        {#if draggingTab}<p class="meta">Drop here to create a new group</p>{/if}
+        {#if draggingTab}<p class="meta">{t('dropNewGroup')}</p>{/if}
         <ul
           class="tabs"
           use:dndzone={{ items: newGroupItems, type: 'tab', flipDurationMs: FLIP_MS, ...DROP_TARGET }}

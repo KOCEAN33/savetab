@@ -4,6 +4,7 @@
   import { clickIntent, restoreSelected } from '@/lib/restore';
   import { selectCommand, type SelectCommand } from '@/lib/selection';
   import { act, chooser, selectMenu, selection } from '@/lib/ui.svelte';
+  import { t } from '@/lib/i18n';
 
   let { view, order }: { view: ListView; order: Id[] } = $props();
 
@@ -43,7 +44,7 @@
   function choose(mode: 'move' | 'copy') {
     const kinds = new Set(items.map((i: Item) => i.kind === 'tab'));
     if (kinds.size > 1) {
-      alert('Select only tabs, or only groups and folders, to move or copy them together.');
+      alert(t('moveMixedKinds'));
       return;
     }
     done(() => Object.assign(chooser, { ids: items.map((i) => i.id), mode }));
@@ -57,12 +58,12 @@
   }
 
   const COMMANDS: [SelectCommand, string][] = [
-    ['all', 'Select all'],
-    ['none', 'Deselect all'],
-    ['invert', 'Invert selection'],
-    ['allExcept', 'Select all except this'],
-    ['thisAndAbove', 'Select this and above'],
-    ['thisAndBelow', 'Select this and below'],
+    ['all', t('selectAll')],
+    ['none', t('deselectAll')],
+    ['invert', t('invertSelection')],
+    ['allExcept', t('selectAllExcept')],
+    ['thisAndAbove', t('selectThisAndAbove')],
+    ['thisAndBelow', t('selectThisAndBelow')],
   ];
 </script>
 
@@ -84,18 +85,18 @@
 {/if}
 
 {#if items.length > 0}
-  <div class="selection-bar" role="toolbar" aria-label="Selection">
-    <span>{items.length} selected</span>
+  <div class="selection-bar" role="toolbar" aria-label={t('selection')}>
+    <span>{t('selectedCount', { n: items.length })}</span>
     <button class="link-button" onclick={(e) => done(() => restoreSelected(tabs, clickIntent(e, view.settings), view.settings))}>
-      Restore
+      {t('restore')}
     </button>
-    <button class="link-button" onclick={() => choose('move')}>Move…</button>
-    <button class="link-button" onclick={() => choose('copy')}>Copy…</button>
-    <button class="link-button" onclick={() => setAll({ star: true })}>Star</button>
-    <button class="link-button" onclick={() => setAll({ archived: true })}>Archive</button>
-    <button class="link-button" onclick={() => setAll({ task: 'pending' })}>Make task</button>
-    <button class="link-button" onclick={() => copyLinks(view, items)}>Copy links</button>
-    <button class="link-button" onclick={trash}>Move to trash</button>
-    <button class="link-button" onclick={() => selection.clear()}>Clear</button>
+    <button class="link-button" onclick={() => choose('move')}>{t('menuMove')}</button>
+    <button class="link-button" onclick={() => choose('copy')}>{t('menuCopy')}</button>
+    <button class="link-button" onclick={() => setAll({ star: true })}>{t('star')}</button>
+    <button class="link-button" onclick={() => setAll({ archived: true })}>{t('archive')}</button>
+    <button class="link-button" onclick={() => setAll({ task: 'pending' })}>{t('makeTask')}</button>
+    <button class="link-button" onclick={() => copyLinks(view, items)}>{t('copyLinks')}</button>
+    <button class="link-button" onclick={trash}>{t('moveToTrash')}</button>
+    <button class="link-button" onclick={() => selection.clear()}>{t('clear')}</button>
   </div>
 {/if}

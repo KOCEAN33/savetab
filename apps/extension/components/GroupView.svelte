@@ -12,6 +12,7 @@
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { clickIntent, restoreGroup, restoreTab } from '@/lib/restore';
   import { act, editing, keys } from '@/lib/ui.svelte';
+  import { t, tn } from '@/lib/i18n';
   import ItemMenu from './ItemMenu.svelte';
   import NotesField from './NotesField.svelte';
   import TabRow from './TabRow.svelte';
@@ -37,7 +38,7 @@
   let items = $derived(tabs);
 
   const count = $derived(view.tabs(group.id).length);
-  const label = $derived(group.title || `${count} ${count === 1 ? 'tab' : 'tabs'}`);
+  const label = $derived(group.title || tn('tabCount', count));
   const created = $derived(new Date(group.createdAt).toLocaleString());
 
   function run(fn: Parameters<typeof act>[0]) {
@@ -71,12 +72,12 @@
 
 <section class="group" class:archived={group.archived} id="item-{group.id}" aria-label={label}>
   <div class="group-head" tabindex="0" role="treeitem" aria-selected="false" aria-expanded={!group.collapsed} aria-label={label} data-nav="group" data-id={group.id}>
-    <span class="group-grip" use:dragHandle aria-label="Drag {label}">⠿</span>
+    <span class="group-grip" use:dragHandle aria-label={t('dragItem', { name: label })}>⠿</span>
     <Tick id={group.id} {label} />
     {#if group.task !== 'none'}
       <input
         type="checkbox"
-        aria-label="Task done"
+        aria-label={t('taskDone')}
         checked={group.task === 'done'}
         onchange={(e) => {
         const task = e.currentTarget.checked ? 'done' : 'pending';
@@ -85,28 +86,28 @@
       />
     {/if}
     {#if editing.title === group.id}
-      <TitleField item={group} title={group.title} label="Group name" />
+      <TitleField item={group} title={group.title} label={t('groupName')} />
     {:else}
       <button class="group-label" onclick={labelClick}>{label}</button>
     {/if}
-    {#if group.star}<span title="Starred">★</span>{/if}
+    {#if group.star}<span title={t('starred')}>★</span>{/if}
     <span class="meta"
-      >{[group.pinnedTop && 'Pinned', group.locked && 'Locked', group.archived && 'Archived', `Created ${created}`]
+      >{[group.pinnedTop && t('pinned'), group.locked && t('locked'), group.archived && t('archived'), t('createdAt', { date: created })]
         .filter(Boolean)
         .join(', ')}</span
     >
     <button class="link-button restore-all" onclick={(e) => restoreGroup(tabs, clickIntent(e, settings), settings)}
-      >Restore all</button
+      >{t('restoreAll')}</button
     >
     {#if !group.locked}
-      <button class="link-button" onclick={() => run((tx) => trashItems(tx, [group.id]))}>Delete all</button>
+      <button class="link-button" onclick={() => run((tx) => trashItems(tx, [group.id]))}>{t('deleteAll')}</button>
     {/if}
     <ItemMenu item={group} {view} />
     <button
       class="link-button"
       aria-expanded={!group.collapsed}
       onclick={() => act((tx) => updateItem(tx, group.id, { collapsed: !group.collapsed }))}
-      >{group.collapsed ? 'Expand' : 'Collapse'}</button
+      >{group.collapsed ? t('expand') : t('collapse')}</button
     >
   </div>
   {#if editing.notes === group.id}

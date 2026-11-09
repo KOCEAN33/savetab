@@ -16,11 +16,12 @@
   } from '@savetab/core';
   import { copyLinks } from '@/lib/clipboard';
   import { act, chooser, editing } from '@/lib/ui.svelte';
+  import { t } from '@/lib/i18n';
 
   let {
     item,
     view,
-    label = 'More…',
+    label = t('menuMore'),
     buttonClass = 'link-button',
     ariaLabel,
   }: { item: Item; view: ListView; label?: string; buttonClass?: string; ariaLabel?: string } = $props();
@@ -28,7 +29,6 @@
   let open = $state(false);
   let anchor = $state<HTMLElement>();
 
-  const noun = $derived(item.kind === 'group' ? 'tab group' : item.kind);
   const locked = $derived(item.kind === 'group' && item.locked);
 
   function close(fn: () => unknown) {
@@ -48,14 +48,14 @@
   function dedupe(scope: DuplicateScope) {
     close(async () => {
       const n = await act((tx) => removeDuplicates(tx, item.id, scope));
-      if (n === 0) alert('No duplicates found.');
+      if (n === 0) alert(t('noDuplicates'));
     });
   }
 
   const TASK_NEXT: Record<TaskState, [TaskState, string]> = {
-    none: ['pending', 'Make this a task'],
-    pending: ['done', 'Mark task done'],
-    done: ['pending', 'Mark task not done'],
+    none: ['pending', t('menuMakeTask')],
+    pending: ['done', t('menuMarkTaskDone')],
+    done: ['pending', t('menuMarkTaskNotDone')],
   };
 </script>
 
@@ -72,77 +72,77 @@
   <button class={buttonClass} aria-expanded={open} aria-label={ariaLabel} onclick={() => (open = !open)}>{label}</button>
   {#if open}
     <div class="menu" role="menu">
-      <button role="menuitem" onclick={() => close(() => (editing.title = item.id))}>Rename</button>
+      <button role="menuitem" onclick={() => close(() => (editing.title = item.id))}>{t('menuRename')}</button>
       <button role="menuitem" onclick={() => close(() => (editing.notes = item.id))}>
-        {view.notes(item) ? 'Edit note' : 'Add note'}
+        {view.notes(item) ? t('menuEditNote') : t('menuAddNote')}
       </button>
       {#if item.kind === 'group'}
         <button role="menuitem" onclick={() => set({ locked: !item.locked })}>
-          {item.locked ? 'Unlock this tab group' : 'Lock this tab group'}
+          {item.locked ? t('menuUnlockGroup') : t('menuLockGroup')}
         </button>
       {/if}
       {#if item.kind !== 'folder'}
         <button role="menuitem" onclick={() => set({ star: !item.star })}>
-          {item.star ? 'Remove star' : `Star this ${noun}`}
+          {item.star ? t('menuRemoveStar') : item.kind === 'group' ? t('menuStarGroup') : t('menuStarTab')}
         </button>
         <button role="menuitem" onclick={() => set({ task: TASK_NEXT[item.task][0] })}>{TASK_NEXT[item.task][1]}</button>
         {#if item.task !== 'none'}
-          <button role="menuitem" onclick={() => set({ task: 'none' })}>Remove task</button>
+          <button role="menuitem" onclick={() => set({ task: 'none' })}>{t('menuRemoveTask')}</button>
         {/if}
         <button role="menuitem" onclick={() => set({ archived: !item.archived })}>
-          {item.archived ? 'Unarchive' : 'Mark as archived'}
+          {item.archived ? t('menuUnarchive') : t('menuMarkArchived')}
         </button>
         {#if item.quickOrder == null}
           <button
             role="menuitem"
             onclick={() => close(() => act((tx) => addToQuickList(tx, item.id, view.quickList().at(-1)?.id ?? null)))}
-            >Add to quick list</button
+            >{t('menuAddQuickList')}</button
           >
         {:else}
           <button role="menuitem" onclick={() => close(() => act((tx) => removeFromQuickList(tx, item.id)))}>
-            Remove from quick list
+            {t('menuRemoveQuickList')}
           </button>
         {/if}
       {/if}
       {#if item.kind !== 'tab'}
         <button role="menuitem" onclick={() => set({ pinnedTop: !item.pinnedTop })}>
-          {item.pinnedTop ? 'Unpin' : 'Pin to top of list'}
+          {item.pinnedTop ? t('menuUnpin') : t('menuPinTop')}
         </button>
         <hr />
-        <button role="menuitem" onclick={() => create('group', 'above')}>Create group above</button>
-        <button role="menuitem" onclick={() => create('group', 'below')}>Create group below</button>
-        <button role="menuitem" onclick={() => create('folder', 'above')}>Create folder above</button>
-        <button role="menuitem" onclick={() => create('folder', 'below')}>Create folder below</button>
+        <button role="menuitem" onclick={() => create('group', 'above')}>{t('menuCreateGroupAbove')}</button>
+        <button role="menuitem" onclick={() => create('group', 'below')}>{t('menuCreateGroupBelow')}</button>
+        <button role="menuitem" onclick={() => create('folder', 'above')}>{t('menuCreateFolderAbove')}</button>
+        <button role="menuitem" onclick={() => create('folder', 'below')}>{t('menuCreateFolderBelow')}</button>
         {#if item.kind === 'folder'}
-          <button role="menuitem" onclick={() => create('group', 'within')}>Create group within</button>
-          <button role="menuitem" onclick={() => create('folder', 'within')}>Create folder within</button>
+          <button role="menuitem" onclick={() => create('group', 'within')}>{t('menuCreateGroupWithin')}</button>
+          <button role="menuitem" onclick={() => create('folder', 'within')}>{t('menuCreateFolderWithin')}</button>
           <hr />
           <button role="menuitem" onclick={() => close(() => act((tx) => mergeIntoParent(tx, item.id)))}>
-            Merge into parent
+            {t('menuMergeIntoParent')}
           </button>
           <button role="menuitem" onclick={() => close(() => act((tx) => mergeInnerGroups(tx, item.id)))}>
-            Merge with inner groups
+            {t('menuMergeInnerGroups')}
           </button>
         {/if}
         <hr />
-        <button role="menuitem" onclick={() => dedupe('within')}>Remove duplicates within here</button>
-        <button role="menuitem" onclick={() => dedupe('hereElsewhere')}>Remove duplicates here that exist elsewhere</button>
-        <button role="menuitem" onclick={() => dedupe('elsewhereHere')}>Remove duplicates elsewhere that exist here</button>
+        <button role="menuitem" onclick={() => dedupe('within')}>{t('menuDedupeWithin')}</button>
+        <button role="menuitem" onclick={() => dedupe('hereElsewhere')}>{t('menuDedupeHereElsewhere')}</button>
+        <button role="menuitem" onclick={() => dedupe('elsewhereHere')}>{t('menuDedupeElsewhereHere')}</button>
       {/if}
       <hr />
       {#if !locked}
         <button role="menuitem" onclick={() => close(() => Object.assign(chooser, { ids: [item.id], mode: 'move' }))}>
-          Move…
+          {t('menuMove')}
         </button>
       {/if}
       <button role="menuitem" onclick={() => close(() => Object.assign(chooser, { ids: [item.id], mode: 'copy' }))}>
-        Copy…
+        {t('menuCopy')}
       </button>
       <button role="menuitem" onclick={() => close(() => copyLinks(view, [item]))}>
-        {item.kind === 'tab' ? 'Copy link to clipboard' : 'Copy links to clipboard'}
+        {item.kind === 'tab' ? t('menuCopyLink') : t('menuCopyLinks')}
       </button>
       {#if !locked}
-        <button role="menuitem" onclick={() => close(() => act((tx) => trashItems(tx, [item.id])))}>Move to trash</button>
+        <button role="menuitem" onclick={() => close(() => act((tx) => trashItems(tx, [item.id])))}>{t('moveToTrash')}</button>
       {/if}
     </div>
   {/if}

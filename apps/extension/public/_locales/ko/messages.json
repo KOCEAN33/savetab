@@ -1,0 +1,13 @@
+{
+  "extName": { "message": "savetab" },
+  "extDescription": { "message": "탭을 목록으로 바꿔 두었다가 나중에 복원하고, 목록을 여러 기기에서 동기화합니다." },
+  "cmdExecuteAction": { "message": "도구 모음의 savetab 아이콘 누르기와 같음" },
+  "cmdDisplay": { "message": "savetab 보기" },
+  "cmdSendCurrent": { "message": "현재 탭을 savetab으로 보내기" },
+  "cmdSendWindow": { "message": "이 창의 모든 탭을 savetab으로 보내기" },
+  "cmdSendTabGroup": { "message": "이 탭 그룹의 모든 탭을 savetab으로 보내기" },
+  "cmdSendExcept": { "message": "이 탭을 뺀 모든 탭을 savetab으로 보내기" },
+  "cmdSendLeft": { "message": "왼쪽 탭을 savetab으로 보내기" },
+  "cmdSendRight": { "message": "오른쪽 탭을 savetab으로 보내기" },
+  "cmdSendAllWindows": { "message": "모든 창의 모든 탭을 savetab으로 보내기" }
+}

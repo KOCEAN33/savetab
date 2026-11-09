@@ -1,6 +1,7 @@
 <script lang="ts">
   import { editTab, NOTES_MAX, updateItem, type Item } from '@savetab/core';
   import { act, editing } from '@/lib/ui.svelte';
+  import { t } from '@/lib/i18n';
 
   let { item, notes }: { item: Item; notes: string } = $props();
 
@@ -19,7 +20,7 @@
 <!-- svelte-ignore a11y_autofocus -->
 <textarea
   class="notes-input"
-  aria-label="Note"
+  aria-label={t('note')}
   maxlength={NOTES_MAX}
   bind:value={draft}
   autofocus

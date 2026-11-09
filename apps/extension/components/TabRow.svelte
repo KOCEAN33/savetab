@@ -2,6 +2,7 @@
   import { browser } from 'wxt/browser';
   import { updateItem, type ListView, type Tab } from '@savetab/core';
   import { act, editing } from '@/lib/ui.svelte';
+  import { t } from '@/lib/i18n';
   import ItemMenu from './ItemMenu.svelte';
   import NotesField from './NotesField.svelte';
   import Tick from './Tick.svelte';
@@ -56,13 +57,13 @@
   {#if locked}
     <span class="tab-delete-slot"></span>
   {:else}
-    <button class="tab-delete" title="Delete" aria-label="Delete {title || tab.url}" onclick={ondelete}>×</button>
+    <button class="tab-delete" title={t('delete')} aria-label={t('deleteItem', { name: title || tab.url })} onclick={ondelete}>×</button>
   {/if}
   <Tick id={tab.id} label={title || tab.url} />
   {#if tab.task !== 'none'}
     <input
       type="checkbox"
-      aria-label="Task done"
+      aria-label={t('taskDone')}
       checked={tab.task === 'done'}
       onchange={(e) => {
         const task = e.currentTarget.checked ? 'done' : 'pending';
@@ -76,16 +77,16 @@
     <span class="tab-icon"></span>
   {/if}
   {#if editing.title === tab.id}
-    <TitleField item={tab} {title} label="Tab title" />
+    <TitleField item={tab} {title} label={t('tabTitle')} />
   {:else}
     <a class="tab-link" href={tab.url} draggable="false" onclick={click} onauxclick={(e) => e.button === 1 && click(e)}
       >{title || tab.url}</a
     >
   {/if}
   {#if shownUrl}<span class="tab-url meta">{shownUrl}</span>{/if}
-  {#if tab.star}<span title="Starred">★</span>{/if}
+  {#if tab.star}<span title={t('starred')}>★</span>{/if}
   {#if notes && editing.notes !== tab.id}<span class="tab-notes meta">{notes}</span>{/if}
-  <ItemMenu item={tab} {view} label="More" buttonClass="link-button tab-more" ariaLabel="More actions for {title || tab.url}" />
+  <ItemMenu item={tab} {view} label={t('more')} buttonClass="link-button tab-more" ariaLabel={t('moreActionsFor', { name: title || tab.url })} />
   {#if editing.notes === tab.id}
     <NotesField item={tab} {notes} />
   {/if}

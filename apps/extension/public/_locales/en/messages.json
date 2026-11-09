@@ -1,0 +1,13 @@
+{
+  "extName": { "message": "savetab" },
+  "extDescription": { "message": "Convert tabs into a list, restore them later, and sync the list across devices." },
+  "cmdExecuteAction": { "message": "Same as clicking the savetab toolbar icon" },
+  "cmdDisplay": { "message": "Display savetab" },
+  "cmdSendCurrent": { "message": "Send the current tab to savetab" },
+  "cmdSendWindow": { "message": "Send all tabs in this window to savetab" },
+  "cmdSendTabGroup": { "message": "Send all tabs in this tab group to savetab" },
+  "cmdSendExcept": { "message": "Send all tabs except this tab to savetab" },
+  "cmdSendLeft": { "message": "Send tabs on the left to savetab" },
+  "cmdSendRight": { "message": "Send tabs on the right to savetab" },
+  "cmdSendAllWindows": { "message": "Send all tabs from all windows to savetab" }
+}

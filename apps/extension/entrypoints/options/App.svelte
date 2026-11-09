@@ -11,6 +11,7 @@
     setSettings,
     type DeviceSettings,
   } from '@/lib/settings';
+  import { t } from '@/lib/i18n';
   import Choice from '@/components/Choice.svelte';
 
   const record = liveQuery(() => db.items.get(SETTINGS_ID));
@@ -33,66 +34,66 @@
 
 <main>
   <header class="page-header">
-    <h1 class="page-total">savetab options</h1>
-    <nav class="page-nav"><a class="link-button" href={browser.runtime.getURL('/onetab.html')}>Back to savetab</a></nav>
+    <h1 class="page-total">{t('optionsTitle')}</h1>
+    <nav class="page-nav"><a class="link-button" href={browser.runtime.getURL('/onetab.html')}>{t('backToSavetab')}</a></nav>
   </header>
 
-  <h2 class="section-title">Storing tabs</h2>
+  <h2 class="section-title">{t('storingTabs')}</h2>
   <Choice
-    legend="When you click the savetab toolbar icon:"
+    legend={t('toolbarActionLegend')}
     value={device.toolbarAction}
     options={[
-      ['sendWindow', 'Send tabs in the current window (only the selected tabs, or the current tab group, if any)'],
-      ['sendWholeWindow', 'Send the current window, including all tabs and tab groups'],
-      ['sendCurrent', 'Send only the current tab (it joins the first group that is not pinned or locked)'],
+      ['sendWindow', t('toolbarSendWindow')],
+      ['sendWholeWindow', t('toolbarSendWholeWindow')],
+      ['sendCurrent', t('toolbarSendCurrent')],
     ]}
     onchange={(v) => setDeviceSettings({ toolbarAction: v })}
   />
   <Choice
-    legend="Pinned tabs:"
+    legend={t('pinnedTabsLegend')}
     value={s.pinnedTabs}
     options={[
-      ['skip', "Don't send pinned tabs (sending only this tab still works)"],
-      ['allow', 'Allow pinned tabs to be sent'],
+      ['skip', t('pinnedSkip')],
+      ['allow', t('pinnedAllow')],
     ]}
     onchange={(v) => setSettings({ pinnedTabs: v })}
   />
   <Choice
-    legend="Duplicates:"
+    legend={t('duplicatesLegend')}
     value={s.duplicates}
     options={[
-      ['allow', 'Allow duplicates'],
-      ['reject', 'Silently reject duplicates'],
+      ['allow', t('duplicatesAllow')],
+      ['reject', t('duplicatesReject')],
     ]}
     onchange={(v) => setSettings({ duplicates: v })}
   />
   <Choice
-    legend="When storing a tab that is already stored:"
+    legend={t('titleOnDuplicateLegend')}
     value={s.titleOnDuplicate}
     options={[
-      ['keep', 'Keep the existing title'],
-      ['update', 'Use the latest title'],
+      ['keep', t('titleKeep')],
+      ['update', t('titleUpdate')],
     ]}
     onchange={(v) => setSettings({ titleOnDuplicate: v })}
   />
   <Choice
-    legend="After storing tabs:"
+    legend={t('afterStoreLegend')}
     value={device.openAfterStore}
     options={[
-      [true, 'Show the savetab list'],
-      [false, 'Stay on the current page'],
+      [true, t('afterStoreShow')],
+      [false, t('afterStoreStay')],
     ]}
     onchange={(v) => setDeviceSettings({ openAfterStore: v })}
   />
 
   <fieldset class="choice">
-    <legend>Excluded web sites (tabs from these hosts are not sent, unless you send only that tab):</legend>
+    <legend>{t('excludedLegend')}</legend>
     {#each s.excludedDomains as host (host)}
       <div class="row">
         <span>{host}</span>
         <button
           class="link-button"
-          onclick={() => setSettings({ excludedDomains: s.excludedDomains.filter((d) => d !== host) })}>Remove</button
+          onclick={() => setSettings({ excludedDomains: s.excludedDomains.filter((d) => d !== host) })}>{t('remove')}</button
         >
       </div>
     {/each}
@@ -103,107 +104,117 @@
         addDomain();
       }}
     >
-      <input type="text" placeholder="www.example.com" bind:value={newDomain} aria-label="Host to exclude" />
-      <button class="button" type="submit">Add</button>
+      <input type="text" placeholder="www.example.com" bind:value={newDomain} aria-label={t('hostToExclude')} />
+      <button class="button" type="submit">{t('add')}</button>
     </form>
   </fieldset>
 
-  <h2 class="section-title">Restoring tabs</h2>
+  <h2 class="section-title">{t('restoringTabs')}</h2>
   <Choice
-    legend="When restoring tabs:"
+    legend={t('afterRestoreLegend')}
     value={s.afterRestore}
     options={[
-      ['remove', 'Remove them from your list (hold Ctrl/Cmd to keep them)'],
-      ['keep', 'Keep them in your list (hold Alt/Option to mark them archived)'],
-      ['archive', 'Mark them as archived'],
+      ['remove', t('afterRestoreRemove')],
+      ['keep', t('afterRestoreKeep')],
+      ['archive', t('afterRestoreArchive')],
     ]}
     onchange={(v) => setSettings({ afterRestore: v })}
   />
   <Choice
-    legend="When restoring a group of tabs:"
+    legend={t('restoreGroupLegend')}
     value={s.restoreGroupTarget}
     options={[
-      ['newUnlessAlone', 'Open the tabs in a new window, unless savetab is the only tab in the current window'],
-      ['new', 'Open the tabs in a new window'],
-      ['current', 'Open the tabs in the current window'],
+      ['newUnlessAlone', t('restoreNewUnlessAlone')],
+      ['new', t('restoreNew')],
+      ['current', t('restoreCurrent')],
     ]}
     onchange={(v) => setSettings({ restoreGroupTarget: v })}
   />
   <Choice
-    legend="When restoring a tab from the list:"
+    legend={t('restoreTabLegend')}
     value={s.switchToRestored}
     options={[
-      [true, 'Open the tab and switch to it (unless you hold Cmd/Ctrl)'],
-      [false, 'Open the tab and stay in savetab'],
+      [true, t('restoreTabSwitch')],
+      [false, t('restoreTabStay')],
     ]}
     onchange={(v) => setSettings({ switchToRestored: v })}
   />
   <Choice
-    legend="When you click on a group's title:"
+    legend={t('groupTitleClickLegend')}
     value={s.groupTitleClick}
     options={[
-      ['edit', 'Edit the title'],
-      ['restore', 'Restore the group'],
+      ['edit', t('groupTitleEdit')],
+      ['restore', t('groupTitleRestore')],
     ]}
     onchange={(v) => setSettings({ groupTitleClick: v })}
   />
 
-  <h2 class="section-title">Display</h2>
+  <h2 class="section-title">{t('display')}</h2>
   <Choice
-    legend="URL display:"
+    legend={t('urlDisplayLegend')}
     value={s.urlDisplay}
     options={[
-      ['none', 'None'],
-      ['domain', 'Domain only'],
-      ['abbreviated', 'Abbreviated'],
-      ['full', 'Full'],
+      ['none', t('urlNone')],
+      ['domain', t('urlDomain')],
+      ['abbreviated', t('urlAbbreviated')],
+      ['full', t('urlFull')],
     ]}
     onchange={(v) => setSettings({ urlDisplay: v })}
   />
   <Choice
-    legend="Copy to clipboard format:"
+    legend={t('copyFormatLegend')}
     value={s.copyFormat}
     options={[
-      ['rich', 'Rich text (links)'],
-      ['urlTitle', 'URL | Title'],
-      ['titleUrl', 'Title URL'],
-      ['url', 'URL only'],
-      ['markdown', 'Markdown'],
+      ['rich', t('copyRich')],
+      ['urlTitle', t('copyUrlTitle')],
+      ['titleUrl', t('copyTitleUrl')],
+      ['url', t('copyUrl')],
+      ['markdown', t('copyMarkdown')],
     ]}
     onchange={(v) => setSettings({ copyFormat: v })}
   />
   <Choice
-    legend="At browser startup:"
+    legend={t('startupLegend')}
     value={device.openAtStartup}
     options={[
-      [false, 'Do not open savetab automatically'],
-      [true, 'Open savetab automatically'],
+      [false, t('startupNo')],
+      [true, t('startupYes')],
     ]}
     onchange={(v) => setDeviceSettings({ openAtStartup: v })}
   />
   <Choice
-    legend={'"Display savetab" action:'}
+    legend={t('displayActionLegend')}
     value={device.openOneTabMode}
     options={[
-      ['switch', 'Switch to the window where savetab is already open'],
-      ['move', 'Move an open savetab tab to the current window'],
+      ['switch', t('displaySwitch')],
+      ['move', t('displayMove')],
     ]}
     onchange={(v) => setDeviceSettings({ openOneTabMode: v })}
   />
   <Choice
-    legend="Right-click menu inside web pages:"
+    legend={t('contextMenuLegend')}
     value={device.contextMenu}
     options={[
-      [true, 'Enabled'],
-      [false, 'Disabled (the exclude-site item goes away too)'],
+      [true, t('contextMenuOn')],
+      [false, t('contextMenuOff')],
     ]}
     onchange={(v) => setDeviceSettings({ contextMenu: v })}
   />
+  <Choice
+    legend={t('languageLegend')}
+    value={device.language}
+    options={[
+      ['auto', t('languageAuto')],
+      ['en', t('languageEn')],
+      ['ko', t('languageKo')],
+    ]}
+    onchange={(v) => setDeviceSettings({ language: v })}
+  />
 
-  <h2 class="section-title">Keyboard shortcuts</h2>
+  <h2 class="section-title">{t('keyboardShortcuts')}</h2>
   {#if shortcutsUrl}
-    <button class="button" onclick={() => browser.tabs.create({ url: shortcutsUrl })}>Configure shortcuts</button>
+    <button class="button" onclick={() => browser.tabs.create({ url: shortcutsUrl })}>{t('configureShortcuts')}</button>
   {:else}
-    <p>Open about:addons, click the cog icon, then choose "Manage Extension Shortcuts".</p>
+    <p>{t('firefoxShortcuts')}</p>
   {/if}
 </main>

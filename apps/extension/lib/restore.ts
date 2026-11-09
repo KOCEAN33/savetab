@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { afterOpen, type Settings, type Tab } from '@savetab/core';
 import { transact } from './db';
+import { t } from './i18n';
 import { RESTORE_CAP, restoreCount } from './selection';
 
 export interface Intent {
@@ -73,6 +74,6 @@ export async function restoreGroup(all: Tab[], intent: Intent, s: Settings): Pro
 /** Restore a selection. Above 50 tabs the user confirms first, as in OneTab. */
 export async function restoreSelected(tabs: Tab[], intent: Intent, s: Settings): Promise<void> {
   const { open, confirm: ask } = restoreCount(tabs.length);
-  if (ask && !confirm(`You are about to open ${open} tabs`)) return;
+  if (ask && !confirm(t('confirmOpenTabs', { n: open }))) return;
   await restoreGroup(tabs, intent, s);
 }

@@ -2,6 +2,7 @@
   import { dndzone, TRIGGERS, type DndEvent } from 'svelte-dnd-action';
   import { mergeGroups, moveItems, type Id, type Item, type ListView } from '@savetab/core';
   import { act } from '@/lib/ui.svelte';
+  import { t, tn } from '@/lib/i18n';
   import { DROP_TARGET } from '@/lib/motion';
   import { navFilterItem, recentItem, type NavFilter } from '@/lib/recent';
 
@@ -30,10 +31,10 @@
     item.kind === 'folder' || (filter === 'all' && item.kind === 'group') || (filter === 'named' && item.title !== '');
 
   function label(item: Item): string {
-    if (item.kind === 'folder') return item.title || 'Untitled folder';
+    if (item.kind === 'folder') return item.title || t('untitledFolder');
     if (item.kind === 'tab') return view.title(item) || item.url;
     const n = view.tabs(item.id).length;
-    return item.title || `${n} ${n === 1 ? 'tab' : 'tabs'}`;
+    return item.title || tn('tabCount', n);
   }
 
   /** A group dropped on a folder moves into it. A group dropped on a group merges into it. */
@@ -81,16 +82,16 @@
   </ul>
 {/snippet}
 
-<nav class="nav-column" aria-label="Folders">
+<nav class="nav-column" aria-label={t('folders')}>
   <div class="nav-entry">
-    <button class="link-button nav-item" class:nav-current={current === null} onclick={() => onopen(null)}>All tabs</button>
+    <button class="link-button nav-item" class:nav-current={current === null} onclick={() => onopen(null)}>{t('allTabs')}</button>
     {@render dropZone(null)}
   </div>
   {@render tree(null)}
 
   {#if quick.length > 0}
-    <h2 class="nav-heading">Quick list</h2>
-    <ul class="nav-tree" aria-label="Quick list">
+    <h2 class="nav-heading">{t('quickList')}</h2>
+    <ul class="nav-tree" aria-label={t('quickList')}>
       {#each quick as item (item.id)}
         <li><button class="link-button nav-item" onclick={() => onopen(item)}>{label(item)}</button></li>
       {/each}
@@ -98,7 +99,7 @@
   {/if}
 
   {#if recent.some((id) => view.get(id))}
-    <h2 class="nav-heading">Recent</h2>
+    <h2 class="nav-heading">{t('recent')}</h2>
     <ul class="nav-tree">
       {#each recent.flatMap((id) => view.get(id) ?? []) as item (item.id)}
         <li><button class="link-button nav-item" onclick={() => onopen(item)}>{label(item)}</button></li>
@@ -107,14 +108,14 @@
   {/if}
 
   <label class="nav-filter meta">
-    Show
+    {t('navShow')}
     <select
       bind:value={filter}
       onchange={() => void navFilterItem.setValue(filter)}
     >
-      <option value="all">everything</option>
-      <option value="folders">folders only</option>
-      <option value="named">named only</option>
+      <option value="all">{t('navAll')}</option>
+      <option value="folders">{t('navFolders')}</option>
+      <option value="named">{t('navNamed')}</option>
     </select>
   </label>
 </nav>

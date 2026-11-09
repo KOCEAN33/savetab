@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Id, ListView, SearchQuery } from '@savetab/core';
+  import { t, tn } from '@/lib/i18n';
 
   let { query = $bindable(), view, count }: { query: SearchQuery; view: ListView; count: number | null } = $props();
 
@@ -11,7 +12,7 @@
     const walk = (parentId: Id | null, prefix: string) => {
       for (const item of view.children(parentId)) {
         if (item.kind !== 'folder') continue;
-        const path = `${prefix}${item.title || 'Untitled folder'}`;
+        const path = `${prefix}${item.title || t('untitledFolder')}`;
         out.push({ id: item.id, path });
         walk(item.id, `${path} / `);
       }
@@ -31,38 +32,38 @@
 
 <div class="search">
   <div class="row">
-    <input class="search-input" type="search" aria-label="Search" placeholder="Search" bind:value={query.text} />
-    {#if count !== null}<span class="meta" role="status">{count} {count === 1 ? 'match' : 'matches'}</span>{/if}
-    <button class="link-button" aria-expanded={showFilters} onclick={() => (showFilters = !showFilters)}>Filters</button>
+    <input class="search-input" type="search" aria-label={t('search')} placeholder={t('search')} bind:value={query.text} />
+    {#if count !== null}<span class="meta" role="status">{tn('matchCount', count)}</span>{/if}
+    <button class="link-button" aria-expanded={showFilters} onclick={() => (showFilters = !showFilters)}>{t('filters')}</button>
   </div>
   {#if showFilters}
     <div class="search-filters">
-      <label><input type="checkbox" bind:checked={query.caseSensitive} /> Case sensitive</label>
-      <label><input type="checkbox" bind:checked={query.wholeWords} /> Whole words</label>
-      <label><input type="checkbox" bind:checked={query.starred} /> Starred</label>
-      <label><input type="checkbox" bind:checked={query.tasks} /> Tasks</label>
-      <label><input type="checkbox" bind:checked={query.hasNotes} /> Has notes</label>
-      <label><input type="checkbox" bind:checked={query.namedOnly} /> Named only</label>
+      <label><input type="checkbox" bind:checked={query.caseSensitive} /> {t('caseSensitive')}</label>
+      <label><input type="checkbox" bind:checked={query.wholeWords} /> {t('wholeWords')}</label>
+      <label><input type="checkbox" bind:checked={query.starred} /> {t('starred')}</label>
+      <label><input type="checkbox" bind:checked={query.tasks} /> {t('tasks')}</label>
+      <label><input type="checkbox" bind:checked={query.hasNotes} /> {t('hasNotes')}</label>
+      <label><input type="checkbox" bind:checked={query.namedOnly} /> {t('namedOnly')}</label>
       <label>
-        Archived
+        {t('archived')}
         <select bind:value={query.archived}>
-          <option value="any">archived and not</option>
-          <option value="only">archived only</option>
-          <option value="none">not archived</option>
+          <option value="any">{t('archivedAny')}</option>
+          <option value="only">{t('archivedOnly')}</option>
+          <option value="none">{t('archivedNone')}</option>
         </select>
       </label>
       <label>
-        Created on or after
+        {t('createdFrom')}
         <input type="date" value={day(query.createdFrom)} onchange={(e) => (query.createdFrom = toMs(e.currentTarget.value, false))} />
       </label>
       <label>
-        Created on or before
+        {t('createdTo')}
         <input type="date" value={day(query.createdTo)} onchange={(e) => (query.createdTo = toMs(e.currentTarget.value, true))} />
       </label>
       <label>
-        In folder
+        {t('inFolder')}
         <select bind:value={query.folderId}>
-          <option value={null}>everywhere</option>
+          <option value={null}>{t('everywhere')}</option>
           {#each folders as f (f.id)}<option value={f.id}>{f.path}</option>{/each}
         </select>
       </label>

@@ -2,6 +2,7 @@ import { browser, type Browser } from 'wxt/browser';
 import { ListView, type Id } from '@savetab/core';
 import { hostnameOf } from './capture';
 import { db } from './db';
+import { loadLanguage, t, tn } from './i18n';
 import { recentItem } from './recent';
 import type { SendAction } from './select';
 import { getDeviceSettings, getSettings } from './settings';
@@ -21,16 +22,16 @@ export const MENU_SEND: Record<string, SendAction> = {
   'send-selected': 'selected',
 };
 
-const SEND_TITLES: Record<keyof typeof MENU_SEND, string> = {
-  'send-current': 'Send only this tab to savetab',
-  'send-except': 'Send all tabs except this tab to savetab',
-  'send-left': 'Send tabs on the left to savetab',
-  'send-right': 'Send tabs on the right to savetab',
-  'send-window': 'Send all tabs in this window to savetab',
-  'send-all-windows': 'Send all tabs from all windows to savetab',
-  'send-tab-group': 'Send all tabs in this tab group to savetab',
-  'send-selected': 'Send selected tabs to savetab',
-};
+const SEND_TITLES = {
+  'send-current': 'menuSendCurrent',
+  'send-except': 'menuSendExcept',
+  'send-left': 'menuSendLeft',
+  'send-right': 'menuSendRight',
+  'send-window': 'menuSendWindow',
+  'send-all-windows': 'menuSendAllWindows',
+  'send-tab-group': 'menuSendTabGroup',
+  'send-selected': 'menuSendSelected',
+} as const satisfies Record<keyof typeof MENU_SEND, string>;
 
 export interface SendTarget {
   id: Id;
@@ -48,7 +49,7 @@ export function sendTargets(view: ListView, recent: Id[]): SendTarget[] {
   const named = open.filter((g) => g.title !== '' && !recentGroups.includes(g));
   return [...recentGroups, ...named].slice(0, SEND_TO_MAX).map((g) => {
     const n = view.tabs(g.id).length;
-    return { id: g.id, title: g.title || `${n} ${n === 1 ? 'tab' : 'tabs'}` };
+    return { id: g.id, title: g.title || tn('tabCount', n) };
   });
 }
 
@@ -83,34 +84,35 @@ export async function refreshSendTo(): Promise<void> {
 }
 
 async function build(): Promise<void> {
+  await loadLanguage();
   await browser.contextMenus.removeAll();
-  await create({ id: 'display-action', title: 'Display savetab', contexts: ['action'] });
+  await create({ id: 'display-action', title: t('menuDisplay'), contexts: ['action'] });
   builtTargets = await currentTargets();
   if (!(await getDeviceSettings()).contextMenu) return;
 
   await create({ id: 'root', title: 'savetab', contexts: PAGE });
-  await create({ id: 'display', parentId: 'root', title: 'Display savetab', contexts: PAGE });
+  await create({ id: 'display', parentId: 'root', title: t('menuDisplay'), contexts: PAGE });
   await create({ id: 'sep-1', parentId: 'root', type: 'separator', contexts: PAGE });
-  for (const [id, title] of Object.entries(SEND_TITLES)) {
-    await create({ id, parentId: 'root', title, contexts: PAGE });
+  for (const [id, key] of Object.entries(SEND_TITLES)) {
+    await create({ id, parentId: 'root', title: t(key), contexts: PAGE });
   }
   await create({
     id: 'send-to',
     parentId: 'root',
-    title: 'Send this tab to',
+    title: t('menuSendTo'),
     contexts: PAGE,
     enabled: builtTargets.length > 0,
   });
   for (const t of builtTargets) {
     await create({ id: SEND_TO_PREFIX + t.id, parentId: 'send-to', title: t.title, contexts: PAGE });
   }
-  await create({ id: 'send-link', parentId: 'root', title: 'Send this web link to savetab', contexts: ['link'] });
+  await create({ id: 'send-link', parentId: 'root', title: t('menuSendLink'), contexts: ['link'] });
   await create({ id: 'sep-2', parentId: 'root', type: 'separator', contexts: PAGE });
   await create({
     id: 'exclude',
     parentId: 'root',
     type: 'checkbox',
-    title: 'Exclude this web site from savetab',
+    title: t('excludeSite'),
     contexts: PAGE,
   });
   await refreshExcludeItem();
@@ -124,7 +126,7 @@ export async function refreshExcludeItem(): Promise<void> {
   const { excludedDomains } = await getSettings();
   try {
     await browser.contextMenus.update('exclude', {
-      title: host ? `Exclude ${host} from savetab` : 'Exclude this web site from savetab',
+      title: host ? t('excludeHost', { host }) : t('excludeSite'),
       checked: excludedDomains.includes(host),
       enabled: host !== '',
     });
