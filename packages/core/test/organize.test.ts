@@ -12,6 +12,7 @@ import {
   MissingError,
   moveItems,
   removeDuplicates,
+  sortGroups,
   storeTabs,
   trashItems,
   updateItem,
@@ -197,5 +198,43 @@ describe('mergeGroups', () => {
     await s.transact((tx) => mergeGroups(tx, source, target));
     expect(names(s, target)).toEqual(['a', 'b', 'c']);
     expect(new ListView(s.all()).get(source)).toBeUndefined();
+  });
+});
+
+describe('sortGroups', () => {
+  async function setup() {
+    const s = new MemoryStore('dev1');
+    const b = await store(s, ['b']);
+    const f = await s.transact((tx) => createFolder(tx, null, 'Folder'));
+    const a = await store(s, ['a']);
+    const c = await store(s, ['c']);
+    await s.transact(async (tx) => {
+      // tx.write, not updateItem, which would stamp modifiedAt with the clock.
+      await tx.write(b, { title: 'B', createdAt: 1, modifiedAt: 30, accessedAt: null });
+      await tx.write(a, { title: 'a', createdAt: 2, modifiedAt: 10, accessedAt: 5 });
+      await tx.write(c, { title: 'C', createdAt: 3, modifiedAt: 20, accessedAt: 9 });
+    });
+    // Root before sorting: c, a, f, b. The folder keeps its slot.
+    return { s, a, b, c, f };
+  }
+
+  it('sorts groups A-Z ignoring case, leaving folders in their slots', async () => {
+    const { s, a, b, c, f } = await setup();
+    await s.transact((tx) => sortGroups(tx, null, 'title', false));
+    expect(ids(s, null)).toEqual([a, b, f, c]);
+    await s.transact((tx) => sortGroups(tx, null, 'title', true));
+    expect(ids(s, null)).toEqual([c, b, f, a]);
+  });
+
+  it('sorts by recently created, modified, and accessed, newest first', async () => {
+    const { s, a, b, c, f } = await setup();
+    await s.transact((tx) => sortGroups(tx, null, 'created', false));
+    expect(ids(s, null)).toEqual([c, a, f, b]);
+    await s.transact((tx) => sortGroups(tx, null, 'modified', false));
+    expect(ids(s, null)).toEqual([b, c, f, a]);
+    await s.transact((tx) => sortGroups(tx, null, 'accessed', false));
+    expect(ids(s, null)).toEqual([c, a, f, b]);
+    await s.transact((tx) => sortGroups(tx, null, 'accessed', true));
+    expect(ids(s, null)).toEqual([b, a, f, c]);
   });
 });

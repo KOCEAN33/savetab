@@ -479,3 +479,28 @@ export async function mergeGroups(tx: Tx, sourceId: Id, targetId: Id): Promise<v
   );
   if (isLive(await tx.get(sourceId))) await trashItems(tx, [sourceId]);
 }
+
+export type SortKey = 'title' | 'created' | 'modified' | 'accessed';
+
+const SORT_COMPARE: Record<SortKey, (a: ItemRecord, b: ItemRecord) => number> = {
+  title: (a, b) => (a.title ?? '').localeCompare(b.title ?? '', undefined, { sensitivity: 'base' }),
+  created: (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0),
+  modified: (a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0),
+  accessed: (a, b) => (b.accessedAt ?? -1) - (a.accessedAt ?? -1),
+};
+
+/**
+ * Sort the groups directly under `parentId`: A-Z, or newest first by date. Folders keep their
+ * slots and tabs keep their order. New order keys sync like a manual reorder.
+ */
+export async function sortGroups(tx: Tx, parentId: Id | null, key: SortKey, reverse: boolean): Promise<void> {
+  const siblings = (await keyOrdered(tx, parentId)).filter(isLive);
+  const groups = siblings.filter((r) => r.kind === 'group').sort(SORT_COMPARE[key]);
+  if (reverse) groups.reverse();
+  let next = 0;
+  const sorted = siblings.map((r) => (r.kind === 'group' ? groups[next++]! : r));
+  const keys = generateNKeysBetween(null, null, sorted.length);
+  for (const [i, rec] of sorted.entries()) {
+    if (rec.order !== keys[i]) await tx.write(rec.id, { order: keys[i] });
+  }
+}
