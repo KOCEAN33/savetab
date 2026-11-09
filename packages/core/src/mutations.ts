@@ -11,6 +11,12 @@ export class LockedError extends Error {
   }
 }
 
+export class MissingError extends Error {
+  constructor() {
+    super('The destination no longer exists');
+  }
+}
+
 export class CycleError extends Error {
   constructor() {
     super('A folder cannot move into itself');
@@ -187,6 +193,7 @@ export async function updateItem(tx: Tx, id: Id, patch: Record<string, unknown>)
 /** Move items under `parentId`, placed just before `beforeId`, or at the end when it is null. */
 export async function moveItems(tx: Tx, ids: Id[], parentId: Id | null, beforeId: Id | null): Promise<void> {
   const target = parentId == null ? undefined : await tx.get(parentId);
+  if (parentId != null && !isLive(target)) throw new MissingError();
   if (isKind(target, 'group') && target.locked) throw new LockedError();
   for (let at: ItemRecord | undefined = target; at; at = at.parentId == null ? undefined : await tx.get(at.parentId)) {
     if (ids.includes(at.id)) throw new CycleError();
@@ -426,4 +433,49 @@ export async function removeDuplicates(tx: Tx, scopeId: Id, scope: DuplicateScop
   for (const t of doomed) if (!(await isInLockedGroup(tx, t))) removable.push(t.id);
   await trashItems(tx, removable);
   return removable.length;
+}
+
+/** Fields a copy takes from its source. Placement, clocks, and quick list membership stay behind. */
+function copyFields(rec: ItemRecord, tx: Tx, parentId: Id | null, order: string): Record<string, unknown> {
+  const { id: _id, clocks: _clocks, ...fields } = rec;
+  return { ...fields, parentId, order, createdAt: tx.now, modifiedAt: tx.now, quickOrder: null };
+}
+
+async function copyTree(tx: Tx, rec: ItemRecord, parentId: Id | null, order: string): Promise<Id> {
+  const id = uuidv7(tx.now);
+  await tx.write(id, copyFields(rec, tx, parentId, order));
+  for (const child of (await tx.children(rec.id)).filter(isLive)) await copyTree(tx, child, id, child.order ?? '');
+  return id;
+}
+
+/** Copy items and everything under them to `parentId`, before `beforeId` or at the end. Copies of a tab share its link. */
+export async function copyItems(tx: Tx, ids: Id[], parentId: Id | null, beforeId: Id | null): Promise<Id[]> {
+  const target = parentId == null ? undefined : await tx.get(parentId);
+  if (parentId != null && !isLive(target)) throw new MissingError();
+  if (isKind(target, 'group') && target.locked) throw new LockedError();
+  const sources: ItemRecord[] = [];
+  for (const id of ids) {
+    const rec = await tx.get(id);
+    if (rec && isLive(rec)) sources.push(rec);
+  }
+  const siblings = await keyOrdered(tx, parentId);
+  const at = beforeId == null ? siblings.length : siblings.findIndex((r) => r.id === beforeId);
+  const idx = at === -1 ? siblings.length : at;
+  const keys = generateNKeysBetween(siblings[idx - 1]?.order ?? null, siblings[idx]?.order ?? null, sources.length);
+  const out: Id[] = [];
+  for (const [i, rec] of sources.entries()) out.push(await copyTree(tx, rec, parentId, keys[i]!));
+  return out;
+}
+
+/** OneTab's "drop a group on a group": the source's tabs join the end of the target, and the source goes to trash. */
+export async function mergeGroups(tx: Tx, sourceId: Id, targetId: Id): Promise<void> {
+  if (sourceId === targetId) return;
+  const tabs = await shownChildren(tx, sourceId);
+  await moveItems(
+    tx,
+    tabs.map((t) => t.id),
+    targetId,
+    null,
+  );
+  if (isLive(await tx.get(sourceId))) await trashItems(tx, [sourceId]);
 }

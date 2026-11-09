@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../src/memory';
 import {
+  copyItems,
   createFolder,
   createNear,
+  editTab,
+  mergeGroups,
   LockedError,
   mergeInnerGroups,
   mergeIntoParent,
+  MissingError,
   moveItems,
   removeDuplicates,
   storeTabs,
@@ -132,5 +136,66 @@ describe('formatLinks', () => {
     const out = formatLinks([{ url: 'https://a.example/?x=1&y=2', title: '<A>' }], 'rich');
     expect(out.html).toBe('<a href="https://a.example/?x=1&amp;y=2">&lt;A&gt;</a>');
     expect(out.text).toBe('https://a.example/?x=1&y=2 | <A>');
+  });
+});
+
+describe('copyItems', () => {
+  it('copies a folder with its groups and tabs under new ids, sharing each URL link', async () => {
+    const s = new MemoryStore('dev1');
+    const f = await s.transact((tx) => createFolder(tx, null, 'F'));
+    const g = await store(s, ['a', 'b']);
+    await s.transact((tx) => moveItems(tx, [g], f, null));
+    const dest = await s.transact((tx) => createFolder(tx, null, 'Dest'));
+
+    const [copy] = await s.transact((tx) => copyItems(tx, [f], dest, null));
+    const v = new ListView(s.all());
+    expect(copy).not.toBe(f);
+    expect(v.get(copy!)).toMatchObject({ kind: 'folder', title: 'F', parentId: dest });
+    const [copiedGroup] = v.groups(copy!);
+    expect(copiedGroup!.id).not.toBe(g);
+    expect(names(s, copiedGroup!.id)).toEqual(['a', 'b']);
+    expect(names(s, g)).toEqual(['a', 'b']);
+
+    const [orig] = v.tabs(g);
+    await s.transact((tx) => editTab(tx, orig!.id, { title: 'Shared' }));
+    const after = new ListView(s.all());
+    expect(after.title(after.tabs(copiedGroup!.id)[0]!)).toBe('Shared');
+  });
+
+  it('copies tabs into a group before a given tab', async () => {
+    const s = new MemoryStore('dev1');
+    const src = await store(s, ['a']);
+    const dest = await store(s, ['x', 'y']);
+    const [a] = new ListView(s.all()).tabs(src);
+    const [, y] = new ListView(s.all()).tabs(dest);
+    await s.transact((tx) => copyItems(tx, [a!.id], dest, y!.id));
+    expect(names(s, dest)).toEqual(['x', 'a', 'y']);
+    expect(names(s, src)).toEqual(['a']);
+  });
+});
+
+describe('destinations', () => {
+  it('refuses to move or copy into an item that does not exist or is in the trash', async () => {
+    const s = new MemoryStore('dev1');
+    const g = await store(s, ['a']);
+    const gone = await store(s, ['b']);
+    await s.transact((tx) => trashItems(tx, [gone]));
+    const [a] = new ListView(s.all()).tabs(g);
+    await expect(s.transact((tx) => moveItems(tx, [a!.id], 'no-such-id', null))).rejects.toBeInstanceOf(MissingError);
+    await expect(s.transact((tx) => moveItems(tx, [a!.id], gone, null))).rejects.toBeInstanceOf(MissingError);
+    await expect(s.transact((tx) => copyItems(tx, [a!.id], gone, null))).rejects.toBeInstanceOf(MissingError);
+    expect(names(s, g)).toEqual(['a']);
+  });
+});
+
+describe('mergeGroups', () => {
+  it('appends the source tabs to the target and trashes the source, even when named', async () => {
+    const s = new MemoryStore('dev1');
+    const target = await store(s, ['a']);
+    const source = await store(s, ['b', 'c']);
+    await s.transact((tx) => updateItem(tx, source, { title: 'Named' }));
+    await s.transact((tx) => mergeGroups(tx, source, target));
+    expect(names(s, target)).toEqual(['a', 'b', 'c']);
+    expect(new ListView(s.all()).get(source)).toBeUndefined();
   });
 });
