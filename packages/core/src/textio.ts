@@ -1,4 +1,5 @@
-import type { CopyFormat } from './model';
+import type { CopyFormat, Id, Item } from './model';
+import type { ListView } from './view';
 
 export interface LinkLine {
   url: string;
@@ -58,4 +59,46 @@ export function formatLinks(links: LinkLine[], format: CopyFormat): { text: stri
   if (format !== 'rich') return { text };
   const html = links.map((l) => `<a href="${escapeHtml(l.url)}">${escapeHtml(l.title || l.url)}</a>`).join('<br>');
   return { text, html };
+}
+
+const PAGE_STYLE = 'font-family:system-ui,sans-serif;font-size:14px;line-height:1.5;color:#444;max-width:960px;margin:32px auto;padding:0 20px';
+const LIST_STYLE = 'list-style:none;padding:0;margin:0 0 20px';
+const NOTE_STYLE = 'margin:0 0 4px;color:#767676;white-space:pre-wrap';
+
+/**
+ * One standalone HTML page for a folder or group: its title as `<h1>`, each group a heading with
+ * its tabs as links, notes as text under their item, sub-folders one heading level deeper.
+ * Inline styles only, so the file renders the same anywhere.
+ */
+export function exportHtml(
+  view: ListView,
+  id: Id,
+  tabCount: (n: number) => string = (n) => `${n} ${n === 1 ? 'tab' : 'tabs'}`,
+): string {
+  const root = view.get(id);
+  if (!root) return '';
+  const label = (item: Item): string =>
+    item.kind === 'group' ? item.title || tabCount(view.tabs(item.id).length) : item.title || 'savetab';
+  const notes = (item: Item): string => {
+    const text = view.notes(item);
+    return text ? `<p style="${NOTE_STYLE}">${escapeHtml(text)}</p>` : '';
+  };
+  const tabs = (groupId: Id): string =>
+    `<ul style="${LIST_STYLE}">` +
+    view
+      .tabs(groupId)
+      .map((t) => `<li><a href="${escapeHtml(t.url)}">${escapeHtml(view.title(t) || t.url)}</a>${notes(t)}</li>`)
+      .join('') +
+    '</ul>';
+  const heading = (level: number, item: Item) => {
+    const h = Math.min(level, 6);
+    return `<h${h}>${escapeHtml(label(item))}</h${h}>${notes(item)}`;
+  };
+  const body = (item: Item, level: number): string => {
+    if (item.kind === 'group') return heading(level, item) + tabs(item.id);
+    if (item.kind !== 'folder') return '';
+    return heading(level, item) + view.children(item.id).map((child) => body(child, level + 1)).join('');
+  };
+  const title = escapeHtml(label(root));
+  return `<!doctype html>\n<html><head><meta charset="utf-8"><title>${title}</title></head><body style="${PAGE_STYLE}">${body(root, 1)}</body></html>\n`;
 }
