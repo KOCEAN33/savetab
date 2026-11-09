@@ -22,6 +22,7 @@
   import FolderRow from '@/components/FolderRow.svelte';
   import GroupView from '@/components/GroupView.svelte';
   import LocationDialog from '@/components/LocationDialog.svelte';
+  import SelectionBar from '@/components/SelectionBar.svelte';
   import NavColumn from '@/components/NavColumn.svelte';
   import TrashView from '@/components/TrashView.svelte';
 
@@ -46,6 +47,8 @@
   const trashTitle = (r: ItemRecord) => tabTitle(r as Tab, view.link(r as Tab));
 
   let items = $derived(view.children(folder));
+  /** Visible folders, groups, and tabs, top to bottom, for the tick menu's range commands. */
+  const order = $derived(view.children(folder).flatMap((i) => [i.id, ...(i.kind === 'group' ? view.tabs(i.id).map((t) => t.id) : [])]));
   let newGroupItems = $state<Tab[]>([]);
 
   $effect(() => {
@@ -139,6 +142,8 @@
         </nav>
         <button class="link-button" onclick={newFolder}>New folder</button>
       </div>
+
+      <SelectionBar {view} {order} />
 
       {#if items.length === 0}
         <p class="empty meta">

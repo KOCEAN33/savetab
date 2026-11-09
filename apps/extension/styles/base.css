@@ -209,8 +209,23 @@ textarea {
   visibility: hidden;
 }
 
-.tab-more {
+.tab-more,
+.tick {
   visibility: hidden;
+}
+
+.tick {
+  flex: none;
+  margin: 0;
+}
+
+.tick:checked,
+.tick-shown,
+.tab:hover .tick,
+.tab:focus-within .tick,
+.group-head:hover .tick,
+.group-head:focus-within .tick {
+  visibility: visible;
 }
 
 .tab:hover .tab-delete,
@@ -443,4 +458,20 @@ textarea {
 
 .dialog-list li {
   padding: var(--space-xs) 0;
+}
+
+.select-menu {
+  position: fixed;
+}
+
+.selection-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
 }

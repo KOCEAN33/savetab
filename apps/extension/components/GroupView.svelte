@@ -15,6 +15,7 @@
   import ItemMenu from './ItemMenu.svelte';
   import NotesField from './NotesField.svelte';
   import TabRow from './TabRow.svelte';
+  import Tick from './Tick.svelte';
   import TitleField from './TitleField.svelte';
 
   let {
@@ -67,6 +68,7 @@
 <section class="group" class:archived={group.archived} id="item-{group.id}" aria-label={label}>
   <div class="group-head">
     <span class="group-grip" use:dragHandle aria-label="Drag {label}">⠿</span>
+    <Tick id={group.id} {label} />
     {#if group.task !== 'none'}
       <input
         type="checkbox"

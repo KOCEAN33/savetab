@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { afterOpen, type Settings, type Tab } from '@savetab/core';
 import { transact } from './db';
+import { RESTORE_CAP, restoreCount } from './selection';
 
 export interface Intent {
   active: boolean;
@@ -52,7 +53,8 @@ export async function restoreTab(tab: Tab, intent: Intent): Promise<void> {
   await open([tab], intent, (await browser.windows.getCurrent()).id);
 }
 
-export async function restoreGroup(tabs: Tab[], intent: Intent, s: Settings): Promise<void> {
+export async function restoreGroup(all: Tab[], intent: Intent, s: Settings): Promise<void> {
+  const tabs = all.slice(0, RESTORE_CAP);
   if (tabs.length === 0) return;
   const current = await browser.windows.getCurrent({ populate: true });
   const alone = (current.tabs?.length ?? 0) <= 1;
@@ -66,4 +68,11 @@ export async function restoreGroup(tabs: Tab[], intent: Intent, s: Settings): Pr
   const blank = win?.tabs?.[0]?.id;
   await open(tabs, { ...intent, active: true }, win?.id);
   if (blank !== undefined) await browser.tabs.remove(blank);
+}
+
+/** Restore a selection. Above 50 tabs the user confirms first, as in OneTab. */
+export async function restoreSelected(tabs: Tab[], intent: Intent, s: Settings): Promise<void> {
+  const { open, confirm: ask } = restoreCount(tabs.length);
+  if (ask && !confirm(`You are about to open ${open} tabs`)) return;
+  await restoreGroup(tabs, intent, s);
 }

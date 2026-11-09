@@ -4,6 +4,7 @@
   import { act, editing } from '@/lib/ui.svelte';
   import ItemMenu from './ItemMenu.svelte';
   import NotesField from './NotesField.svelte';
+  import Tick from './Tick.svelte';
   import TitleField from './TitleField.svelte';
 
   let {
@@ -57,6 +58,7 @@
   {:else}
     <button class="tab-delete" title="Delete" aria-label="Delete {title || tab.url}" onclick={ondelete}>×</button>
   {/if}
+  <Tick id={tab.id} label={title || tab.url} />
   {#if tab.task !== 'none'}
     <input
       type="checkbox"

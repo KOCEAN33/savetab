@@ -4,6 +4,7 @@
   import { editing } from '@/lib/ui.svelte';
   import ItemMenu from './ItemMenu.svelte';
   import NotesField from './NotesField.svelte';
+  import Tick from './Tick.svelte';
   import TitleField from './TitleField.svelte';
 
   let { folder, view, onopen }: { folder: Folder; view: ListView; onopen: () => void } = $props();
@@ -15,6 +16,7 @@
 <section class="group folder" id="item-{folder.id}" aria-label="Folder {label}">
   <div class="group-head">
     <span class="group-grip" use:dragHandle aria-label="Drag {label}">⠿</span>
+    <Tick id={folder.id} {label} />
     {#if editing.title === folder.id}
       <TitleField item={folder} title={folder.title} label="Folder name" />
     {:else}
