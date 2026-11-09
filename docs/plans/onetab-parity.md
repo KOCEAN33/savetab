@@ -31,7 +31,18 @@ interface ItemBase {
   star: boolean;
   task: 'none' | 'pending' | 'done';
   archived: boolean;
+  collapsed: boolean;
+  quickOrder: string | null;      // fractional index in the quick list, null = not listed
   clocks: Record<string, Hlc>;    // last-writer-wins clock per field
+}
+
+interface Link {                  // title and notes shared by every tab with this URL
+  id: string;                     // "link-" + hash of url, the same on every device
+  kind: 'link';
+  url: string;                    // normalized
+  title: string;
+  notes: string;
+  purged: boolean;
 }
 
 interface Folder extends ItemBase { kind: 'folder'; pinnedTop: boolean }
@@ -54,7 +65,7 @@ interface Op {                    // outbox entry, one per item write
 
 Settings split in two. Synced settings (exclusions, duplicate rule, restore rules, display rules) are the record with id `settings` in the item store, so they merge like an item. Device settings (toolbar action, startup, context menu, theme) stay in `browser.storage.local`.
 
-Title and notes sharing across copies of one URL (features.md "Data hierarchy") is a `P2` change: titles and notes move to a `Link` record keyed by normalized URL. `P1` keeps them on `Tab`.
+A tab's title and notes live on a `Link` record shared by every copy of its URL (features.md "Data hierarchy"). See P2 step 1.
 
 Merge rule for incoming ops: a field takes the op's value when the op's HLC is greater than the field's clock. Clients run this rule. Whether the server also runs it depends on the E2E decision in `P4`.
 
@@ -76,7 +87,40 @@ Built. Every `P1` item in `docs/specs/features.md` works in Chrome and Firefox.
 
 ### P2: v2 organization
 
-Folders and navigation column, `Link` records for shared titles and notes, notes, search with filters, omnibox `11`, multi-select and bulk actions, sort, collapse, paging, keyboard navigation, quick list, tasks view, archive, move and copy dialogs, merge actions, remove-duplicates tools, copy to clipboard formats.
+Steps run in this order. Each step is done when its check passes plus `pnpm test`, `pnpm test:e2e`, `pnpm check`, and `pnpm lint`. A value marked *(savetab choice)* has no observed OneTab counterpart.
+
+1. **Data model.** Shape changes land before any UI.
+   - `Link` record: `{ id, kind: 'link', url, title, notes, purged }`. `url` is the normalized URL: `new URL(raw).href`, or the raw string when parsing fails. `id` is `link-` plus a 106-bit hex hash of the normalized URL (two cyrb53 runs with different seeds). It is synchronous, since a Dexie transaction commits on any non-IndexedDB await. Two devices that store the same URL make the same id, so their writes merge.
+   - A tab shows its `Link` title when the `Link` exists, else its own `Tab.title`. Storing a tab creates the `Link` with the tab's title when none exists. `titleOnDuplicate: 'update'` writes the `Link` title. Renaming or noting a tab writes the `Link`.
+   - Emptying trash purges a `Link` when no live or trashed tab has its URL.
+   - `ItemBase` adds `collapsed: boolean` and `quickOrder: string | null` (fractional key in the quick list, null = not listed).
+   - Synced settings add `copyFormat: 'rich' | 'urlTitle' | 'titleUrl' | 'url' | 'markdown'` (default `rich`).
+   - `NOTES_MAX = 5000` characters *(savetab choice)*.
+   - Check: core tests show two copies of a URL sharing a renamed title and notes, two devices converging on one `Link`, and an orphan `Link` purged with the trash.
+2. **Folders and navigation column.** The page shows one folder at a time: its folders, then its groups, in display order. A left column lists the folder tree, recent folders and groups (last 10 opened, device setting), and a filter: show everything, folders only, named only. A breadcrumb leads back to root. "New folder" creates a folder at the top of the current folder. Dragging a group onto a folder in the column moves it there. New stores still land at the root.
+   - Check: e2e makes a folder, moves a group into it, opens it, and returns to root through the breadcrumb.
+3. **Item menus and flags.** One menu component serves folder, group, and tab rows. A tab row gets a "More" button shown on hover and focus, like the delete cross.
+   - Rename, notes (text area capped at `NOTES_MAX`, shown under the title), star, make task / mark done / remove task, mark archived (weak text on the border-color background: stylelint rejects striped gradients as a tell), pin to top, lock.
+   - Create group or folder above, within, below. An empty new group gets the title "New group" and opens in edit mode, since an empty unnamed group is not shown.
+   - Merge into parent (folder: children move to its parent, then the folder goes to trash). Merge with inner groups (folder: every group below it merges into its first group).
+   - Remove duplicates: within here, here that exist elsewhere, elsewhere that exist here. Duplicates compare normalized URLs. The first copy in display order stays. Removed copies go to trash.
+   - Copy links to clipboard in `copyFormat`: `URL | Title`, `Title URL`, URL only, Markdown `[Title](URL)`, or rich text (`text/html` links plus a plain-text fallback). The options page sets `copyFormat`.
+   - The emoji picker shortcut on notes goes to `docs/candidates.md`: features.md does not say what it does.
+   - Check: core tests for merge and each remove-duplicates variant, e2e for adding a tab note that shows on a second copy of the URL.
+4. **Move and copy.** A location chooser dialog lists folders and groups with a search field. Move uses `moveItems`. Copy duplicates items and their subtrees with new ids. Dragging with Ctrl or Alt held copies instead of moving. Dropping a group on another group's header merges its tabs into that group.
+   - Check: core tests for copy (new ids, same `Link`) and group merge, e2e for "Move" through the dialog.
+5. **Multi-select and bulk actions.** A tick before each tab and group head toggles selection. Right-click on a tick opens: Select all, Deselect all, Invert selection, Select all except this, Select this and above, Select this and below, in the current view's order. A bar shows the count and actions: Restore, Move, Copy, Star, Archive, Make task, Copy links, Move to trash. Restoring more than 50 tabs asks "You are about to open {N} tabs". One open is capped at 500 tabs.
+   - Check: unit tests for the selection commands, e2e for select all and bulk trash.
+6. **Search.** A header field with a match count. Terms match the shown title, URL, and notes of tabs, groups, and folders. Filters: case sensitive, whole words, created on or after, created on or before, starred, tasks, has notes, named only, archived / non-archived / both, restrict to a folder. Results show matching tabs under their groups. Omnibox keyword `11` lists the top 6 matches as suggestions. Choosing a suggestion opens its URL. Pressing Enter on typed text opens the page with `?q=<text>`. The search function lives in `core`.
+   - Check: core tests for each filter, e2e for typing a term and reading the count.
+7. **Sort, collapse, paging.** The folder menu sorts its groups: A-Z, recently created, recently modified, recently accessed, each with reverse. Sorting rewrites order keys, so it syncs. Tabs keep their order. The collapse toggle on a group or folder head writes `collapsed`. A folder shows 50 groups per page with "Next {N}" and "Previous {N}" *(savetab choice: page size)*.
+   - Check: core test for each sort key, e2e for collapse and paging.
+8. **Keyboard navigation.** Tab enters the list on the first row. Up and Down move between rows, Enter opens a tab or restores a group, Left collapses and Right expands, Backspace goes to the parent folder, Esc leaves the list. `/` focuses search, `Alt+/` focuses search restricted to the current folder *(savetab choice: the key)*.
+   - Check: e2e drives each key.
+9. **Tasks view and quick list.** A header link "Tasks ({pending} pending, {done} done)" opens a view of tasks, pending first, each with a done toggle. Item menus get "Add to quick list" and "Remove from quick list". The quick list shows in the navigation column under the folder tree, in `quickOrder`. Removing an entry clears `quickOrder` and leaves the item.
+   - Check: e2e marks a task done and adds and removes a quick list entry.
+10. **Send to a group from the context menu.** A "Send this tab to" submenu lists the 5 most recent destinations, then named groups that are not locked, up to 20 entries. The menu rebuilds when a group title changes. The recent destination list is a device setting, updated by each send and move.
+    - Check: e2e sends a tab to a named group through the menu click handler.
 
 ### P3: v2 capture and restore extras
 
