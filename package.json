@@ -1,0 +1,20 @@
+{
+  "name": "savetab",
+  "private": true,
+  "packageManager": "pnpm@12.8.1",
+  "scripts": {
+    "build": "pnpm --filter @savetab/extension build && pnpm --filter @savetab/extension build:firefox",
+    "dev": "pnpm --filter @savetab/extension dev",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter @savetab/extension test:e2e",
+    "check": "pnpm -r check",
+    "lint": "oxlint packages apps && pnpm --filter @savetab/extension lint:css",
+    "fmt": "oxfmt packages apps",
+    "fmt:check": "oxfmt --check packages apps"
+  },
+  "devDependencies": {
+    "oxfmt": "0.77.0",
+    "oxlint": "1.92.0",
+    "typescript": "6.0.3"
+  }
+}
