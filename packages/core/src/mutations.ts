@@ -480,7 +480,20 @@ export async function mergeGroups(tx: Tx, sourceId: Id, targetId: Id): Promise<v
   if (isLive(await tx.get(sourceId))) await trashItems(tx, [sourceId]);
 }
 
-export type SortKey = 'title' | 'created' | 'modified' | 'accessed';
+/**
+ * Append an item to the quick list, after its last entry `afterId`. Listing is not an edit,
+ * so `modifiedAt` stays.
+ */
+export async function addToQuickList(tx: Tx, id: Id, afterId: Id | null): Promise<void> {
+  const after = afterId == null ? undefined : await tx.get(afterId);
+  await tx.write(id, { quickOrder: generateKeyBetween(after?.quickOrder ?? null, null) });
+}
+
+export async function removeFromQuickList(tx: Tx, id: Id): Promise<void> {
+  await tx.write(id, { quickOrder: null });
+}
+
+export type SortKey ='title' | 'created' | 'modified' | 'accessed';
 
 const SORT_COMPARE: Record<SortKey, (a: ItemRecord, b: ItemRecord) => number> = {
   title: (a, b) => (a.title ?? '').localeCompare(b.title ?? '', undefined, { sensitivity: 'base' }),
