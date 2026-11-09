@@ -1,10 +1,11 @@
 import { liveQuery } from 'dexie';
-import { browser } from 'wxt/browser';
+import { browser, type Browser } from 'wxt/browser';
 import { db } from '@/lib/db';
-import { hostnameOf, sendLink, sendTabs, toggleExcluded } from '@/lib/capture';
-import { MENU_SEND, rebuildMenus, refreshExcludeItem } from '@/lib/menus';
+import { hostnameOf, sendLink, sendTabs, sendTabTo, toggleExcluded } from '@/lib/capture';
+import { builtTargets, MENU_SEND, rebuildMenus, refreshExcludeItem, refreshSendTo, SEND_TO_PREFIX } from '@/lib/menus';
 import { omniboxSuggestions } from '@/lib/omnibox';
 import { onetabUrl, openOneTab } from '@/lib/onetab-page';
+import { recentItem } from '@/lib/recent';
 import type { SendAction } from '@/lib/select';
 import { deviceSettingsItem, getDeviceSettings } from '@/lib/settings';
 import { ListView, SETTINGS_ID } from '@savetab/core';
@@ -25,10 +26,23 @@ const TOOLBAR_SEND: Record<string, SendAction> = {
   sendCurrent: 'current',
 };
 
+async function onMenuClick(info: Browser.contextMenus.OnClickData, tab?: Browser.tabs.Tab): Promise<void> {
+  const id = String(info.menuItemId);
+  if (id === 'display' || id === 'display-action') return openOneTab(tab?.windowId);
+  if (id === 'send-link' && info.linkUrl) {
+    const text = (info as { linkText?: string }).linkText ?? info.selectionText ?? '';
+    return sendLink(info.linkUrl, text);
+  }
+  if (id === 'exclude') return toggleExcluded(hostnameOf(tab?.url ?? info.pageUrl));
+  if (id.startsWith(SEND_TO_PREFIX) && tab) return sendTabTo(id.slice(SEND_TO_PREFIX.length), tab);
+  const action = MENU_SEND[id];
+  if (action) await sendTabs(action, tab);
+}
+
 export default defineBackground(() => {
-  // Playwright cannot click the toolbar icon, so e2e builds expose the store entry point.
+  // Playwright cannot click the toolbar icon or a context menu, so e2e builds expose their handlers.
   if (import.meta.env.MODE === 'e2e') {
-    Object.assign(globalThis, { savetabTest: { sendTabs } });
+    Object.assign(globalThis, { savetabTest: { sendTabs, onMenuClick, sendTargets: () => builtTargets } });
     // WebDriver BiDi cannot navigate to moz-extension:// pages, so give the Firefox smoke test one to drive.
     if (import.meta.env.FIREFOX) {
       browser.runtime.onInstalled.addListener(
@@ -48,17 +62,7 @@ export default defineBackground(() => {
     if (action) await sendTabs(action, tab);
   });
 
-  browser.contextMenus.onClicked.addListener(async (info, tab) => {
-    const id = String(info.menuItemId);
-    if (id === 'display' || id === 'display-action') return openOneTab(tab?.windowId);
-    if (id === 'send-link' && info.linkUrl) {
-      const text = (info as { linkText?: string }).linkText ?? info.selectionText ?? '';
-      return sendLink(info.linkUrl, text);
-    }
-    if (id === 'exclude') return toggleExcluded(hostnameOf(tab?.url ?? info.pageUrl));
-    const action = MENU_SEND[id];
-    if (action) await sendTabs(action, tab);
-  });
+  browser.contextMenus.onClicked.addListener(onMenuClick);
 
   browser.omnibox.onInputChanged.addListener(async (text, suggest) => {
     suggest(omniboxSuggestions(new ListView(await db.items.toArray()), text, !import.meta.env.FIREFOX));
@@ -85,4 +89,8 @@ export default defineBackground(() => {
   browser.windows.onFocusChanged.addListener(() => void refreshExcludeItem());
   // liveQuery also sees writes from the OneTab and options pages.
   liveQuery(() => db.items.get(SETTINGS_ID)).subscribe(() => void refreshExcludeItem());
+  // Ceiling: every write rereads the whole list to rebuild "Send this tab to". Switch to a
+  // query over groups if large lists make the background worker busy.
+  liveQuery(() => db.items.toArray()).subscribe(() => void refreshSendTo());
+  recentItem.watch(() => void refreshSendTo());
 });

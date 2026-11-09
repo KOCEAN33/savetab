@@ -1,5 +1,8 @@
 import { browser, type Browser } from 'wxt/browser';
+import { ListView, type Id } from '@savetab/core';
 import { hostnameOf } from './capture';
+import { db } from './db';
+import { recentItem } from './recent';
 import type { SendAction } from './select';
 import { getDeviceSettings, getSettings } from './settings';
 
@@ -29,6 +32,33 @@ const SEND_TITLES: Record<keyof typeof MENU_SEND, string> = {
   'send-selected': 'Send selected tabs to savetab',
 };
 
+export interface SendTarget {
+  id: Id;
+  title: string;
+}
+
+const SEND_TO_RECENT = 5;
+const SEND_TO_MAX = 20;
+export const SEND_TO_PREFIX = 'send-to:';
+
+/** "Send this tab to" entries: the most recent open groups, then named open groups in list order. Locked groups take no tabs. */
+export function sendTargets(view: ListView, recent: Id[]): SendTarget[] {
+  const open = view.groups(null).filter((g) => !g.locked);
+  const recentGroups = recent.flatMap((id) => open.find((g) => g.id === id) ?? []).slice(0, SEND_TO_RECENT);
+  const named = open.filter((g) => g.title !== '' && !recentGroups.includes(g));
+  return [...recentGroups, ...named].slice(0, SEND_TO_MAX).map((g) => {
+    const n = view.tabs(g.id).length;
+    return { id: g.id, title: g.title || `${n} ${n === 1 ? 'tab' : 'tabs'}` };
+  });
+}
+
+/** The entries the menu was last built with. */
+export let builtTargets: SendTarget[] = [];
+
+async function currentTargets(): Promise<SendTarget[]> {
+  return sendTargets(new ListView(await db.items.toArray()), await recentItem.getValue());
+}
+
 function create(props: Browser.contextMenus.CreateProperties): Promise<void> {
   return new Promise((resolve) => {
     browser.contextMenus.create(props, () => {
@@ -39,9 +69,23 @@ function create(props: Browser.contextMenus.CreateProperties): Promise<void> {
   });
 }
 
-export async function rebuildMenus(): Promise<void> {
+let building = Promise.resolve();
+
+/** Rebuilds run one at a time, since an overlapping removeAll would drop the other's items. */
+export function rebuildMenus(): Promise<void> {
+  building = building.then(build, build);
+  return building;
+}
+
+/** Rebuild when a "Send this tab to" entry changed, such as a group renamed or a new recent destination. */
+export async function refreshSendTo(): Promise<void> {
+  if (JSON.stringify(await currentTargets()) !== JSON.stringify(builtTargets)) await rebuildMenus();
+}
+
+async function build(): Promise<void> {
   await browser.contextMenus.removeAll();
   await create({ id: 'display-action', title: 'Display savetab', contexts: ['action'] });
+  builtTargets = await currentTargets();
   if (!(await getDeviceSettings()).contextMenu) return;
 
   await create({ id: 'root', title: 'savetab', contexts: PAGE });
@@ -49,6 +93,16 @@ export async function rebuildMenus(): Promise<void> {
   await create({ id: 'sep-1', parentId: 'root', type: 'separator', contexts: PAGE });
   for (const [id, title] of Object.entries(SEND_TITLES)) {
     await create({ id, parentId: 'root', title, contexts: PAGE });
+  }
+  await create({
+    id: 'send-to',
+    parentId: 'root',
+    title: 'Send this tab to',
+    contexts: PAGE,
+    enabled: builtTargets.length > 0,
+  });
+  for (const t of builtTargets) {
+    await create({ id: SEND_TO_PREFIX + t.id, parentId: 'send-to', title: t.title, contexts: PAGE });
   }
   await create({ id: 'send-link', parentId: 'root', title: 'Send this web link to savetab', contexts: ['link'] });
   await create({ id: 'sep-2', parentId: 'root', type: 'separator', contexts: PAGE });

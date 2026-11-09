@@ -1,7 +1,8 @@
 import { browser, type Browser } from 'wxt/browser';
-import { filterStorable, storeIntoFirstGroup, storeTabs, type NewTab } from '@savetab/core';
+import { filterStorable, storeIntoFirstGroup, storeIntoGroup, storeTabs, type Id, type NewTab } from '@savetab/core';
 import { transact } from './db';
 import { openOneTab } from './onetab-page';
+import { touchRecent } from './recent';
 import { selectTabs, type SendAction } from './select';
 import { getDeviceSettings, getSettings, setSettings } from './settings';
 
@@ -62,6 +63,16 @@ export async function sendTabs(action: SendAction, origin?: Browser.tabs.Tab): P
   // Open the list before closing tabs, so a fully stored window stays open on it.
   if (!single && (await getDeviceSettings()).openAfterStore) await openOneTab(windowId);
   await browser.tabs.remove([...storable, ...blanks].flatMap((t) => (t.id === undefined ? [] : [t.id])));
+}
+
+/** "Send this tab to": the tab joins the top of a chosen group, then closes. It skips the pinned and excluded rules, like "Send only this tab". */
+export async function sendTabTo(groupId: Id, tab: Browser.tabs.Tab): Promise<void> {
+  const settings = await getSettings();
+  const storable = filterStorable([toNewTab(tab)], settings, { single: true, ignorePrefixes: ignorePrefixes() });
+  if (storable.length === 0) return;
+  await transact((tx) => storeIntoGroup(tx, groupId, storable, settings));
+  await touchRecent(groupId);
+  if (tab.id !== undefined) await browser.tabs.remove(tab.id);
 }
 
 export async function sendLink(url: string, title: string): Promise<void> {
