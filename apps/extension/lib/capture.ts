@@ -4,6 +4,7 @@ import {
   storeIntoFirstGroup,
   storeIntoGroup,
   storeTabs,
+  updateItem,
   type BrowserGroup,
   type Id,
   type NewTab,
@@ -88,6 +89,34 @@ export async function sendTabs(action: SendAction, origin?: Browser.tabs.Tab): P
   // Open the list before closing tabs, so a fully stored window stays open on it.
   if (!single && (await getDeviceSettings()).openAfterStore) await openOneTab(windowId);
   await browser.tabs.remove([...storable, ...blanks].flatMap((t) => (t.id === undefined ? [] : [t.id])));
+}
+
+/**
+ * The popup's send: the chosen tabs join a new group, named when `title` is set, or an existing
+ * group. The tabs were ticked by hand, so the pinned and excluded rules do not apply.
+ */
+export async function storeChosen(
+  tabs: Browser.tabs.Tab[],
+  dest: { groupId: Id } | { title: string },
+  close: boolean,
+): Promise<void> {
+  const settings = await getSettings();
+  const storable = filterStorable(
+    tabs.map((t) => toNewTab(t)),
+    settings,
+    { single: true, ignorePrefixes: ignorePrefixes() },
+  );
+  if (storable.length === 0) return;
+  if ('groupId' in dest) {
+    await transact((tx) => storeIntoGroup(tx, dest.groupId, storable, settings));
+    await touchRecent(dest.groupId);
+  } else {
+    await transact(async (tx) => {
+      const id = await storeTabs(tx, storable, settings);
+      if (id && dest.title) await updateItem(tx, id, { title: dest.title });
+    });
+  }
+  if (close) await browser.tabs.remove(storable.flatMap((t) => (t.id === undefined ? [] : [t.id])));
 }
 
 /** "Send this tab to": the tab joins the top of a chosen group, then closes. It skips the pinned and excluded rules, like "Send only this tab". */

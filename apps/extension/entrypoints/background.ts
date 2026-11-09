@@ -26,6 +26,12 @@ const TOOLBAR_SEND: Record<string, SendAction> = {
   sendCurrent: 'current',
 };
 
+/** The toolbar icon opens the send popup with `toolbarAction: 'popup'`. Otherwise its click runs `action.onClicked`. */
+async function syncPopup(): Promise<void> {
+  const { toolbarAction } = await getDeviceSettings();
+  await browser.action.setPopup({ popup: toolbarAction === 'popup' ? 'send.html' : '' });
+}
+
 async function onMenuClick(info: Browser.contextMenus.OnClickData, tab?: Browser.tabs.Tab): Promise<void> {
   const id = String(info.menuItemId);
   if (id === 'display' || id === 'display-action') return openOneTab(tab?.windowId);
@@ -80,7 +86,11 @@ export default defineBackground(() => {
     await rebuildMenus();
     if ((await getDeviceSettings()).openAtStartup) await openOneTab();
   });
-  deviceSettingsItem.watch(() => void rebuildMenus());
+  deviceSettingsItem.watch(() => {
+    void rebuildMenus();
+    void syncPopup();
+  });
+  void syncPopup();
 
   browser.tabs.onActivated.addListener(() => void refreshExcludeItem());
   browser.tabs.onUpdated.addListener((_id, change) => {

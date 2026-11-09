@@ -46,6 +46,7 @@
       ['sendWindow', t('toolbarSendWindow')],
       ['sendWholeWindow', t('toolbarSendWholeWindow')],
       ['sendCurrent', t('toolbarSendCurrent')],
+      ['popup', t('toolbarPopup')],
     ]}
     onchange={(v) => setDeviceSettings({ toolbarAction: v })}
   />

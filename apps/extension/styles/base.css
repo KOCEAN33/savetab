@@ -14,6 +14,19 @@ main {
   padding: var(--space-xl);
 }
 
+/* The toolbar popup is narrow, so it drops the page margin. */
+.popup-main {
+  width: 400px;
+  padding: var(--space-md);
+}
+
+.popup-main select,
+.popup-main input[type='text'],
+.popup-main input[type='search'] {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 a {
   color: var(--color-primary);
 }
