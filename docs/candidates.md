@@ -22,5 +22,9 @@ From the screenshot review of the P1 pages. The list keeps OneTab's plain look o
 
 ## Open choices and code follow-ups
 
+- features.md lists two `P1` items that are not built: export from a chosen location (the import-export page exports the whole root) and an import destination (import always lands at the root).
+- Archived rows show `--color-on-surface-weak` text on a `--color-border` background (`styles/base.css`): 3.91:1 in the light palette and 3.96:1 in the planned dark one, below 4.5:1.
+- The Firefox GUI check has not covered P2 multi-select, sort, collapse, paging, or keyboard navigation. Chromium e2e covers them.
+
 - Dragging tabs into a group does not update the recent destination list. Only sends and moves through the location dialog do (plan P2 step 10). Counting drags needs `GroupView` to tell a drop from another group apart from a reorder.
 - The default group label `{N} tab(s)` is computed separately in `NavColumn.svelte`, `TasksView.svelte`, `GroupView.svelte`, and `lib/menus.ts`. A shared label on `ListView` would replace all four.
