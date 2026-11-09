@@ -495,3 +495,9 @@ textarea {
   gap: var(--space-sm) var(--space-lg);
   margin-top: var(--space-sm);
 }
+
+.pager {
+  display: flex;
+  gap: var(--space-md);
+  padding: var(--space-md) 0;
+}

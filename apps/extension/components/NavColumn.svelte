@@ -72,7 +72,7 @@
           onclick={() => onopen(item)}>{label(item)}</button
         >
         {#if item.kind !== 'group' || !item.locked}{@render dropZone(item.id)}{/if}
-        {#if item.kind === 'folder'}{@render tree(item.id)}{/if}
+        {#if item.kind === 'folder' && !item.collapsed}{@render tree(item.id)}{/if}
       </li>
     {/each}
   </ul>

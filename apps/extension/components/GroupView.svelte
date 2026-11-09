@@ -100,6 +100,12 @@
       <button class="link-button" onclick={() => run((tx) => trashItems(tx, [group.id]))}>Delete all</button>
     {/if}
     <ItemMenu item={group} {view} />
+    <button
+      class="link-button"
+      aria-expanded={!group.collapsed}
+      onclick={() => act((tx) => updateItem(tx, group.id, { collapsed: !group.collapsed }))}
+      >{group.collapsed ? 'Expand' : 'Collapse'}</button
+    >
   </div>
   {#if editing.notes === group.id}
     <NotesField item={group} notes={group.notes} />
@@ -107,27 +113,29 @@
     <p class="notes meta">{group.notes}</p>
   {/if}
 
-  <ul
-    class="tabs"
-    use:dndzone={{
-      items,
-      type: 'tab',
-      flipDurationMs: FLIP_MS,
-      ...DROP_TARGET,
-      dragDisabled: group.locked || shown !== undefined,
-      dropFromOthersDisabled: group.locked,
-    }}
-    onconsider={consider}
-    onfinalize={finalize}
-  >
-    {#each items as tab (tab.id)}
-      <TabRow
-        {tab}
-        {view}
-        locked={group.locked}
-        onopen={(e) => restoreTab(tab, clickIntent(e, settings))}
-        ondelete={() => run((tx) => trashItems(tx, [tab.id]))}
-      />
-    {/each}
-  </ul>
+  {#if !group.collapsed}
+    <ul
+      class="tabs"
+      use:dndzone={{
+        items,
+        type: 'tab',
+        flipDurationMs: FLIP_MS,
+        ...DROP_TARGET,
+        dragDisabled: group.locked || shown !== undefined,
+        dropFromOthersDisabled: group.locked,
+      }}
+      onconsider={consider}
+      onfinalize={finalize}
+    >
+      {#each items as tab (tab.id)}
+        <TabRow
+          {tab}
+          {view}
+          locked={group.locked}
+          onopen={(e) => restoreTab(tab, clickIntent(e, settings))}
+          ondelete={() => run((tx) => trashItems(tx, [tab.id]))}
+        />
+      {/each}
+    </ul>
+  {/if}
 </section>

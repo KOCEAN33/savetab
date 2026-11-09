@@ -1,7 +1,7 @@
 <script lang="ts">
   import { dragHandle } from 'svelte-dnd-action';
-  import type { Folder, ListView } from '@savetab/core';
-  import { editing } from '@/lib/ui.svelte';
+  import { updateItem, type Folder, type ListView } from '@savetab/core';
+  import { act, editing } from '@/lib/ui.svelte';
   import ItemMenu from './ItemMenu.svelte';
   import NotesField from './NotesField.svelte';
   import Tick from './Tick.svelte';
@@ -24,6 +24,13 @@
     {/if}
     <span class="meta">{[folder.pinnedTop && 'Pinned', `Folder, ${count} ${count === 1 ? 'tab' : 'tabs'}`].filter(Boolean).join(', ')}</span>
     <ItemMenu item={folder} {view} />
+    <button
+      class="link-button"
+      aria-expanded={!folder.collapsed}
+      title="Show or hide its folders in the folder column"
+      onclick={() => act((tx) => updateItem(tx, folder.id, { collapsed: !folder.collapsed }))}
+      >{folder.collapsed ? 'Expand' : 'Collapse'}</button
+    >
   </div>
   {#if editing.notes === folder.id}
     <NotesField item={folder} notes={folder.notes} />

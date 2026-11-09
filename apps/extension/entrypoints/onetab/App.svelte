@@ -10,6 +10,7 @@
     isActive,
     ListView,
     search,
+    sortGroups,
     moveItems,
     moveToNewGroup,
     tabTitle,
@@ -17,6 +18,7 @@
     type Item,
     type ItemRecord,
     type SearchQuery,
+    type SortKey,
     type Tab,
   } from '@savetab/core';
   import { db, transact } from '@/lib/db';
@@ -55,7 +57,21 @@
 
   const results = $derived(isActive(query) ? search(view, query) : null);
 
-  let items = $derived(view.children(folder));
+  /** Items per page in a folder. A long folder pages with "Next {N}" and "Previous {N}". */
+  const PAGE_SIZE = 50;
+  let page = $state(0);
+  $effect(() => {
+    void folder;
+    page = 0;
+  });
+  const children = $derived(view.children(folder));
+  const pageCount = $derived(Math.max(1, Math.ceil(children.length / PAGE_SIZE)));
+  const pageStart = $derived(Math.min(page, pageCount - 1) * PAGE_SIZE);
+  /** The first item after this page: a drop at the page's end lands before it. */
+  const afterPage = $derived(children[pageStart + PAGE_SIZE]?.id ?? null);
+  const nextCount = $derived(Math.min(PAGE_SIZE, children.length - pageStart - PAGE_SIZE));
+
+  let items = $derived(children.slice(pageStart, pageStart + PAGE_SIZE));
   /** Visible folders, groups, and tabs, top to bottom, for the tick menu's range commands. */
   const order = $derived(view.children(folder).flatMap((i) => [i.id, ...(i.kind === 'group' ? view.tabs(i.id).map((t) => t.id) : [])]));
   let newGroupItems = $state<Tab[]>([]);
@@ -66,7 +82,7 @@
 
   function run<T>(fn: Parameters<typeof transact<T>>[0]): Promise<T | undefined> {
     return transact(fn).catch((err) => {
-      items = view.children(folder);
+      items = children.slice(pageStart, pageStart + PAGE_SIZE);
       newGroupItems = [];
       alert(err instanceof Error ? err.message : String(err));
       return undefined;
@@ -95,11 +111,11 @@
     const { id, trigger } = e.detail.info;
     const copy = keys.copy;
     // A copy leaves the source in place, which the list's own data never stopped showing.
-    if (copy || trigger !== TRIGGERS.DROPPED_INTO_ZONE) items = view.children(folder);
+    if (copy || trigger !== TRIGGERS.DROPPED_INTO_ZONE) items = children.slice(pageStart, pageStart + PAGE_SIZE);
     if (trigger !== TRIGGERS.DROPPED_INTO_ZONE) return;
     const at = e.detail.items.findIndex((g) => g.id === id);
     if (at === -1) return;
-    const before = e.detail.items[at + 1]?.id ?? null;
+    const before = e.detail.items[at + 1]?.id ?? afterPage;
     void run(async (tx) => {
       if (copy) await copyItems(tx, [id], folder, before);
       else await moveItems(tx, [id], folder, before);
@@ -162,6 +178,25 @@
           {/each}
         </nav>
         <button class="link-button" onclick={newFolder}>New folder</button>
+        <select
+          aria-label="Sort groups"
+          value=""
+          onchange={(e) => {
+            const [key, dir] = e.currentTarget.value.split(':') as [SortKey, string];
+            e.currentTarget.value = '';
+            void run((tx) => sortGroups(tx, folder, key, dir === 'reverse'));
+          }}
+        >
+          <option value="" disabled>Sort groups</option>
+          <option value="title:">A-Z</option>
+          <option value="title:reverse">Z-A</option>
+          <option value="created:">Recently created</option>
+          <option value="created:reverse">Least recently created</option>
+          <option value="modified:">Recently modified</option>
+          <option value="modified:reverse">Least recently modified</option>
+          <option value="accessed:">Recently accessed</option>
+          <option value="accessed:reverse">Least recently accessed</option>
+        </select>
       </div>
 
       <SelectionBar {view} {order} />
@@ -188,6 +223,18 @@
           {/if}
         {/each}
       </div>
+
+      {#if pageCount > 1}
+        <nav class="pager" aria-label="Pages">
+          {#if pageStart > 0}
+            <button class="link-button" onclick={() => (page = pageStart / PAGE_SIZE - 1)}>Previous {PAGE_SIZE}</button>
+          {/if}
+          <span class="meta">{pageStart + 1}-{pageStart + items.length} of {children.length}</span>
+          {#if nextCount > 0}
+            <button class="link-button" onclick={() => (page = pageStart / PAGE_SIZE + 1)}>Next {nextCount}</button>
+          {/if}
+        </nav>
+      {/if}
 
       <div class="drop-new-group" class:hidden={!draggingTab}>
         {#if draggingTab}<p class="meta">Drop here to create a new group</p>{/if}
