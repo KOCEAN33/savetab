@@ -574,3 +574,11 @@ export async function sortGroups(tx: Tx, parentId: Id | null, key: SortKey, reve
     if (rec.order !== keys[i]) await tx.write(rec.id, { order: keys[i] });
   }
 }
+
+/**
+ * Write a backup's records back, each through the outbox so the restore syncs like any edit.
+ * Every field takes a fresh clock, so the restored values win over older copies elsewhere.
+ */
+export async function restoreSnapshot(tx: Tx, records: ItemRecord[]): Promise<void> {
+  for (const { id, clocks: _clocks, ...fields } of records) await tx.write(id, fields);
+}
