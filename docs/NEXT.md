@@ -6,7 +6,7 @@ savetab reaches OneTab 2.24 feature parity in Chrome and Firefox (`docs/specs/fe
 
 ## Next steps
 
-- Write P3 (`docs/plans/onetab-parity.md`) as ordered steps with checks, like P2, before building any of it.
+- Build P3 (`docs/plans/onetab-parity.md`) from step 1, in step order.
 - The Firefox GUI check has not covered P2 multi-select, sort, collapse, paging, or keyboard navigation. Chromium e2e covers them.
 
 ## Pointers
