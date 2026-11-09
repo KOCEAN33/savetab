@@ -27,6 +27,7 @@
   import { touchRecent } from '@/lib/recent';
   import { navigate } from '@/lib/keynav';
   import { linksFromData } from '@/lib/links-in';
+  import { restoredItem } from '@/lib/backup';
   import { editing, keys } from '@/lib/ui.svelte';
   import { t, tn } from '@/lib/i18n';
   import { deviceSettingsItem, getDeviceSettings, setDeviceSettings } from '@/lib/settings';
@@ -48,6 +49,16 @@
   const records = liveQuery(() => db.items.toArray());
 
   let mode = $state<'list' | 'trash' | 'tasks'>('list');
+
+  /** Shown once: the background restored the list from the backup taken at this time. */
+  let restoredFrom = $state<number | null>(null);
+  function showRestored(at: number | null) {
+    if (at === null) return;
+    restoredFrom = at;
+    void restoredItem.setValue(null);
+  }
+  void restoredItem.getValue().then(showRestored);
+  restoredItem.watch(showRestored);
   // The omnibox opens the page with ?q=<text>.
   let query = $state<SearchQuery>({ ...emptyQuery, text: new URLSearchParams(location.search).get('q') ?? '' });
   let draggingTab = $state(false);
@@ -214,6 +225,10 @@
         <button class="link-button" onclick={() => browser.runtime.openOptionsPage()}>{t('options')}</button>
       </nav>
     </header>
+
+    {#if restoredFrom !== null}
+      <p role="alert">{t('restoredFromBackup', { date: new Date(restoredFrom).toLocaleString() })}</p>
+    {/if}
 
     {#if mode === 'list'}
       <SearchBar bind:query {view} count={results?.count ?? null} />

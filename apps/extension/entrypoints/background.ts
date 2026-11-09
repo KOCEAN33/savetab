@@ -1,5 +1,6 @@
 import { liveQuery } from 'dexie';
 import { browser, type Browser } from 'wxt/browser';
+import { BACKUP_ALARM, BACKUP_PERIOD_MINUTES, restoreIfLost, takeBackup } from '@/lib/backup';
 import { db } from '@/lib/db';
 import { hostnameOf, sendLink, sendTabs, sendTabTo, toggleExcluded } from '@/lib/capture';
 import { builtTargets, MENU_SEND, rebuildMenus, refreshExcludeItem, refreshSendTo, SEND_TO_PREFIX } from '@/lib/menus';
@@ -80,6 +81,14 @@ export default defineBackground(() => {
     if (disposition === 'currentTab') await browser.tabs.update({ url });
     else await browser.tabs.create({ url, active: disposition === 'newForegroundTab' });
   });
+
+  browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === BACKUP_ALARM) void takeBackup();
+  });
+  void browser.alarms.get(BACKUP_ALARM).then((alarm) => {
+    if (!alarm) void browser.alarms.create(BACKUP_ALARM, { periodInMinutes: BACKUP_PERIOD_MINUTES });
+  });
+  void restoreIfLost();
 
   browser.runtime.onInstalled.addListener(() => void rebuildMenus());
   browser.runtime.onStartup.addListener(async () => {

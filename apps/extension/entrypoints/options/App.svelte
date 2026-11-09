@@ -12,6 +12,7 @@
     type DeviceSettings,
   } from '@/lib/settings';
   import { t } from '@/lib/i18n';
+  import { backupItem, takeBackup, type Backup } from '@/lib/backup';
   import Choice from '@/components/Choice.svelte';
 
   const record = liveQuery(() => db.items.get(SETTINGS_ID));
@@ -20,6 +21,10 @@
   let device = $state<DeviceSettings>(defaultDeviceSettings);
   void getDeviceSettings().then((d) => (device = d));
   deviceSettingsItem.watch(() => void getDeviceSettings().then((d) => (device = d)));
+
+  let backup = $state<Backup | null>(null);
+  void backupItem.getValue().then((b) => (backup = b));
+  backupItem.watch((b) => (backup = b));
 
   let newDomain = $state('');
 
@@ -220,6 +225,14 @@
     ]}
     onchange={(v) => setDeviceSettings({ language: v })}
   />
+
+  <h2 class="section-title">{t('backupTitle')}</h2>
+  <p class="row">
+    <span role="status"
+      >{backup ? t('backupLast', { date: new Date(backup.takenAt).toLocaleString() }) : t('backupNone')}</span
+    >
+    <button class="button" onclick={takeBackup}>{t('backupNow')}</button>
+  </p>
 
   <h2 class="section-title">{t('keyboardShortcuts')}</h2>
   {#if shortcutsUrl}
