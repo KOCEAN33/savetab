@@ -21,8 +21,6 @@ export function clickIntent(e: MouseEvent, s: Settings): Intent {
   };
 }
 
-export const CONFIRM_OPEN_COUNT = 50;
-
 /** Open tabs, then apply the after-restore rule to the ones that opened. */
 async function open(tabs: Tab[], intent: Intent, windowId: number | undefined): Promise<void> {
   const opened: string[] = [];
@@ -56,7 +54,6 @@ export async function restoreTab(tab: Tab, intent: Intent): Promise<void> {
 
 export async function restoreGroup(tabs: Tab[], intent: Intent, s: Settings): Promise<void> {
   if (tabs.length === 0) return;
-  if (tabs.length > CONFIRM_OPEN_COUNT && !confirm(`You are about to open ${tabs.length} tabs. Are you sure?`)) return;
   const current = await browser.windows.getCurrent({ populate: true });
   const alone = (current.tabs?.length ?? 0) <= 1;
   const newWindow =

@@ -97,7 +97,7 @@ export const defaultSettings: SettingsFields = {
   pinnedTabs: 'skip',
   afterRestore: 'remove',
   restoreGroupTarget: 'newUnlessAlone',
-  switchToRestored: true,
+  switchToRestored: false,
   groupTitleClick: 'edit',
   urlDisplay: 'none',
 };

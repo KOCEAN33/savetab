@@ -13,7 +13,7 @@ export interface DeviceSettings {
 
 export const defaultDeviceSettings: DeviceSettings = {
   toolbarAction: 'sendWindow',
-  openAtStartup: false,
+  openAtStartup: true,
   contextMenu: true,
   openAfterStore: true,
   openOneTabMode: 'switch',

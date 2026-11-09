@@ -5,17 +5,19 @@ import { openOneTab } from './onetab-page';
 import { selectTabs, type SendAction } from './select';
 import { getDeviceSettings, getSettings, setSettings } from './settings';
 
-/** Pages never worth storing: savetab itself and empty new-tab pages. */
+/** Empty pages: OneTab closes them with the rest but does not store them. */
+const BLANK_PAGES = [
+  'chrome://newtab',
+  'chrome://new-tab-page',
+  'edge://newtab',
+  'about:newtab',
+  'about:home',
+  'about:blank',
+];
+
+/** Pages never stored: savetab itself, which also stays open, and empty pages. */
 function ignorePrefixes(): string[] {
-  return [
-    browser.runtime.getURL('/'),
-    'chrome://newtab',
-    'chrome://new-tab-page',
-    'edge://newtab',
-    'about:newtab',
-    'about:home',
-    'about:blank',
-  ];
+  return [browser.runtime.getURL('/'), ...BLANK_PAGES];
 }
 
 // Large data: favicons would bloat every synced op. Chrome renders favicons through
@@ -50,6 +52,7 @@ export async function sendTabs(action: SendAction, origin?: Browser.tabs.Tab): P
   const candidates = selectTabs(action, windowTabs, allTabs).map(toNewTab);
   const settings = await getSettings();
   const storable = filterStorable(candidates, settings, { single, ignorePrefixes: ignorePrefixes() });
+  const blanks = single ? [] : candidates.filter((t) => BLANK_PAGES.some((p) => t.url.startsWith(p)));
   if (storable.length === 0) {
     if (!single) await openOneTab(windowId);
     return;
@@ -58,7 +61,7 @@ export async function sendTabs(action: SendAction, origin?: Browser.tabs.Tab): P
   await transact((tx) => (single ? storeIntoFirstGroup(tx, storable, settings) : storeTabs(tx, storable, settings)));
   // Open the list before closing tabs, so a fully stored window stays open on it.
   if (!single && (await getDeviceSettings()).openAfterStore) await openOneTab(windowId);
-  await browser.tabs.remove(storable.flatMap((t) => (t.id === undefined ? [] : [t.id])));
+  await browser.tabs.remove([...storable, ...blanks].flatMap((t) => (t.id === undefined ? [] : [t.id])));
 }
 
 export async function sendLink(url: string, title: string): Promise<void> {
