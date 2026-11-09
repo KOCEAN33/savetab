@@ -124,13 +124,14 @@ Steps run in this order. Each step is done when its check passes plus `pnpm test
 
 ### P3: v2 capture and restore extras
 
-Steps run in this order. Each step is done when its check passes plus `pnpm test`, `pnpm test:e2e`, `pnpm check`, and `pnpm lint`. A value marked *(savetab choice)* has no observed OneTab counterpart. Locales land before the steps that add UI, so new strings go straight into both message files.
+Steps run in this order. Each step is done when its check passes plus `pnpm test`, `pnpm test:e2e`, `pnpm check`, and `pnpm lint`. A value marked *(savetab choice)* has no observed OneTab counterpart. Locales land before the steps that add UI, so new strings go straight into both message files. The Chrome and Firefox API differences each step relies on are in `docs/specs/browser-apis.md`.
 
 1. **Data model and settings.** Shape changes land before any UI.
    - `GroupFields` adds `openAs: { mode: 'window' | 'tabGroup'; color: TabGroupColor; collapsed: boolean }` (default `{ mode: 'window', color: 'grey', collapsed: false }`) and `restoreTarget: 'default' | 'current' | 'new' | 'incognito'` (default `'default'`). `TabGroupColor` is `'grey' | 'blue' | 'red' | 'yellow' | 'green' | 'pink' | 'purple' | 'cyan' | 'orange'`, Chrome's set. A record without these fields reads as the default.
    - Synced settings add `tabGroupRestore: 'current' | 'new'` (default `'current'`) and `discardOnOpen: boolean` (default `false`).
    - `DeviceSettings` adds `theme: 'auto' | 'light' | 'dark'` (default `'auto'`) and `language: 'auto' | 'en' | 'ko'` (default `'auto'`). `toolbarAction` adds `'popup'`.
-   - `NewTab` adds optional `pinned` and `browserGroup: { title: string; color: TabGroupColor; collapsed: boolean } | null`. Storing a pinned tab writes `pinOnOpen: true`.
+   - `NewTab` adds optional `pinned`. Storing a pinned tab writes `pinOnOpen: true`.
+   - `ListView` fills a group record's missing `openAs` and `restoreTarget` with the defaults, so every reader sees both fields.
    - Check: core tests show a stored pinned tab with `pinOnOpen`, and an old group record reading as the default `openAs` and `restoreTarget`.
 2. **Locales.** `apps/extension/locales/en.json` and `ko.json` hold every UI string as flat camelCase keys with `{name}` placeholders. A count string has `_one` and `_other` keys, picked by `Intl.PluralRules`. `lib/i18n.ts` exports `t(key, vars?)` and `tn(key, n, vars?)`, reads the device `language`, and resolves `'auto'` from `browser.i18n.getUILanguage()`: `ko*` maps to `ko`, everything else to `en`. A missing `ko` key falls back to `en`. `browser.i18n.getMessage` is not used for page text, because the browser does not let an extension switch its language at runtime.
    - Pages, context menus, the omnibox, and dialogs all call `t`. The background rebuilds menus when `language` changes.
@@ -148,6 +149,7 @@ Steps run in this order. Each step is done when its check passes plus `pnpm test
    - Placeholder page: a new `placeholder` entrypoint shows the URL in a read-only field, a Copy button, and "Your browser does not let extensions open this address. Copy it into the address bar." When `tabs.create` rejects a URL, `restore.ts` opens `placeholder.html?url=<encoded>` in its place. The tab stays listed: the after-restore rule applies only to tabs that opened their own URL *(savetab choice)*.
    - Check: unit test for the choice between `restoreTarget` and `restoreGroupTarget`, e2e for "Restore in a new window" sticking to the group and for `about:config` or `chrome://crash` opening the placeholder page.
 5. **Browser tab groups.** The manifest adds the `tabGroups` permission. Code that touches `browser.tabGroups` checks that it exists first, and treats a missing API as no tab groups.
+   - `NewTab` adds optional `browserGroup: { title: string; color: TabGroupColor; collapsed: boolean } | null`.
    - Storing: `capture.ts` reads each tab's `groupId`, and `tabGroups.get` for its title, color, and collapsed state. Tabs in one browser tab group become one savetab group with that title and `openAs: { mode: 'tabGroup', ... }`. The ungrouped tabs of the same store become one plain group. The groups keep the window's tab order, the first at the top *(savetab choice: OneTab's split is not observed)*. A single-tab send ignores browser tab groups.
    - Restoring a group with `openAs.mode === 'tabGroup'` opens its tabs, calls `tabs.group({ tabIds, createProperties: { windowId } })`, then `tabGroups.update` with title, color, and collapsed. `tabGroupRestore` picks the current window or a new one.
    - The group menu gets "Open as browser tab group", a toggle on `openAs.mode`, with a color choice from `TabGroupColor` and a "Collapsed" toggle.
