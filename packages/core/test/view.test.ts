@@ -11,7 +11,7 @@ import {
   updateItem,
 } from '../src/mutations';
 import { ListView } from '../src/view';
-import { defaultSettings } from '../src/model';
+import { defaultSettings, type ItemRecord } from '../src/model';
 
 const settings = { ...defaultSettings, id: 'settings' };
 const tab = (n: string, title = `T${n}`) => ({ url: `https://${n}.example/`, title, favIconUrl: '' });
@@ -88,5 +88,44 @@ describe('ListView', () => {
     const v = await viewOf(s);
     expect(v.quickList().map((i) => i.id)).toEqual([b!.id, a!.id]);
     expect(v.children(null).map((i) => i.id)).toEqual([g]);
+  });
+
+  it('reads a group stored before restore options existed with the default options', () => {
+    const old = {
+      id: 'g1',
+      clocks: {},
+      kind: 'group' as const,
+      parentId: null,
+      order: 'a0',
+      title: 'Old',
+      trashedAt: null,
+      purged: false,
+      pinnedTop: false,
+      locked: false,
+    };
+    const g = new ListView([old]).get('g1');
+    expect(g).toMatchObject({
+      openAs: { mode: 'window', color: 'grey', collapsed: false },
+      restoreTarget: 'default',
+    });
+  });
+
+  it('keeps restore options a group has stored', () => {
+    const rec: ItemRecord = {
+      id: 'g1',
+      clocks: {},
+      kind: 'group',
+      parentId: null,
+      order: 'a0',
+      title: 'Set',
+      trashedAt: null,
+      purged: false,
+      openAs: { mode: 'tabGroup', color: 'blue', collapsed: true },
+      restoreTarget: 'incognito',
+    };
+    expect(new ListView([rec]).get('g1')).toMatchObject({
+      openAs: { mode: 'tabGroup', color: 'blue', collapsed: true },
+      restoreTarget: 'incognito',
+    });
   });
 });

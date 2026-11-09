@@ -27,6 +27,8 @@ export interface NewTab {
   url: string;
   title: string;
   favIconUrl: string;
+  /** Pinned in the browser when stored. The stored tab then opens pinned. */
+  pinned?: boolean;
 }
 
 function hostname(url: string): string {
@@ -159,7 +161,7 @@ async function insertTabs(tx: Tx, groupId: Id, tabs: NewTab[]): Promise<void> {
       url: tab.url,
       title: tab.title,
       favIconUrl: tab.favIconUrl,
-      pinOnOpen: false,
+      pinOnOpen: tab.pinned === true,
     });
   }
 }

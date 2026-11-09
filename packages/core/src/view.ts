@@ -1,5 +1,6 @@
 import { linkId, tabTitle } from './link';
 import {
+  groupDefaults,
   isKind,
   isLive,
   readSettings,
@@ -26,7 +27,8 @@ export class ListView {
   private readonly counts = new Map<Id, number>();
 
   constructor(records: ItemRecord[]) {
-    for (const r of records) {
+    for (const rec of records) {
+      const r = rec.kind === 'group' ? { ...groupDefaults, ...rec } : rec;
       this.byId.set(r.id, r);
       if (r.trashedAt != null && !r.purged) this.trashed.push(r);
       if (!isLive(r) || r.parentId === undefined) continue;

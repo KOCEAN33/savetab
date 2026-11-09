@@ -4,11 +4,14 @@ import { db, transact } from './db';
 
 /** Settings that describe this browser rather than the list. They never sync. */
 export interface DeviceSettings {
-  toolbarAction: 'sendWindow' | 'sendWholeWindow' | 'sendCurrent';
+  toolbarAction: 'sendWindow' | 'sendWholeWindow' | 'sendCurrent' | 'popup';
   openAtStartup: boolean;
   contextMenu: boolean;
   openAfterStore: boolean;
   openOneTabMode: 'switch' | 'move';
+  theme: 'auto' | 'light' | 'dark';
+  /** 'auto' follows the browser UI language. */
+  language: 'auto' | 'en' | 'ko';
 }
 
 export const defaultDeviceSettings: DeviceSettings = {
@@ -17,6 +20,8 @@ export const defaultDeviceSettings: DeviceSettings = {
   contextMenu: true,
   openAfterStore: true,
   openOneTabMode: 'switch',
+  theme: 'auto',
+  language: 'auto',
 };
 
 export const deviceSettingsItem = storage.defineItem<Partial<DeviceSettings>>('local:deviceSettings', {

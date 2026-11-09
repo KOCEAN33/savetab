@@ -34,11 +34,31 @@ export interface FolderFields extends CommonFields {
   pinnedTop: boolean;
 }
 
+/** Chrome's tab group colors. */
+export type TabGroupColor = 'grey' | 'blue' | 'red' | 'yellow' | 'green' | 'pink' | 'purple' | 'cyan' | 'orange';
+
+export interface OpenAs {
+  mode: 'window' | 'tabGroup';
+  color: TabGroupColor;
+  collapsed: boolean;
+}
+
+export type RestoreTarget = 'default' | 'current' | 'new' | 'incognito';
+
 export interface GroupFields extends CommonFields {
   kind: 'group';
   pinnedTop: boolean;
   locked: boolean;
+  openAs: OpenAs;
+  /** A restore choice from the group's menu. 'default' follows the restoreGroupTarget setting. */
+  restoreTarget: RestoreTarget;
 }
+
+/** Groups stored before these fields existed read as these values. */
+export const groupDefaults: Pick<GroupFields, 'openAs' | 'restoreTarget'> = {
+  openAs: { mode: 'window', color: 'grey', collapsed: false },
+  restoreTarget: 'default',
+};
 
 export interface TabFields extends CommonFields {
   kind: 'tab';
@@ -71,6 +91,8 @@ export interface SettingsFields {
   groupTitleClick: 'edit' | 'restore';
   urlDisplay: 'full' | 'abbreviated' | 'domain' | 'none';
   copyFormat: CopyFormat;
+  tabGroupRestore: 'current' | 'new';
+  discardOnOpen: boolean;
 }
 
 export type Folder = { id: Id } & FolderFields;
@@ -120,6 +142,8 @@ export const defaultSettings: SettingsFields = {
   groupTitleClick: 'edit',
   urlDisplay: 'none',
   copyFormat: 'rich',
+  tabGroupRestore: 'current',
+  discardOnOpen: false,
 };
 
 /** Character limit of a notes field. */

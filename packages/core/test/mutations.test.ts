@@ -59,6 +59,13 @@ describe('storeTabs', () => {
     expect(g3).toBeNull();
     expect(await groupIds(s)).toHaveLength(2);
   });
+
+  it('marks a tab that was pinned in the browser to open pinned', async () => {
+    const s = new MemoryStore('dev1');
+    const g = await s.transact((tx) => storeTabs(tx, [{ ...t('a'), pinned: true }, t('b')], settings()));
+    const tabs = (await liveChildren(s, g!)) as Tab[];
+    expect(tabs.map((x) => x.pinOnOpen)).toEqual([true, false]);
+  });
 });
 
 describe('storeIntoFirstGroup', () => {
