@@ -2,7 +2,7 @@ import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from './id';
 import { linkId, normalizeUrl } from './link';
 import { isKind, isLive, type Id, type ItemRecord, type Settings } from './model';
-import { liveChildren } from './query';
+import { compareSiblings, liveChildren } from './query';
 import type { Tx } from './tx';
 
 export class LockedError extends Error {
@@ -230,12 +230,20 @@ export async function moveToNewGroup(tx: Tx, ids: Id[], parentId: Id | null = nu
   return groupId;
 }
 
+/** True when the item is a locked group or a folder holding one at any depth. */
+async function holdsLock(tx: Tx, rec: ItemRecord): Promise<boolean> {
+  if (isKind(rec, 'group')) return rec.locked === true;
+  if (rec.kind !== 'folder') return false;
+  for (const child of (await tx.children(rec.id)).filter(isLive)) if (await holdsLock(tx, child)) return true;
+  return false;
+}
+
 export async function trashItems(tx: Tx, ids: Id[]): Promise<void> {
   const recs: ItemRecord[] = [];
   for (const id of ids) {
     const rec = await tx.get(id);
     if (!rec) continue;
-    if ((isKind(rec, 'group') && rec.locked) || (await isInLockedGroup(tx, rec))) throw new LockedError();
+    if ((await holdsLock(tx, rec)) || (await isInLockedGroup(tx, rec))) throw new LockedError();
     recs.push(rec);
   }
   for (const rec of recs) await tx.write(rec.id, { trashedAt: tx.now, modifiedAt: tx.now });
@@ -299,4 +307,123 @@ export async function editTab(tx: Tx, tabId: Id, patch: { title?: string; notes?
   const link = await ensureLink(tx, tab.url, tab.title);
   await tx.write(link.id, patch);
   await tx.write(tabId, { modifiedAt: tx.now });
+}
+
+export type Placement = 'above' | 'within' | 'below';
+
+/**
+ * Create an empty folder or group next to `anchorId`, or at the top inside it. An empty unnamed
+ * group is hidden, so a new group gets a name.
+ */
+export async function createNear(tx: Tx, kind: 'folder' | 'group', anchorId: Id, where: Placement): Promise<Id> {
+  const anchor = await tx.get(anchorId);
+  if (!anchor) throw new Error('The item no longer exists');
+  const parentId = where === 'within' ? anchorId : ((anchor.parentId as Id | null | undefined) ?? null);
+  const siblings = await keyOrdered(tx, parentId);
+  const at = siblings.findIndex((r) => r.id === anchorId);
+  const [lo, hi] =
+    where === 'within'
+      ? [null, siblings[0]]
+      : where === 'above'
+        ? [siblings[at - 1], anchor]
+        : [anchor, siblings[at + 1]];
+  const id = uuidv7(tx.now);
+  await tx.write(id, {
+    ...baseFields(tx, parentId, generateKeyBetween(lo?.order ?? null, hi?.order ?? null)),
+    kind,
+    title: kind === 'group' ? 'New group' : '',
+    pinnedTop: false,
+    ...(kind === 'group' ? { locked: false } : {}),
+  });
+  return id;
+}
+
+/** Live children in display order. */
+async function shownChildren(tx: Tx, parentId: Id | null): Promise<ItemRecord[]> {
+  return (await tx.children(parentId)).filter(isLive).sort(compareSiblings);
+}
+
+/** Move a folder's contents into its parent at the folder's place, then trash the folder. */
+export async function mergeIntoParent(tx: Tx, folderId: Id): Promise<void> {
+  const folder = await tx.get(folderId);
+  if (!isKind(folder, 'folder')) return;
+  const parentId = folder.parentId ?? null;
+  const siblings = await keyOrdered(tx, parentId);
+  const next = siblings[siblings.findIndex((r) => r.id === folderId) + 1];
+  const children = await shownChildren(tx, folderId);
+  await moveItems(
+    tx,
+    children.map((c) => c.id),
+    parentId,
+    next?.id ?? null,
+  );
+  await trashItems(tx, [folderId]);
+}
+
+async function groupsUnder(tx: Tx, parentId: Id | null): Promise<ItemRecord[]> {
+  const out: ItemRecord[] = [];
+  for (const child of await shownChildren(tx, parentId)) {
+    if (child.kind === 'group') out.push(child);
+    if (child.kind === 'folder') out.push(...(await groupsUnder(tx, child.id)));
+  }
+  return out;
+}
+
+/** Move the tabs of every group under a folder into the first one, in display order. */
+export async function mergeInnerGroups(tx: Tx, folderId: Id): Promise<void> {
+  const [first, ...rest] = await groupsUnder(tx, folderId);
+  if (!first) return;
+  for (const g of rest) {
+    const tabs = await shownChildren(tx, g.id);
+    await moveItems(
+      tx,
+      tabs.map((t) => t.id),
+      first.id,
+      null,
+    );
+    if (isLive(await tx.get(g.id))) await trashItems(tx, [g.id]);
+  }
+}
+
+async function tabsUnder(tx: Tx, parentId: Id | null): Promise<ItemRecord[]> {
+  const out: ItemRecord[] = [];
+  for (const child of await shownChildren(tx, parentId)) {
+    if (child.kind === 'tab') out.push(child);
+    else out.push(...(await tabsUnder(tx, child.id)));
+  }
+  return out;
+}
+
+export type DuplicateScope = 'within' | 'hereElsewhere' | 'elsewhereHere';
+
+/**
+ * OneTab's three remove-duplicates tools, comparing normalized URLs. The first copy in display
+ * order stays. Tabs in locked groups cannot be removed, so they are skipped. Returns the count trashed.
+ */
+export async function removeDuplicates(tx: Tx, scopeId: Id, scope: DuplicateScope): Promise<number> {
+  const here = await tabsUnder(tx, scopeId);
+  const hereIds = new Set(here.map((t) => t.id));
+  const elsewhere = scope === 'within' ? [] : (await tabsUnder(tx, null)).filter((t) => !hereIds.has(t.id));
+  const urls = (list: ItemRecord[]) => new Set(list.map((t) => normalizeUrl(t.url ?? '')));
+
+  let doomed: ItemRecord[];
+  if (scope === 'within') {
+    const seen = new Set<string>();
+    doomed = here.filter((t) => {
+      const u = normalizeUrl(t.url ?? '');
+      if (seen.has(u)) return true;
+      seen.add(u);
+      return false;
+    });
+  } else if (scope === 'hereElsewhere') {
+    const other = urls(elsewhere);
+    doomed = here.filter((t) => other.has(normalizeUrl(t.url ?? '')));
+  } else {
+    const mine = urls(here);
+    doomed = elsewhere.filter((t) => mine.has(normalizeUrl(t.url ?? '')));
+  }
+  const removable: Id[] = [];
+  for (const t of doomed) if (!(await isInLockedGroup(tx, t))) removable.push(t.id);
+  await trashItems(tx, removable);
+  return removable.length;
 }

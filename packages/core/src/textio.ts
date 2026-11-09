@@ -1,3 +1,5 @@
+import type { CopyFormat } from './model';
+
 export interface LinkLine {
   url: string;
   title: string;
@@ -32,4 +34,28 @@ export function parseImportText(text: string): LinkLine[][] {
   }
   if (current.length > 0) groups.push(current);
   return groups;
+}
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** Clipboard text for "Copy links". Rich text carries HTML links plus the `URL | Title` text as fallback. */
+export function formatLinks(links: LinkLine[], format: CopyFormat): { text: string; html?: string } {
+  const line = (l: LinkLine): string => {
+    const title = l.title || l.url;
+    switch (format) {
+      case 'titleUrl':
+        return `${title} ${l.url}`;
+      case 'url':
+        return l.url;
+      case 'markdown':
+        return `[${title}](${l.url})`;
+      default:
+        return l.title ? `${l.url}${SEPARATOR}${l.title}` : l.url;
+    }
+  };
+  const text = links.map(line).join('\n');
+  if (format !== 'rich') return { text };
+  const html = links.map((l) => `<a href="${escapeHtml(l.url)}">${escapeHtml(l.title || l.url)}</a>`).join('<br>');
+  return { text, html };
 }

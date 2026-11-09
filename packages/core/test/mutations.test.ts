@@ -57,7 +57,6 @@ describe('storeTabs', () => {
     expect(g3).toBeNull();
     expect(await groupIds(s)).toHaveLength(2);
   });
-
 });
 
 describe('storeIntoFirstGroup', () => {
