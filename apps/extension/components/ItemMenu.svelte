@@ -13,7 +13,7 @@
     type TaskState,
   } from '@savetab/core';
   import { copyLinks } from '@/lib/clipboard';
-  import { act, editing } from '@/lib/ui.svelte';
+  import { act, chooser, editing } from '@/lib/ui.svelte';
 
   let {
     item,
@@ -117,6 +117,14 @@
         <button role="menuitem" onclick={() => dedupe('elsewhereHere')}>Remove duplicates elsewhere that exist here</button>
       {/if}
       <hr />
+      {#if !locked}
+        <button role="menuitem" onclick={() => close(() => Object.assign(chooser, { ids: [item.id], mode: 'move' }))}>
+          Move…
+        </button>
+      {/if}
+      <button role="menuitem" onclick={() => close(() => Object.assign(chooser, { ids: [item.id], mode: 'copy' }))}>
+        Copy…
+      </button>
       <button role="menuitem" onclick={() => close(() => copyLinks(view, [item]))}>
         {item.kind === 'tab' ? 'Copy link to clipboard' : 'Copy links to clipboard'}
       </button>

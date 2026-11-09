@@ -419,3 +419,28 @@ textarea {
     padding: var(--space-md);
   }
 }
+
+.dialog {
+  width: 480px;
+  max-width: 90vw;
+  padding: var(--space-lg);
+  border: 1px solid var(--color-on-surface-weak);
+  border-radius: var(--radius-sm);
+  color: var(--color-on-surface);
+}
+
+.dialog .section-title {
+  margin-top: 0;
+}
+
+.dialog-list {
+  max-height: 50vh;
+  margin: var(--space-md) 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.dialog-list li {
+  padding: var(--space-xs) 0;
+}

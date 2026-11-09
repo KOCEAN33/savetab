@@ -1,9 +1,17 @@
 <script lang="ts">
   import { dndzone, dragHandle, TRIGGERS, type DndEvent } from 'svelte-dnd-action';
-  import { moveItems, trashItems, updateItem, type Group, type ListView, type Tab } from '@savetab/core';
+  import {
+    copyItems,
+    moveItems,
+    trashItems,
+    updateItem,
+    type Group,
+    type ListView,
+    type Tab,
+  } from '@savetab/core';
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { clickIntent, restoreGroup, restoreTab } from '@/lib/restore';
-  import { act, editing } from '@/lib/ui.svelte';
+  import { act, editing, keys } from '@/lib/ui.svelte';
   import ItemMenu from './ItemMenu.svelte';
   import NotesField from './NotesField.svelte';
   import TabRow from './TabRow.svelte';
@@ -45,10 +53,14 @@
     items = e.detail.items;
     ondragging(false);
     const { id, trigger } = e.detail.info;
+    const copy = keys.copy;
+    // A copy leaves the source in place, which the group's own data never stopped showing.
+    if (copy) items = tabs;
     if (trigger !== TRIGGERS.DROPPED_INTO_ZONE) return;
-    const at = items.findIndex((t) => t.id === id);
+    const at = e.detail.items.findIndex((t) => t.id === id);
     if (at === -1) return;
-    void run((tx) => moveItems(tx, [id], group.id, items[at + 1]?.id ?? null));
+    const before = e.detail.items[at + 1]?.id ?? null;
+    void run((tx) => (copy ? copyItems(tx, [id], group.id, before) : moveItems(tx, [id], group.id, before)));
   }
 </script>
 

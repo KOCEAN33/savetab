@@ -4,6 +4,7 @@
   import { dndzone, dragHandleZone, setKeyboardDragTrigger, TRIGGERS, type DndEvent } from 'svelte-dnd-action';
   import { browser } from 'wxt/browser';
   import {
+    copyItems,
     createFolder,
     ListView,
     moveItems,
@@ -17,9 +18,10 @@
   import { db, transact } from '@/lib/db';
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { touchRecent } from '@/lib/recent';
-  import { editing } from '@/lib/ui.svelte';
+  import { editing, keys } from '@/lib/ui.svelte';
   import FolderRow from '@/components/FolderRow.svelte';
   import GroupView from '@/components/GroupView.svelte';
+  import LocationDialog from '@/components/LocationDialog.svelte';
   import NavColumn from '@/components/NavColumn.svelte';
   import TrashView from '@/components/TrashView.svelte';
 
@@ -79,10 +81,17 @@
   function finalizeItems(e: CustomEvent<DndEvent<Item>>) {
     items = e.detail.items;
     const { id, trigger } = e.detail.info;
+    const copy = keys.copy;
+    // A copy leaves the source in place, which the list's own data never stopped showing.
+    if (copy || trigger !== TRIGGERS.DROPPED_INTO_ZONE) items = view.children(folder);
     if (trigger !== TRIGGERS.DROPPED_INTO_ZONE) return;
-    const at = items.findIndex((g) => g.id === id);
+    const at = e.detail.items.findIndex((g) => g.id === id);
     if (at === -1) return;
-    void run((tx) => moveItems(tx, [id], folder, items[at + 1]?.id ?? null));
+    const before = e.detail.items[at + 1]?.id ?? null;
+    void run(async (tx) => {
+      if (copy) await copyItems(tx, [id], folder, before);
+      else await moveItems(tx, [id], folder, before);
+    });
   }
 
   function finalizeNewGroup(e: CustomEvent<DndEvent<Tab>>) {
@@ -92,6 +101,13 @@
     if (trigger === TRIGGERS.DROPPED_INTO_ZONE) void run((tx) => moveToNewGroup(tx, [id], folder));
   }
 </script>
+
+<!-- The drop finishes after the drop animation, by which time the key may be up, so the
+     modifier state comes from the last pointer event, which is the release itself. -->
+<svelte:window
+  onmousemovecapture={(e) => (keys.copy = e.ctrlKey || e.altKey)}
+  onmouseupcapture={(e) => (keys.copy = e.ctrlKey || e.altKey)}
+/>
 
 <div class="layout">
   <NavColumn {view} current={folder} onopen={open} />
@@ -161,3 +177,5 @@
     {/if}
   </main>
 </div>
+
+<LocationDialog {view} />

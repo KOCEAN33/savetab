@@ -1,7 +1,7 @@
 <script lang="ts">
   import { dndzone, TRIGGERS, type DndEvent } from 'svelte-dnd-action';
-  import { moveItems, type Id, type Item, type ListView } from '@savetab/core';
-  import { transact } from '@/lib/db';
+  import { mergeGroups, moveItems, type Id, type Item, type ListView } from '@savetab/core';
+  import { act } from '@/lib/ui.svelte';
   import { DROP_TARGET } from '@/lib/motion';
   import { navFilterItem, recentItem, type NavFilter } from '@/lib/recent';
 
@@ -33,18 +33,22 @@
     return item.title || `${n} ${n === 1 ? 'tab' : 'tabs'}`;
   }
 
-  function finalize(folderId: Id | null, e: CustomEvent<DndEvent<Item>>) {
-    drops[folderId ?? ''] = [];
+  /** A group dropped on a folder moves into it. A group dropped on a group merges into it. */
+  function finalize(targetId: Id | null, e: CustomEvent<DndEvent<Item>>) {
+    drops[targetId ?? ''] = [];
     const { id, trigger } = e.detail.info;
-    if (trigger !== TRIGGERS.DROPPED_INTO_ZONE) return;
-    const first = view.children(folderId)[0]?.id ?? null;
-    void transact((tx) => moveItems(tx, [id], folderId, first === id ? null : first)).catch((err) =>
-      alert(err instanceof Error ? err.message : String(err)),
-    );
+    if (trigger !== TRIGGERS.DROPPED_INTO_ZONE || id === targetId) return;
+    const target = targetId === null ? null : view.get(targetId);
+    if (target?.kind === 'group') {
+      if (view.get(id)?.kind === 'group') void act((tx) => mergeGroups(tx, id, target.id));
+      return;
+    }
+    const first = view.children(targetId)[0]?.id ?? null;
+    void act((tx) => moveItems(tx, [id], targetId, first === id ? null : first));
   }
 </script>
 
-<!-- A drop zone overlays its folder's label. It ignores the pointer, so the label stays clickable,
+<!-- A drop zone overlays a folder's or group's label. It ignores the pointer, so the label stays clickable,
      while svelte-dnd-action finds zones by their rectangles. -->
 {#snippet dropZone(folderId: Id | null)}
   <div
@@ -67,10 +71,8 @@
           aria-current={item.id === current ? 'page' : undefined}
           onclick={() => onopen(item)}>{label(item)}</button
         >
-        {#if item.kind === 'folder'}
-          {@render dropZone(item.id)}
-          {@render tree(item.id)}
-        {/if}
+        {#if item.kind !== 'group' || !item.locked}{@render dropZone(item.id)}{/if}
+        {#if item.kind === 'folder'}{@render tree(item.id)}{/if}
       </li>
     {/each}
   </ul>
