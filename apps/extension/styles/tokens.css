@@ -29,6 +29,33 @@
   --motion-duration: 150ms;
 }
 
+/* Dark palette from DESIGN.md `## Colors`. It follows the system unless a page sets `data-theme`. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-surface: #202124;
+    --color-on-surface: #e3e3e3;
+    --color-on-surface-weak: #9aa0a6;
+    --color-border: #3c4043;
+    --color-primary: #8ab4f8;
+    --color-primary-tint: #2a3243;
+    --color-danger: #f28b82;
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --color-surface: #202124;
+  --color-on-surface: #e3e3e3;
+  --color-on-surface-weak: #9aa0a6;
+  --color-border: #3c4043;
+  --color-primary: #8ab4f8;
+  --color-primary-tint: #2a3243;
+  --color-danger: #f28b82;
+
+  color-scheme: dark;
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --motion-duration: 0ms;

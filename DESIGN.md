@@ -10,6 +10,13 @@ colors:
   primary: "#234da7"
   primary-tint: "#f1f4f9"
   danger: "#d93025"
+  dark-surface: "#202124"
+  dark-on-surface: "#e3e3e3"
+  dark-on-surface-weak: "#9aa0a6"
+  dark-border: "#3c4043"
+  dark-primary: "#8ab4f8"
+  dark-primary-tint: "#2a3243"
+  dark-danger: "#f28b82"
 typography:
   body-md:
     fontFamily: system-ui
@@ -67,6 +74,7 @@ Heavy-tab users open the list after storing a window, or to find one tab among h
 - Accent `primary`: #234da7. Why: OneTab uses this link blue, and users of OneTab read blue rows as "click to restore". Used only for tab title links and the one primary button in a dialog.
 - Surface and text: white surface, #444 text, #767676 for meta lines (creation date, counts, URLs). Why: the titles carry the page, meta text steps back. #767676 keeps 4.5:1 contrast on white.
 - Status colors: `danger` #d93025 for the confirm-delete action only. Locked and starred states use glyphs, not color.
+- Dark theme: the `dark-*` colors replace their light counterparts one for one. Why: a list page left open all day should not glare at night. Each text color keeps 4.5:1 on `dark-surface`. They apply under `prefers-color-scheme: dark` when `<html>` has no `data-theme`, and always under `data-theme="dark"`. The list page header cycles Automatic, Light, Dark.
 
 ## Typography
 

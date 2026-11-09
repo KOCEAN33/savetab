@@ -37,6 +37,10 @@ for (const [name, w, h] of [
     await p.screenshot({ path: `/tmp/savetab-shots/onetab-${name}.png`, fullPage: true });
     await p.locator('.group').nth(2).getByRole('button', { name: 'More…' }).click();
     await p.screenshot({ path: `/tmp/savetab-shots/onetab-menu-${name}.png`, fullPage: true });
+    await p.keyboard.press('Escape');
+    await p.getByRole('button', { name: 'Theme: Automatic' }).click();
+    await p.getByRole('button', { name: 'Theme: Light' }).click();
+    await p.screenshot({ path: `/tmp/savetab-shots/onetab-dark-${name}.png`, fullPage: true });
     await p.goto(`chrome-extension://${extensionId}/options.html`);
     await p.screenshot({ path: `/tmp/savetab-shots/options-${name}.png`, fullPage: true });
   });

@@ -27,6 +27,8 @@
   import { navigate } from '@/lib/keynav';
   import { editing, keys } from '@/lib/ui.svelte';
   import { t, tn } from '@/lib/i18n';
+  import { deviceSettingsItem, getDeviceSettings, setDeviceSettings } from '@/lib/settings';
+  import type { Theme } from '@/lib/theme';
   import FolderRow from '@/components/FolderRow.svelte';
   import GroupView from '@/components/GroupView.svelte';
   import LocationDialog from '@/components/LocationDialog.svelte';
@@ -80,6 +82,12 @@
   /** Visible folders, groups, and tabs, top to bottom, for the tick menu's range commands. */
   const order = $derived(view.children(folder).flatMap((i) => [i.id, ...(i.kind === 'group' ? view.tabs(i.id).map((t) => t.id) : [])]));
   let newGroupItems = $state<Tab[]>([]);
+
+  let theme = $state<Theme>('auto');
+  void getDeviceSettings().then((d) => (theme = d.theme));
+  deviceSettingsItem.watch((d) => (theme = d?.theme ?? 'auto'));
+  const NEXT_THEME: Record<Theme, Theme> = { auto: 'light', light: 'dark', dark: 'auto' };
+  const THEME_NAME = { auto: 'themeAuto', light: 'themeLight', dark: 'themeDark' } as const;
 
   $effect(() => {
     history.replaceState(null, '', folder ? `#${folder}` : location.pathname);
@@ -179,6 +187,9 @@
           {mode === 'trash' ? t('backToList') : t('trashLink', { n: view.trashed.length })}
         </button>
         <a class="link-button" href={browser.runtime.getURL('/import-export.html')}>{t('importExport')}</a>
+        <button class="link-button" onclick={() => setDeviceSettings({ theme: NEXT_THEME[theme] })}>
+          {t('themeButton', { name: t(THEME_NAME[theme]) })}
+        </button>
         <button class="link-button" onclick={() => browser.runtime.openOptionsPage()}>{t('options')}</button>
       </nav>
     </header>
