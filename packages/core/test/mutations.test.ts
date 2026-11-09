@@ -9,11 +9,13 @@ import {
   moveToNewGroup,
   restoreFromTrash,
   storeIntoFirstGroup,
+  storeIntoGroup,
   storeTabs,
   trashItems,
   updateItem,
   LockedError,
   CycleError,
+  MissingError,
   createFolder,
 } from '../src/mutations';
 import { liveChildren } from '../src/query';
@@ -78,6 +80,26 @@ describe('storeIntoFirstGroup', () => {
     const s = new MemoryStore('dev1');
     const g = await s.transact((tx) => storeIntoFirstGroup(tx, [t('a')], settings()));
     expect(await groupIds(s)).toEqual([g]);
+  });
+});
+
+describe('storeIntoGroup', () => {
+  it('adds tabs to the top of the chosen group', async () => {
+    const s = new MemoryStore('dev1');
+    const g = (await s.transact((tx) => storeTabs(tx, [t('a'), t('b')], settings())))!;
+    await s.transact((tx) => storeTabs(tx, [t('other')], settings()));
+    await s.transact((tx) => storeIntoGroup(tx, g, [t('c')], settings()));
+    expect(await urlsOf(s, g)).toEqual(['https://c.example/', 'https://a.example/', 'https://b.example/']);
+  });
+
+  it('refuses a locked or trashed group', async () => {
+    const s = new MemoryStore('dev1');
+    const locked = (await s.transact((tx) => storeTabs(tx, [t('a')], settings())))!;
+    const gone = (await s.transact((tx) => storeTabs(tx, [t('b')], settings())))!;
+    await s.transact((tx) => updateItem(tx, locked, { locked: true }));
+    await s.transact((tx) => trashItems(tx, [gone]));
+    await expect(s.transact((tx) => storeIntoGroup(tx, locked, [t('c')], settings()))).rejects.toThrow(LockedError);
+    await expect(s.transact((tx) => storeIntoGroup(tx, gone, [t('c')], settings()))).rejects.toThrow(MissingError);
   });
 });
 

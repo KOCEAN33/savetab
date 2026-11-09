@@ -186,6 +186,15 @@ export async function storeIntoFirstGroup(tx: Tx, tabs: NewTab[], settings: Sett
   return target.id;
 }
 
+/** "Send this tab to": the tabs join the top of a chosen group. */
+export async function storeIntoGroup(tx: Tx, groupId: Id, tabs: NewTab[], settings: Settings): Promise<void> {
+  const group = await tx.get(groupId);
+  if (!isKind(group, 'group') || !isLive(group)) throw new MissingError();
+  if (group.locked) throw new LockedError();
+  const accepted = await acceptTabs(tx, tabs, settings);
+  if (accepted.length > 0) await insertTabs(tx, groupId, accepted);
+}
+
 export async function updateItem(tx: Tx, id: Id, patch: Record<string, unknown>): Promise<void> {
   await tx.write(id, { ...patch, modifiedAt: tx.now });
 }
@@ -493,7 +502,7 @@ export async function removeFromQuickList(tx: Tx, id: Id): Promise<void> {
   await tx.write(id, { quickOrder: null });
 }
 
-export type SortKey ='title' | 'created' | 'modified' | 'accessed';
+export type SortKey = 'title' | 'created' | 'modified' | 'accessed';
 
 const SORT_COMPARE: Record<SortKey, (a: ItemRecord, b: ItemRecord) => number> = {
   title: (a, b) => (a.title ?? '').localeCompare(b.title ?? '', undefined, { sensitivity: 'base' }),
