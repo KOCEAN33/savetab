@@ -14,7 +14,7 @@
 </script>
 
 <section class="group folder" id="item-{folder.id}" aria-label="Folder {label}">
-  <div class="group-head">
+  <div class="group-head" tabindex="0" role="treeitem" aria-selected="false" aria-expanded={!folder.collapsed} aria-label="Folder {label}" data-nav="folder" data-id={folder.id}>
     <span class="group-grip" use:dragHandle aria-label="Drag {label}">⠿</span>
     <Tick id={folder.id} {label} />
     {#if editing.title === folder.id}

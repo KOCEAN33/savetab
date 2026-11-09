@@ -70,7 +70,7 @@
 </script>
 
 <section class="group" class:archived={group.archived} id="item-{group.id}" aria-label={label}>
-  <div class="group-head">
+  <div class="group-head" tabindex="0" role="treeitem" aria-selected="false" aria-expanded={!group.collapsed} aria-label={label} data-nav="group" data-id={group.id}>
     <span class="group-grip" use:dragHandle aria-label="Drag {label}">⠿</span>
     <Tick id={group.id} {label} />
     {#if group.task !== 'none'}
@@ -95,7 +95,9 @@
         .filter(Boolean)
         .join(', ')}</span
     >
-    <button class="link-button" onclick={(e) => restoreGroup(tabs, clickIntent(e, settings), settings)}>Restore all</button>
+    <button class="link-button restore-all" onclick={(e) => restoreGroup(tabs, clickIntent(e, settings), settings)}
+      >Restore all</button
+    >
     {#if !group.locked}
       <button class="link-button" onclick={() => run((tx) => trashItems(tx, [group.id]))}>Delete all</button>
     {/if}

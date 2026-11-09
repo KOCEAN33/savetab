@@ -24,6 +24,7 @@
   import { db, transact } from '@/lib/db';
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { touchRecent } from '@/lib/recent';
+  import { navigate } from '@/lib/keynav';
   import { editing, keys } from '@/lib/ui.svelte';
   import FolderRow from '@/components/FolderRow.svelte';
   import GroupView from '@/components/GroupView.svelte';
@@ -101,6 +102,27 @@
     document.getElementById(`item-${item.id}`)?.scrollIntoView({ block: 'start' });
   }
 
+  let mainEl = $state<HTMLElement>();
+
+  function onListKey(e: KeyboardEvent) {
+    if (!mainEl?.contains(e.target as Node)) return;
+    const parent = folder ? (view.get(folder)?.parentId ?? null) : undefined;
+    if (navigate(e, mainEl!, () => parent !== undefined && open(parent === null ? null : view.get(parent)!))) {
+      e.preventDefault();
+    }
+  }
+
+  /** `/` focuses search. Alt+/ also restricts it to the open folder. Keys typed into a field are left alone. */
+  function onWindowKey(e: KeyboardEvent) {
+    onListKey(e);
+    const t = e.target as HTMLElement;
+    if (e.code !== 'Slash' || e.ctrlKey || e.metaKey || t.closest('input, textarea, select, [contenteditable]')) return;
+    e.preventDefault();
+    showTrash = false;
+    if (e.altKey) query.folderId = folder;
+    document.querySelector<HTMLInputElement>('.search-input')?.focus();
+  }
+
   async function newFolder() {
     const id = await run((tx) => createFolder(tx, folder, ''));
     if (id) editing.title = id;
@@ -133,6 +155,7 @@
 <!-- The drop finishes after the drop animation, by which time the key may be up, so the
      modifier state comes from the last pointer event, which is the release itself. -->
 <svelte:window
+  onkeydown={onWindowKey}
   onmousemovecapture={(e) => (keys.copy = e.ctrlKey || e.altKey)}
   onmouseupcapture={(e) => (keys.copy = e.ctrlKey || e.altKey)}
 />
@@ -140,7 +163,7 @@
 <div class="layout">
   <NavColumn {view} current={folder} onopen={open} />
 
-  <main>
+  <main bind:this={mainEl}>
     <header class="page-header">
       <h1 class="page-total">Total: {total} {total === 1 ? 'tab' : 'tabs'}</h1>
       <nav class="page-nav">
@@ -211,7 +234,7 @@
 
       <div
         class="groups"
-        use:dragHandleZone={{ items, type: 'group', flipDurationMs: FLIP_MS, useCursorForDetection: true, ...DROP_TARGET }}
+        use:dragHandleZone={{ items, type: 'group', flipDurationMs: FLIP_MS, useCursorForDetection: true, zoneTabIndex: -1, zoneItemTabIndex: -1, ...DROP_TARGET }}
         onconsider={(e) => (items = e.detail.items)}
         onfinalize={finalizeItems}
       >

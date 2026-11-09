@@ -52,7 +52,7 @@
   const shownUrl = $derived(urlText(tab.url));
 </script>
 
-<li class="tab" class:archived={tab.archived}>
+<li class="tab" class:archived={tab.archived} data-nav="tab" data-id={tab.id} aria-label={title || tab.url}>
   {#if locked}
     <span class="tab-delete-slot"></span>
   {:else}
