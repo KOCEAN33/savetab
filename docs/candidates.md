@@ -18,3 +18,4 @@ From the screenshot review of the P1 pages. The list keeps OneTab's plain look o
 - Mobile-width touch targets are text links about 14px tall.
 - The options page is one long form of radio groups.
 - The group drag handle `⠿` is small and low contrast.
+- Folder and group heads use role `treeitem` for keyboard focus, but no element around them has role `tree`.

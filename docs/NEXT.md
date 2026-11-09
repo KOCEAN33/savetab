@@ -6,10 +6,12 @@ savetab reaches OneTab 2.24 feature parity in Chrome and Firefox (`docs/specs/fe
 
 ## Next steps
 
-- P2 has no step order yet. Expand the P2 section of `docs/plans/onetab-parity.md` into ordered steps with done-when checks, leading with the data model change: titles and notes move to `Link` records keyed by normalized URL, shared by all copies. Done when the plan lists each P2 feature from `features.md` under a step.
-- Build P2 in that order. Folders already exist in the model (`packages/core/src/model.ts`, `parentId`), with no UI yet. Done when each step's check passes plus `pnpm test`, `pnpm test:e2e`, `pnpm check`, `pnpm lint`.
+- Build P2 step 9, Tasks view and quick list, as `docs/plans/onetab-parity.md` specifies. `quickOrder` already exists on every item (`packages/core/src/model.ts`), with no UI yet. Done when the step's e2e check passes plus `pnpm test`, `pnpm test:e2e`, `pnpm check`, `pnpm lint`.
+- Build P2 step 10, "Send this tab to" in the context menu. `apps/extension/lib/recent.ts` already holds the device's recent list, which `touchRecent` updates when the move dialog targets a group. Done when the step's check passes plus the four commands above.
+- Run the Firefox GUI check (`docs/guides/firefox-check.md`) over the P2 pages: folder column, item menus, move dialog, search, omnibox `11`. Only Chromium e2e has run for P2. Done when each works in Firefox or a failure is written down.
 
 ## Pointers
 
-- State checked at handoff: 29 core tests, 8 extension unit tests, 7 Chromium e2e tests pass. A Firefox GUI run stored 3 tabs and restored one.
+- State checked at handoff: 57 core tests, 14 extension unit tests, and 23 Chromium e2e tests pass. `pnpm check` and `pnpm lint` pass. The tree is clean at `d05b17c`.
 - The repo has no git remote. Nothing is pushed.
+- Steps 1-8 changed the plan in three places, recorded in the plan itself: group merge drops on the folder column, sorting sits in the folder bar, and archived rows use a flat background.
