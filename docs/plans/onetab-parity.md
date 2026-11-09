@@ -117,7 +117,7 @@ Steps run in this order. Each step is done when its check passes plus `pnpm test
    - Check: core test for each sort key, e2e for collapse and paging.
 8. **Keyboard navigation.** Tab enters the list on the first row. Up and Down move between rows, Enter opens a tab or restores a group, Left collapses and Right expands, Backspace goes to the parent folder, Esc leaves the list. `/` focuses search, `Alt+/` focuses search restricted to the current folder *(savetab choice: the key)*.
    - Check: e2e drives each key.
-9. **Tasks view and quick list.** A header link "Tasks ({pending} pending, {done} done)" opens a view of tasks, pending first, each with a done toggle. Item menus get "Add to quick list" and "Remove from quick list". The quick list shows in the navigation column under the folder tree, in `quickOrder`. Removing an entry clears `quickOrder` and leaves the item.
+9. **Tasks view and quick list.** A header link "Tasks ({pending} pending, {done} done)" opens a view of tasks, pending first, each with a done toggle. Tab and group menus get "Add to quick list" and "Remove from quick list", since the quick list holds tabs and groups (features.md). The quick list shows in the navigation column under the folder tree, in `quickOrder`. Removing an entry clears `quickOrder` and leaves the item.
    - Check: e2e marks a task done and adds and removes a quick list entry.
 10. **Send to a group from the context menu.** A "Send this tab to" submenu lists the 5 most recent destinations, then named groups that are not locked, up to 20 entries. The menu rebuilds when a group title changes. The recent destination list is a device setting, updated by each send and move.
     - Check: e2e sends a tab to a named group through the menu click handler.

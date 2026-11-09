@@ -32,6 +32,7 @@
   import SelectionBar from '@/components/SelectionBar.svelte';
   import NavColumn from '@/components/NavColumn.svelte';
   import SearchBar from '@/components/SearchBar.svelte';
+  import TasksView from '@/components/TasksView.svelte';
   import TrashView from '@/components/TrashView.svelte';
 
   // Enter stays free for opening links; Space starts a keyboard drag.
@@ -41,7 +42,7 @@
   // tabs; switch to per-folder queries if large lists stutter.
   const records = liveQuery(() => db.items.toArray());
 
-  let showTrash = $state(false);
+  let mode = $state<'list' | 'trash' | 'tasks'>('list');
   // The omnibox opens the page with ?q=<text>.
   let query = $state<SearchQuery>({ ...emptyQuery, text: new URLSearchParams(location.search).get('q') ?? '' });
   let draggingTab = $state(false);
@@ -57,6 +58,8 @@
   const trashTitle = (r: ItemRecord) => tabTitle(r as Tab, view.link(r as Tab));
 
   const results = $derived(isActive(query) ? search(view, query) : null);
+  const tasks = $derived(view.tasks());
+  const pendingCount = $derived(tasks.filter((t) => t.task === 'pending').length);
 
   /** Items per page in a folder. A long folder pages with "Next {N}" and "Previous {N}". */
   const PAGE_SIZE = 50;
@@ -91,15 +94,16 @@
   }
 
   async function open(item: Item | null) {
-    showTrash = false;
+    mode = 'list';
     if (item === null || item.kind === 'folder') {
       current = item?.id ?? null;
       if (item) void touchRecent(item.id);
       return;
     }
-    current = item.parentId;
+    const group = item.kind === 'tab' && item.parentId ? view.get(item.parentId) : item;
+    current = group?.parentId ?? null;
     await tick();
-    document.getElementById(`item-${item.id}`)?.scrollIntoView({ block: 'start' });
+    document.querySelector(`[data-id="${item.id}"]`)?.scrollIntoView({ block: 'start' });
   }
 
   let mainEl = $state<HTMLElement>();
@@ -118,7 +122,7 @@
     const t = e.target as HTMLElement;
     if (e.code !== 'Slash' || e.ctrlKey || e.metaKey || t.closest('input, textarea, select, [contenteditable]')) return;
     e.preventDefault();
-    showTrash = false;
+    mode = 'list';
     if (e.altKey) query.folderId = folder;
     document.querySelector<HTMLInputElement>('.search-input')?.focus();
   }
@@ -167,20 +171,25 @@
     <header class="page-header">
       <h1 class="page-total">Total: {total} {total === 1 ? 'tab' : 'tabs'}</h1>
       <nav class="page-nav">
-        <button class="link-button" onclick={() => (showTrash = !showTrash)}>
-          {showTrash ? 'Back to list' : `Trash (${view.trashed.length})`}
+        <button class="link-button" onclick={() => (mode = mode === 'tasks' ? 'list' : 'tasks')}>
+          {mode === 'tasks' ? 'Back to list' : `Tasks (${pendingCount} pending, ${tasks.length - pendingCount} done)`}
+        </button>
+        <button class="link-button" onclick={() => (mode = mode === 'trash' ? 'list' : 'trash')}>
+          {mode === 'trash' ? 'Back to list' : `Trash (${view.trashed.length})`}
         </button>
         <a class="link-button" href={browser.runtime.getURL('/import-export.html')}>Import / Export</a>
         <button class="link-button" onclick={() => browser.runtime.openOptionsPage()}>Options</button>
       </nav>
     </header>
 
-    {#if !showTrash}
+    {#if mode === 'list'}
       <SearchBar bind:query {view} count={results?.count ?? null} />
     {/if}
 
-    {#if showTrash}
+    {#if mode === 'trash'}
       <TrashView trashed={view.trashed} tabCount={countAll} tabTitle={trashTitle} />
+    {:else if mode === 'tasks'}
+      <TasksView {tasks} {view} onopen={open} />
     {:else if results}
       <SelectionBar {view} order={results.groups.flatMap((r) => [r.group.id, ...r.tabs.map((t) => t.id)])} />
       {#each results.folders as f (f.id)}

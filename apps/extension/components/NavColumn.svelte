@@ -21,6 +21,8 @@
   void recentItem.getValue().then((v) => (recent = v));
   recentItem.watch((v) => (recent = v ?? []));
 
+  const quick = $derived(view.quickList());
+
   /** Drop zones hold only the dragged group's placeholder while it hovers. */
   let drops = $state<Record<string, Item[]>>({});
 
@@ -29,6 +31,7 @@
 
   function label(item: Item): string {
     if (item.kind === 'folder') return item.title || 'Untitled folder';
+    if (item.kind === 'tab') return view.title(item) || item.url;
     const n = view.tabs(item.id).length;
     return item.title || `${n} ${n === 1 ? 'tab' : 'tabs'}`;
   }
@@ -84,6 +87,15 @@
     {@render dropZone(null)}
   </div>
   {@render tree(null)}
+
+  {#if quick.length > 0}
+    <h2 class="nav-heading">Quick list</h2>
+    <ul class="nav-tree" aria-label="Quick list">
+      {#each quick as item (item.id)}
+        <li><button class="link-button nav-item" onclick={() => onopen(item)}>{label(item)}</button></li>
+      {/each}
+    </ul>
+  {/if}
 
   {#if recent.some((id) => view.get(id))}
     <h2 class="nav-heading">Recent</h2>

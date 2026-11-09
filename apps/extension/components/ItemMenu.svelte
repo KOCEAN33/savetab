@@ -1,9 +1,11 @@
 <script lang="ts">
   import {
+    addToQuickList,
     createNear,
     mergeInnerGroups,
     mergeIntoParent,
     removeDuplicates,
+    removeFromQuickList,
     trashItems,
     updateItem,
     type DuplicateScope,
@@ -90,6 +92,17 @@
         <button role="menuitem" onclick={() => set({ archived: !item.archived })}>
           {item.archived ? 'Unarchive' : 'Mark as archived'}
         </button>
+        {#if item.quickOrder == null}
+          <button
+            role="menuitem"
+            onclick={() => close(() => act((tx) => addToQuickList(tx, item.id, view.quickList().at(-1)?.id ?? null)))}
+            >Add to quick list</button
+          >
+        {:else}
+          <button role="menuitem" onclick={() => close(() => act((tx) => removeFromQuickList(tx, item.id)))}>
+            Remove from quick list
+          </button>
+        {/if}
       {/if}
       {#if item.kind !== 'tab'}
         <button role="menuitem" onclick={() => set({ pinnedTop: !item.pinnedTop })}>
