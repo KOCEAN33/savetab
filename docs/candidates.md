@@ -19,3 +19,8 @@ From the screenshot review of the P1 pages. The list keeps OneTab's plain look o
 - The options page is one long form of radio groups.
 - The group drag handle `⠿` is small and low contrast.
 - Folder and group heads use role `treeitem` for keyboard focus, but no element around them has role `tree`.
+
+## Open choices and code follow-ups
+
+- Dragging tabs into a group does not update the recent destination list. Only sends and moves through the location dialog do (plan P2 step 10). Counting drags needs `GroupView` to tell a drop from another group apart from a reorder.
+- The default group label `{N} tab(s)` is computed separately in `NavColumn.svelte`, `TasksView.svelte`, `GroupView.svelte`, and `lib/menus.ts`. A shared label on `ListView` would replace all four.

@@ -6,6 +6,6 @@ Playwright cannot load extensions into Firefox, and WebDriver BiDi (puppeteer) i
 2. Run in a temporary profile, from `apps/extension`:
    `npx web-ext run -s .output/firefox-mv3 --no-reload --firefox=/Applications/Firefox.app/Contents/MacOS/firefox --start-url https://example.com/ --start-url https://example.org/`
    Wait for `Installed ... as a temporary add-on` in its output.
-3. Drive the window with the `orca-computer` skill, targeting the web-ext Firefox by pid (`--app pid:<pid>`). The bundle id resolves to the user's own Firefox instead.
+3. Drive the window with the `orca-computer` skill, targeting the web-ext Firefox by pid (`--app pid:<pid>`). The bundle id resolves to the user's own Firefox instead. Probe first with `orca computer get-app-state --app com.apple.finder`. When it fails with `permission_denied` "no accessibility window" on every app while `orca computer permissions` reports granted, macOS Accessibility blocks Orca. `--restore-window` and coordinate clicks fail the same way, so stop and ask the user.
 4. Click the savetab toolbar button. Done when the site tabs close and the list shows `Total: N tabs`. Click a title. Done when that site opens and the total drops by one.
 5. Stop the run with `pkill -f "web-ext run -s .output/firefox-mv3"`.

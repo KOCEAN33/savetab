@@ -6,12 +6,11 @@ savetab reaches OneTab 2.24 feature parity in Chrome and Firefox (`docs/specs/fe
 
 ## Next steps
 
-- Build P2 step 9, Tasks view and quick list, as `docs/plans/onetab-parity.md` specifies. `quickOrder` already exists on every item (`packages/core/src/model.ts`), with no UI yet. Done when the step's e2e check passes plus `pnpm test`, `pnpm test:e2e`, `pnpm check`, `pnpm lint`.
-- Build P2 step 10, "Send this tab to" in the context menu. `apps/extension/lib/recent.ts` already holds the device's recent list, which `touchRecent` updates when the move dialog targets a group. Done when the step's check passes plus the four commands above.
-- Run the Firefox GUI check (`docs/guides/firefox-check.md`) over the P2 pages: folder column, item menus, move dialog, search, omnibox `11`. Only Chromium e2e has run for P2. Done when each works in Firefox or a failure is written down.
+- Run the Firefox GUI check (`docs/guides/firefox-check.md`) over the P2 pages: folder column, item menus, move dialog, search, omnibox `11`, Tasks view, quick list, and the "Send this tab to" context submenu. Only Chromium e2e has run for P2. Done when each works in Firefox or a failure is written down.
+  - Blocker: every `orca computer` AX read fails with `permission_denied` "has visible windows but no accessibility window", on Finder as well as Firefox. `--restore-window` and coordinate clicks fail the same way. `orca computer permissions` still reports accessibility granted. The user plans to toggle Orca Computer Use off and on in System Settings > Privacy & Security > Accessibility. Guess: the grant is stale. Before starting web-ext, check that `orca computer get-app-state --app com.apple.finder` returns a snapshot.
+  - Guide steps 1 (`pnpm build`, `web-ext lint`: 0 errors, the known innerHTML warning) and 2 (`web-ext run`) passed at `5db7914`.
 
 ## Pointers
 
-- State checked at handoff: 57 core tests, 14 extension unit tests, and 23 Chromium e2e tests pass. `pnpm check` and `pnpm lint` pass. The tree is clean at `d05b17c`.
+- State checked at handoff: 61 core tests, 15 extension unit tests, and 26 Chromium e2e tests pass. `pnpm check`, `pnpm lint`, and `oxfmt --check` pass. P2 steps 1-10 are built.
 - The repo has no git remote. Nothing is pushed.
-- Steps 1-8 changed the plan in three places, recorded in the plan itself: group merge drops on the folder column, sorting sits in the folder bar, and archived rows use a flat background.
