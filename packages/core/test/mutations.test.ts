@@ -4,6 +4,7 @@ import {
   afterOpen,
   emptyTrash,
   filterStorable,
+  importBookmarks,
   importGroups,
   moveItems,
   moveToNewGroup,
@@ -147,6 +148,41 @@ describe('importGroups', () => {
     expect(await groupIds(s)).toEqual([...ids, old]);
     expect(await urlsOf(s, ids[0]!)).toEqual(['https://a.example/', 'https://b.example/']);
     expect(await urlsOf(s, ids[1]!)).toEqual(['https://c.example/']);
+  });
+
+  it('puts the groups at the top of a given folder', async () => {
+    const s = new MemoryStore('dev1');
+    const folder = await s.transact((tx) => createFolder(tx, null, 'F'));
+    const [id] = await s.transact((tx) => importGroups(tx, [[t('a')]], folder));
+    expect((await liveChildren(s, folder)).map((g) => g.id)).toEqual([id]);
+  });
+});
+
+describe('importBookmarks', () => {
+  it('makes a root folder per bookmark folder, sub-folders inside, and one group for the direct bookmarks', async () => {
+    const s = new MemoryStore('dev1');
+    const id = await s.transact((tx) =>
+      importBookmarks(tx, {
+        title: 'Dev',
+        links: [t('a'), t('b')],
+        folders: [
+          { title: 'Go', links: [t('g')], folders: [] },
+          { title: 'Empty', links: [], folders: [] },
+        ],
+      }),
+    );
+    const root = await liveChildren(s, null);
+    expect(root.map((r) => [r.id, r.kind, r.title])).toEqual([[id, 'folder', 'Dev']]);
+    const inside = await liveChildren(s, id);
+    expect(inside.map((r) => [r.kind, r.title])).toEqual([
+      ['folder', 'Go'],
+      ['folder', 'Empty'],
+      ['group', ''],
+    ]);
+    expect(await urlsOf(s, inside[2]!.id)).toEqual(['https://a.example/', 'https://b.example/']);
+    const go = await liveChildren(s, inside[0]!.id);
+    expect(await urlsOf(s, go[0]!.id)).toEqual(['https://g.example/']);
+    expect(await liveChildren(s, inside[1]!.id)).toEqual([]);
   });
 });
 

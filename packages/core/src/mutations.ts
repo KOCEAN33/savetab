@@ -257,16 +257,34 @@ export async function moveItems(tx: Tx, ids: Id[], parentId: Id | null, beforeId
   }
 }
 
-/** Imported groups go to the top of the list, keeping the text's order. Duplicate rules do not apply. */
-export async function importGroups(tx: Tx, groups: NewTab[][]): Promise<Id[]> {
+/** Imported groups go to the top of `parentId`, keeping the text's order. Duplicate rules do not apply. */
+export async function importGroups(tx: Tx, groups: NewTab[][], parentId: Id | null = null): Promise<Id[]> {
   const ids: Id[] = [];
   for (const tabs of [...groups].reverse()) {
     if (tabs.length === 0) continue;
-    const id = await createGroupAtTop(tx, null);
+    const id = await createGroupAtTop(tx, parentId);
     await insertTabs(tx, id, tabs);
     ids.unshift(id);
   }
   return ids;
+}
+
+export interface BookmarkFolder {
+  title: string;
+  /** The bookmarks directly inside this folder. */
+  links: NewTab[];
+  folders: BookmarkFolder[];
+}
+
+/**
+ * A bookmark folder becomes a savetab folder at the top of `parentId`: its sub-folders become
+ * sub-folders in order, and its direct bookmarks one group below them. Returns the folder.
+ */
+export async function importBookmarks(tx: Tx, node: BookmarkFolder, parentId: Id | null = null): Promise<Id> {
+  const id = await createFolder(tx, parentId, node.title);
+  await importGroups(tx, [node.links], id);
+  for (const sub of [...node.folders].reverse()) await importBookmarks(tx, sub, id);
+  return id;
 }
 
 /** OneTab's "drag tabs into blank space": the tabs form a new group at the top of `parentId`. */
