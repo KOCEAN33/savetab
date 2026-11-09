@@ -19,7 +19,7 @@ import {
   createFolder,
 } from '../src/mutations';
 import { liveChildren } from '../src/query';
-import { defaultSettings, type Settings, type Tab } from '../src/model';
+import { defaultSettings, type Group, type Settings, type Tab } from '../src/model';
 
 const settings = (patch: Partial<Settings> = {}): Settings => ({ ...defaultSettings, id: 'settings', ...patch });
 const t = (n: string, title = `Title ${n}`) => ({ url: `https://${n}.example/`, title, favIconUrl: '' });
@@ -65,6 +65,35 @@ describe('storeTabs', () => {
     const g = await s.transact((tx) => storeTabs(tx, [{ ...t('a'), pinned: true }, t('b')], settings()));
     const tabs = (await liveChildren(s, g!)) as Tab[];
     expect(tabs.map((x) => x.pinOnOpen)).toEqual([true, false]);
+  });
+
+  it('splits browser tab groups into their own groups, in window order, with the ungrouped tabs as one plain group', async () => {
+    const s = new MemoryStore('dev1');
+    const work = { id: 7, title: 'Work', color: 'blue' as const, collapsed: false };
+    const read = { id: 9, title: 'Read', color: 'red' as const, collapsed: true };
+    const top = await s.transact((tx) =>
+      storeTabs(
+        tx,
+        [
+          t('x'),
+          { ...t('a1'), browserGroup: work },
+          { ...t('a2'), browserGroup: work },
+          t('y'),
+          { ...t('b1'), browserGroup: { ...read } },
+        ],
+        settings(),
+      ),
+    );
+    const groups = (await liveChildren(s, null)) as Group[];
+    expect(groups[0]!.id).toBe(top);
+    expect(groups.map((g) => [g.title, g.openAs])).toEqual([
+      ['', undefined],
+      ['Work', { mode: 'tabGroup', color: 'blue', collapsed: false }],
+      ['Read', { mode: 'tabGroup', color: 'red', collapsed: true }],
+    ]);
+    expect(await urlsOf(s, groups[0]!.id)).toEqual(['https://x.example/', 'https://y.example/']);
+    expect(await urlsOf(s, groups[1]!.id)).toEqual(['https://a1.example/', 'https://a2.example/']);
+    expect(await urlsOf(s, groups[2]!.id)).toEqual(['https://b1.example/']);
   });
 });
 

@@ -1,7 +1,7 @@
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from './id';
 import { linkId, normalizeUrl } from './link';
-import { isKind, isLive, type Id, type ItemRecord, type Settings } from './model';
+import { isKind, isLive, type GroupFields, type Id, type ItemRecord, type Settings, type TabGroupColor } from './model';
 import { compareSiblings, liveChildren } from './query';
 import type { Tx } from './tx';
 
@@ -29,6 +29,16 @@ export interface NewTab {
   favIconUrl: string;
   /** Pinned in the browser when stored. The stored tab then opens pinned. */
   pinned?: boolean;
+  /** The browser tab group the tab was in. Tabs sharing an `id` store as one group. */
+  browserGroup?: BrowserGroup | null;
+}
+
+export interface BrowserGroup {
+  /** The browser's group id, used only to split one store into groups. */
+  id: number;
+  title: string;
+  color: TabGroupColor;
+  collapsed: boolean;
 }
 
 function hostname(url: string): string {
@@ -83,7 +93,7 @@ async function keyOrdered(tx: Tx, parentId: Id | null, exclude: Set<Id> = new Se
     .sort((a, b) => ((a.order ?? '') < (b.order ?? '') ? -1 : (a.order ?? '') > (b.order ?? '') ? 1 : 0));
 }
 
-async function createGroupAtTop(tx: Tx, parentId: Id | null, title = ''): Promise<Id> {
+async function createGroupAtTop(tx: Tx, parentId: Id | null, title = '', extra: Partial<GroupFields> = {}): Promise<Id> {
   const first = (await keyOrdered(tx, parentId))[0];
   const id = uuidv7(tx.now);
   await tx.write(id, {
@@ -92,6 +102,7 @@ async function createGroupAtTop(tx: Tx, parentId: Id | null, title = ''): Promis
     title,
     pinnedTop: false,
     locked: false,
+    ...extra,
   });
   return id;
 }
@@ -166,13 +177,30 @@ async function insertTabs(tx: Tx, groupId: Id, tabs: NewTab[]): Promise<void> {
   }
 }
 
-/** Store tabs as a new group at the top of the root list. Returns null when every tab was rejected. */
+/**
+ * Store tabs as new groups at the top of the root list: one per browser tab group, opening as a
+ * tab group again, and one plain group for the rest. The groups keep the order of their first
+ * tab. Returns the top group, or null when every tab was rejected.
+ */
 export async function storeTabs(tx: Tx, tabs: NewTab[], settings: Settings): Promise<Id | null> {
   const accepted = await acceptTabs(tx, tabs, settings);
-  if (accepted.length === 0) return null;
-  const groupId = await createGroupAtTop(tx, null);
-  await insertTabs(tx, groupId, accepted);
-  return groupId;
+  const parts = new Map<number | null, NewTab[]>();
+  for (const tab of accepted) {
+    const key = tab.browserGroup?.id ?? null;
+    parts.set(key, [...(parts.get(key) ?? []), tab]);
+  }
+  let top: Id | null = null;
+  for (const part of [...parts.values()].reverse()) {
+    const bg = part[0]!.browserGroup;
+    top = await createGroupAtTop(
+      tx,
+      null,
+      bg?.title ?? '',
+      bg ? { openAs: { mode: 'tabGroup', color: bg.color, collapsed: bg.collapsed } } : {},
+    );
+    await insertTabs(tx, top, part);
+  }
+  return top;
 }
 
 /**
