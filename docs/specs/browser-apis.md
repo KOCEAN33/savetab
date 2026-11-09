@@ -6,7 +6,7 @@ Chrome and Firefox differences that shape savetab's P3 steps (`docs/plans/onetab
 
 - Permission `tabGroups`. Chrome: `tabs.group` and `Tab.groupId` since 88, `tabGroups` since 89. Firefox: `tabs.group` and `Tab.groupId` since 138, `tabGroups` since 139. Firefox for Android has neither.
 - Both: `tabs.group({ tabIds })` without `groupId` makes a group. `tabGroups.update` sets `title`, `color`, `collapsed`. `tabGroups.query({ windowId })` lists a window's groups.
-- Whether Firefox accepts all nine Chrome colors is _(unverified)_.
+- Firefox 159 stores and restores a blue tab group with its title. Whether it accepts all nine Chrome colors is _(unverified)_.
 - Sources: [MDN tabGroups](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/tabGroups), [Chrome tabGroups](https://developer.chrome.com/docs/extensions/reference/api/tabGroups).
 
 ## Reading list and bookmarks
@@ -26,6 +26,7 @@ Chrome and Firefox differences that shape savetab's P3 steps (`docs/plans/onetab
 - Chrome: without "Allow in Incognito", `windows.create({ incognito: true })` still opens a window but resolves to `undefined`. With `incognito: "spanning"`, an extension page cannot load in an incognito window and opens in a normal one.
 - Firefox: without "Run in Private Windows", `windows.create({ incognito: true })` rejects with `Extension does not have permission for incognito mode`. Firefox does not support `"split"`.
 - Both: `extension.isAllowedIncognitoAccess()` reports the user's grant.
+- Firefox: granting "Run in Private Windows" reloads the extension, which closes its open pages.
 - Sources: [Chromium windows_api.cc](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/browser/extensions/api/tabs/windows_api.cc), [Firefox ext-windows.js](https://github.com/mozilla-firefox/firefox/blob/main/browser/components/extensions/parent/ext-windows.js).
 
 ## URLs an extension cannot open
@@ -47,7 +48,7 @@ Chrome and Firefox differences that shape savetab's P3 steps (`docs/plans/onetab
 
 ## Downloads
 
-- A Blob URL with `<a download>` needs no permission in Chrome: the savetab e2e catches the download. Firefox ignored `download` on extension pages for `data:` URLs in 2017 _(unverified on current Firefox)_. `downloads.download` needs the `downloads` permission, which can be optional in both browsers.
+- A Blob URL with `<a download>` needs no permission in Chrome: the savetab e2e catches the download. Firefox 159 downloads a Blob URL with `<a download>` from an extension page without the permission (savetab P3 Firefox check). `downloads.download` needs the `downloads` permission, which can be optional in both browsers.
 - Source: [Mozilla bug 1379960](https://bugzilla.mozilla.org/show_bug.cgi?id=1379960).
 
 ## Storage lifetime

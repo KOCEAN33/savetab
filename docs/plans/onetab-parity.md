@@ -87,6 +87,8 @@ Built. Every `P1` item in `docs/specs/features.md` works in Chrome and Firefox.
 
 ### P2: v2 organization
 
+Built, in Chrome and Firefox. The steps below record what each one built.
+
 Steps run in this order. Each step is done when its check passes plus `pnpm test`, `pnpm test:e2e`, `pnpm check`, and `pnpm lint`. A value marked *(savetab choice)* has no observed OneTab counterpart.
 
 1. **Data model.** Shape changes land before any UI.
@@ -123,6 +125,8 @@ Steps run in this order. Each step is done when its check passes plus `pnpm test
     - Check: e2e sends a tab to a named group through the menu click handler.
 
 ### P3: v2 capture and restore extras
+
+Built, in Chrome and Firefox. The steps below record what each one built.
 
 Steps run in this order. Each step is done when its check passes plus `pnpm test`, `pnpm test:e2e`, `pnpm check`, and `pnpm lint`. A value marked *(savetab choice)* has no observed OneTab counterpart. Locales land before the steps that add UI, so new strings go straight into both message files. The Chrome and Firefox API differences each step relies on are in `docs/specs/browser-apis.md`.
 

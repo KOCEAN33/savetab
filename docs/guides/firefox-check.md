@@ -12,6 +12,9 @@ Playwright cannot load extensions into Firefox, and WebDriver BiDi (puppeteer) i
 
 Driving notes:
 
-- Firefox has the Korean IME active. `type-text` and `paste-text` into a page input double or mangle the text, so fill page inputs with `set-value`. The address bar takes `type-text` after Select All and Backspace.
+- Firefox has the Korean IME active. `type-text` and `paste-text` into a page input double or mangle the text, so fill page inputs with `set-value`. It often reports `verification_failed` while the value did land, so check the page result instead. The address bar takes `type-text` after Select All and Backspace.
+- The web-ext Firefox UI is Korean, so savetab's Language "Automatic" shows Korean. Choose English on the options page before following English labels.
+- To copy page content, drag-select it, then press Cmd+C. Cmd+C after Select All copies nothing.
+- macOS dark mode makes the theme "Automatic" dark too. Compare a Light screenshot to see the Dark setting.
 - A tab row's "More actions" button shows only on hover or focus. Click empty space on the row first, then use the button's element index.
 - Native context submenus, such as "Send this tab to", are absent from the accessibility tree. Open them with the Right and Down keys and read them from the screenshot.
