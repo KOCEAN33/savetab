@@ -288,3 +288,90 @@ textarea {
 .drop-target {
   outline: 1px dashed var(--color-primary);
 }
+
+/* Folder navigation */
+.layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 960px);
+  gap: var(--space-xl);
+  padding: var(--space-xl);
+}
+
+.layout main {
+  padding: 0;
+}
+
+.nav-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.nav-tree {
+  margin: 0;
+  padding: 0 0 0 var(--space-md);
+  list-style: none;
+}
+
+.nav-column > .nav-tree {
+  padding-left: 0;
+}
+
+.nav-item {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--color-on-surface);
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.nav-current {
+  font-weight: var(--font-weight-bold);
+}
+
+.nav-entry {
+  position: relative;
+}
+
+.nav-drop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--line-height-body);
+  pointer-events: none;
+}
+
+.nav-heading {
+  margin: var(--space-md) 0 0;
+  font-size: var(--text-body);
+  font-weight: var(--font-weight-bold);
+}
+
+.nav-filter {
+  margin-top: var(--space-md);
+}
+
+.folder-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+@media (width <= 640px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--space-md);
+  }
+}

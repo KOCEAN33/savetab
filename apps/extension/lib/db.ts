@@ -1,8 +1,16 @@
 import Dexie, { type Table } from 'dexie';
 import { Tx, tick, uuidv7, type Hlc, type Id, type ItemRecord, type ItemSource, type Op } from '@savetab/core';
 
-/** IndexedDB does not index null, so root children are indexed under ''. */
-type StoredRecord = ItemRecord & { parentKey: string };
+/**
+ * IndexedDB does not index null, so root children are indexed under ''. Records without
+ * a parent (links, settings) carry no key and stay out of the index.
+ */
+type StoredRecord = ItemRecord & { parentKey?: string };
+
+function stored(r: ItemRecord): StoredRecord {
+  if (r.parentId === undefined) return r;
+  return { ...r, parentKey: (r.parentId as Id | null) ?? '' };
+}
 
 class SavetabDb extends Dexie {
   items!: Table<StoredRecord, string>;
@@ -16,6 +24,14 @@ class SavetabDb extends Dexie {
       outbox: '++seq',
       meta: 'key',
     });
+    this.version(2).upgrade((tx) =>
+      tx
+        .table<StoredRecord, string>('items')
+        .toCollection()
+        .modify((r) => {
+          if (r.parentId === undefined) delete r.parentKey;
+        }),
+    );
   }
 }
 
@@ -55,7 +71,7 @@ export function transact<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     let clock = ((await db.meta.get('hlc'))?.value as Hlc | undefined) ?? null;
     const tx = new Tx(source, () => (clock = tick(clock, Date.now(), device)));
     const result = await fn(tx);
-    await db.items.bulkPut(tx.changed().map((r) => ({ ...r, parentKey: (r.parentId as Id | null) ?? '' })));
+    await db.items.bulkPut(tx.changed().map(stored));
     await db.outbox.bulkAdd(tx.ops.map((op) => ({ op })));
     await db.meta.put({ key: 'hlc', value: clock });
     return result;

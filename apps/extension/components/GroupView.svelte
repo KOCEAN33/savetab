@@ -1,6 +1,6 @@
 <script lang="ts">
   import { dndzone, dragHandle, TRIGGERS, type DndEvent } from 'svelte-dnd-action';
-  import { moveItems, trashItems, updateItem, type Group, type Settings, type Tab } from '@savetab/core';
+  import { moveItems, trashItems, updateItem, type Group, type ListView, type Tab } from '@savetab/core';
   import { transact } from '@/lib/db';
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { clickIntent, restoreGroup, restoreTab } from '@/lib/restore';
@@ -8,15 +8,16 @@
 
   let {
     group,
-    tabs,
-    settings,
+    view,
     ondragging,
   }: {
     group: Group;
-    tabs: Tab[];
-    settings: Settings;
+    view: ListView;
     ondragging: (active: boolean) => void;
   } = $props();
+
+  const tabs = $derived(view.tabs(group.id));
+  const settings = $derived(view.settings);
 
   let items = $derived(tabs);
   let editing = $state(false);
@@ -81,7 +82,7 @@
   }}
 />
 
-<section class="group" aria-label={label}>
+<section class="group" id="item-{group.id}" aria-label={label}>
   <div class="group-head">
     <span class="group-grip" use:dragHandle aria-label="Drag {label}">⠿</span>
     {#if editing}
@@ -147,6 +148,7 @@
     {#each items as tab (tab.id)}
       <TabRow
         {tab}
+        title={view.title(tab)}
         {settings}
         locked={group.locked}
         onopen={(e) => restoreTab(tab, clickIntent(e, settings))}

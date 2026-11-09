@@ -7,11 +7,11 @@ const settings = { ...defaultSettings, id: 'settings' };
 const tab = (n: string) => ({ url: `https://${n}.example/`, title: n, favIconUrl: '' });
 
 describe('Dexie adapter', () => {
-  it('persists a transaction: root group, its tabs, and one outbox row per op', async () => {
+  it('persists a transaction: root group, its tabs, their links, and one outbox row per op', async () => {
     const g = (await transact((tx) => storeTabs(tx, [tab('a'), tab('b')], settings)))!;
     expect((await liveChildren(source, null)).map((x) => x.id)).toContain(g);
     expect((await liveChildren(source, g)).map((x) => x.title)).toEqual(['a', 'b']);
-    expect(await db.outbox.count()).toBe(3);
+    expect(await db.outbox.count()).toBe(5);
   });
 
   it('rolls back every write when a mutation throws', async () => {
@@ -26,6 +26,11 @@ describe('Dexie adapter', () => {
     ).rejects.toBeInstanceOf(LockedError);
     expect(await db.outbox.count()).toBe(before);
     expect((await db.items.get(g))?.title).toBe('');
+  });
+
+  it('keeps links out of the root children index', async () => {
+    await transact((tx) => storeTabs(tx, [tab('e')], settings));
+    expect((await source.children(null)).filter((r) => r.kind === 'link')).toEqual([]);
   });
 
   it('lists trashed items through the trashedAt index', async () => {

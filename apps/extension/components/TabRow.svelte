@@ -4,12 +4,14 @@
 
   let {
     tab,
+    title,
     settings,
     locked,
     onopen,
     ondelete,
   }: {
     tab: Tab;
+    title: string;
     settings: Settings;
     locked: boolean;
     onopen: (e: MouseEvent) => void;
@@ -47,7 +49,7 @@
   {#if locked}
     <span class="tab-delete-slot"></span>
   {:else}
-    <button class="tab-delete" title="Delete" aria-label="Delete {tab.title || tab.url}" onclick={ondelete}>×</button>
+    <button class="tab-delete" title="Delete" aria-label="Delete {title || tab.url}" onclick={ondelete}>×</button>
   {/if}
   {#if icon}
     <img class="tab-icon" src={icon} alt="" draggable="false" />
@@ -55,7 +57,7 @@
     <span class="tab-icon"></span>
   {/if}
   <a class="tab-link" href={tab.url} draggable="false" onclick={click} onauxclick={(e) => e.button === 1 && click(e)}
-    >{tab.title || tab.url}</a
+    >{title || tab.url}</a
   >
   {#if shownUrl}<span class="tab-url meta">{shownUrl}</span>{/if}
   {#if tab.star}<span title="Starred">★</span>{/if}

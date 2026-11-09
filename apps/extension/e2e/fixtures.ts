@@ -1,4 +1,4 @@
-import { test as base, chromium, type BrowserContext, type Page, type Worker } from '@playwright/test';
+import { test as base, chromium, type BrowserContext, type Locator, type Page, type Worker } from '@playwright/test';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
@@ -70,4 +70,26 @@ export function openUrls(context: BrowserContext): string[] {
     .pages()
     .map((p) => p.url())
     .filter((u) => u.startsWith(SITE));
+}
+
+/**
+ * Drag `from` to just below the middle of `to`. svelte-dnd-action samples the pointer on a
+ * timer, so the pointer moves at human speed and rests on the target before the drop.
+ */
+export async function drag(page: Page, from: Locator, to: Locator, grabX = 20): Promise<void> {
+  const a = (await from.boundingBox())!;
+  const b = (await to.boundingBox())!;
+  const start = { x: a.x + Math.min(grabX, a.width / 2), y: a.y + a.height / 2 };
+  const end = { x: b.x + Math.min(grabX, b.width / 2), y: b.y + b.height / 2 + 2 };
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 20; i++) {
+    await page.mouse.move(start.x + ((end.x - start.x) * i) / 20, start.y + ((end.y - start.y) * i) / 20);
+    await page.waitForTimeout(30);
+  }
+  for (let i = 0; i < 5; i++) {
+    await page.mouse.move(end.x, end.y + (i % 2));
+    await page.waitForTimeout(30);
+  }
+  await page.mouse.up();
 }

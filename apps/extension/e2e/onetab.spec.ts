@@ -1,4 +1,4 @@
-import { expect, onetabPage, openPages, openUrls, sendWindow, SITE, test } from './fixtures';
+import { drag, expect, onetabPage, openPages, openUrls, sendWindow, SITE, test } from './fixtures';
 
 test('stores a window of 5 tabs as one group and closes them', async ({ context, worker, extensionId }) => {
   await openPages(context, ['1', '2', '3', '4', '5']);
@@ -6,7 +6,7 @@ test('stores a window of 5 tabs as one group and closes them', async ({ context,
   const list = await onetabPage(context, extensionId);
 
   await expect(list.getByRole('heading', { name: 'Total: 5 tabs' })).toBeVisible();
-  await expect(list.getByRole('button', { name: '5 tabs', exact: true })).toBeVisible();
+  await expect(list.getByRole('main').getByRole('button', { name: '5 tabs', exact: true })).toBeVisible();
   await expect(list.locator('.tab-link')).toHaveText(['Page 1', 'Page 2', 'Page 3', 'Page 4', 'Page 5']);
   expect(openUrls(context)).toEqual([]);
 });
@@ -69,10 +69,10 @@ test('renames a group by clicking its label', async ({ context, worker, extensio
   await sendWindow(worker);
   const list = await onetabPage(context, extensionId);
 
-  await list.getByRole('button', { name: '2 tabs', exact: true }).click();
+  await list.getByRole('main').getByRole('button', { name: '2 tabs', exact: true }).click();
   await list.locator('.group-title-input').fill('Reading');
   await list.keyboard.press('Enter');
-  await expect(list.getByRole('button', { name: 'Reading', exact: true })).toBeVisible();
+  await expect(list.getByRole('main').getByRole('button', { name: 'Reading', exact: true })).toBeVisible();
 });
 
 test('drags a tab into another group', async ({ context, worker, extensionId }) => {
@@ -85,18 +85,7 @@ test('drags a tab into another group', async ({ context, worker, extensionId }) 
 
   const groups = list.locator('.group');
   await expect(groups).toHaveCount(2);
-  const source = groups.nth(0).getByRole('link', { name: 'Page b1' });
-  const target = groups.nth(1).getByRole('link', { name: 'Page a2' });
-  const from = (await source.boundingBox())!;
-  const to = (await target.boundingBox())!;
-  await list.mouse.move(from.x + 20, from.y + from.height / 2);
-  await list.mouse.down();
-  // The library samples the pointer on a timer, so move at human speed.
-  for (let i = 1; i <= 20; i++) {
-    await list.mouse.move(from.x + 20, from.y + ((to.y + to.height / 2 + 2 - from.y) * i) / 20);
-    await list.waitForTimeout(30);
-  }
-  await list.mouse.up();
+  await drag(list, groups.nth(0).getByRole('link', { name: 'Page b1' }), groups.nth(1).getByRole('link', { name: 'Page a2' }));
 
   await expect(list.locator('.group')).toHaveCount(1);
   await expect(list.locator('.tab-link')).toHaveText(['Page a1', 'Page b1', 'Page a2']);

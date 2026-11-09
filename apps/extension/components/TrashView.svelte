@@ -2,14 +2,21 @@
   import { emptyTrash, restoreFromTrash, type ItemRecord } from '@savetab/core';
   import { transact } from '@/lib/db';
 
-  let { trashed, tabCount }: { trashed: ItemRecord[]; tabCount: (groupId: string) => number } = $props();
+  let {
+    trashed,
+    tabCount,
+    tabTitle,
+  }: { trashed: ItemRecord[]; tabCount: (groupId: string) => number; tabTitle: (r: ItemRecord) => string } = $props();
+
+  const KIND_LABEL: Record<string, string> = { folder: 'Folder', group: 'Group', tab: 'Tab' };
 
   function label(r: ItemRecord): string {
     if (r.kind === 'group') {
       const n = tabCount(r.id);
       return r.title || `${n} ${n === 1 ? 'tab' : 'tabs'}`;
     }
-    return r.title || r.url || '';
+    if (r.kind === 'folder') return r.title || 'Untitled folder';
+    return tabTitle(r) || r.url || '';
   }
 
   function deleteAll() {
@@ -26,7 +33,7 @@
       {#each trashed as r (r.id)}
         <li class="tab">
           <span>{label(r)}</span>
-          <span class="meta">{r.kind === 'group' ? 'Group' : 'Tab'}, deleted {new Date(r.trashedAt ?? 0).toLocaleString()}</span>
+          <span class="meta">{KIND_LABEL[r.kind ?? 'tab']}, deleted {new Date(r.trashedAt ?? 0).toLocaleString()}</span>
           <button class="link-button" onclick={() => transact((tx) => restoreFromTrash(tx, [r.id]))}>Move back</button>
         </li>
       {/each}

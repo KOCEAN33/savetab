@@ -1,30 +1,14 @@
 <script lang="ts">
   import { liveQuery } from 'dexie';
   import { browser } from 'wxt/browser';
-  import {
-    compareSiblings,
-    exportText,
-    importGroups,
-    isLive,
-    parseImportText,
-    type ItemRecord,
-    type Tab,
-  } from '@savetab/core';
+  import { exportText, importGroups, ListView, parseImportText, type ItemRecord } from '@savetab/core';
   import { db, transact } from '@/lib/db';
 
   const records = liveQuery(() => db.items.toArray());
 
   const exported = $derived.by(() => {
-    const all = (($records ?? []) as ItemRecord[]).filter(isLive);
-    const groups = all.filter((r) => r.kind === 'group' && r.parentId == null).sort(compareSiblings);
-    return exportText(
-      groups.map((g) =>
-        all
-          .filter((r): r is ItemRecord & Tab => r.kind === 'tab' && r.parentId === g.id)
-          .sort(compareSiblings)
-          .map((t) => ({ url: t.url, title: t.title })),
-      ),
-    );
+    const view = new ListView(($records ?? []) as ItemRecord[]);
+    return exportText(view.groups(null).map((g) => view.tabs(g.id).map((t) => ({ url: t.url, title: view.title(t) }))));
   });
 
   let input = $state('');
