@@ -23,6 +23,10 @@ export class MemoryStore implements ItemSource {
     return [...this.records.values()].filter((r) => r.url === url);
   }
 
+  all(): ItemRecord[] {
+    return [...this.records.values()];
+  }
+
   async trashed() {
     return [...this.records.values()].filter((r) => r.trashedAt != null && r.purged !== true);
   }

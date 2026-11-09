@@ -7,3 +7,5 @@ export * from './memory';
 export * from './query';
 export * from './mutations';
 export * from './textio';
+export * from './link';
+export * from './view';

@@ -1,5 +1,6 @@
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from './id';
+import { linkId, normalizeUrl } from './link';
 import { isKind, isLive, type Id, type ItemRecord, type Settings } from './model';
 import { liveChildren } from './query';
 import type { Tx } from './tx';
@@ -7,6 +8,12 @@ import type { Tx } from './tx';
 export class LockedError extends Error {
   constructor() {
     super('The group is locked');
+  }
+}
+
+export class CycleError extends Error {
+  constructor() {
+    super('A folder cannot move into itself');
   }
 }
 
@@ -56,6 +63,8 @@ function baseFields(tx: Tx, parentId: Id | null, order: string) {
     star: false,
     task: 'none',
     archived: false,
+    collapsed: false,
+    quickOrder: null,
   };
 }
 
@@ -79,6 +88,18 @@ async function createGroupAtTop(tx: Tx, parentId: Id | null, title = ''): Promis
   return id;
 }
 
+export async function createFolder(tx: Tx, parentId: Id | null, title: string): Promise<Id> {
+  const first = (await keyOrdered(tx, parentId))[0];
+  const id = uuidv7(tx.now);
+  await tx.write(id, {
+    ...baseFields(tx, parentId, generateKeyBetween(null, first?.order ?? null)),
+    kind: 'folder',
+    title,
+    pinnedTop: false,
+  });
+  return id;
+}
+
 async function isInLockedGroup(tx: Tx, rec: ItemRecord): Promise<boolean> {
   if (rec.kind !== 'tab' || rec.parentId == null) return false;
   const parent = await tx.get(rec.parentId);
@@ -94,14 +115,25 @@ async function trashIfEmpty(tx: Tx, groupId: Id | null | undefined): Promise<voi
   await tx.write(groupId, { trashedAt: tx.now, modifiedAt: tx.now });
 }
 
-/** Apply the duplicate and title rules. Returns the tabs that should be added. */
+/** Create the URL's link when missing, seeded with `title`. Returns the live link. */
+async function ensureLink(tx: Tx, url: string, title: string): Promise<ItemRecord> {
+  const id = linkId(url);
+  const link = await tx.get(id);
+  if (isKind(link, 'link') && link.purged !== true) return link;
+  return tx.write(id, { kind: 'link', url: normalizeUrl(url), title, notes: '', purged: false });
+}
+
+/** Apply the duplicate and title rules and the URL's link. Returns the tabs that should be added. */
 async function acceptTabs(tx: Tx, tabs: NewTab[], settings: Settings): Promise<NewTab[]> {
   const accepted: NewTab[] = [];
   const seen = new Set<string>();
-  for (const tab of tabs) {
+  for (const raw of tabs) {
+    const tab = { ...raw, url: normalizeUrl(raw.url) };
     const copies = (await tx.byUrl(tab.url)).filter((r) => r.kind === 'tab' && isLive(r));
-    if (settings.titleOnDuplicate === 'update' && tab.title) {
-      for (const c of copies) if (c.title !== tab.title) await tx.write(c.id, { title: tab.title, modifiedAt: tx.now });
+    // A copy stored before links existed holds the title "keep" refers to.
+    const link = await ensureLink(tx, tab.url, copies[0]?.title ?? tab.title);
+    if (settings.titleOnDuplicate === 'update' && tab.title && link.title !== tab.title) {
+      await tx.write(link.id, { title: tab.title });
     }
     if (settings.duplicates === 'reject' && (copies.length > 0 || seen.has(tab.url))) continue;
     seen.add(tab.url);
@@ -156,6 +188,9 @@ export async function updateItem(tx: Tx, id: Id, patch: Record<string, unknown>)
 export async function moveItems(tx: Tx, ids: Id[], parentId: Id | null, beforeId: Id | null): Promise<void> {
   const target = parentId == null ? undefined : await tx.get(parentId);
   if (isKind(target, 'group') && target.locked) throw new LockedError();
+  for (let at: ItemRecord | undefined = target; at; at = at.parentId == null ? undefined : await tx.get(at.parentId)) {
+    if (ids.includes(at.id)) throw new CycleError();
+  }
   const moving: ItemRecord[] = [];
   for (const id of ids) {
     const rec = await tx.get(id);
@@ -188,9 +223,9 @@ export async function importGroups(tx: Tx, groups: NewTab[][]): Promise<Id[]> {
   return ids;
 }
 
-/** OneTab's "drag tabs into blank space": the tabs form a new group at the top. */
-export async function moveToNewGroup(tx: Tx, ids: Id[]): Promise<Id> {
-  const groupId = await createGroupAtTop(tx, null);
+/** OneTab's "drag tabs into blank space": the tabs form a new group at the top of `parentId`. */
+export async function moveToNewGroup(tx: Tx, ids: Id[], parentId: Id | null = null): Promise<Id> {
+  const groupId = await createGroupAtTop(tx, parentId);
   await moveItems(tx, ids, groupId, null);
   return groupId;
 }
@@ -222,13 +257,24 @@ export async function restoreFromTrash(tx: Tx, ids: Id[]): Promise<void> {
   }
 }
 
-async function purgeTree(tx: Tx, id: Id): Promise<void> {
-  for (const child of await tx.children(id)) await purgeTree(tx, child.id);
+async function purgeTree(tx: Tx, id: Id, urls: Set<string>): Promise<void> {
+  for (const child of await tx.children(id)) await purgeTree(tx, child.id, urls);
+  const rec = await tx.get(id);
+  if (rec?.url) urls.add(rec.url);
   await tx.write(id, { purged: true, title: '', notes: '', url: '', favIconUrl: '', modifiedAt: tx.now });
 }
 
+/** Purge the trash, and every link whose last tab went with it. */
 export async function emptyTrash(tx: Tx): Promise<void> {
-  for (const rec of await tx.trashed()) await purgeTree(tx, rec.id);
+  const urls = new Set<string>();
+  for (const rec of await tx.trashed()) await purgeTree(tx, rec.id, urls);
+  for (const url of urls) {
+    if ((await tx.byUrl(url)).some((r) => r.kind === 'tab' && r.purged !== true)) continue;
+    const link = await tx.get(linkId(url));
+    if (isKind(link, 'link') && link.purged !== true) {
+      await tx.write(link.id, { purged: true, url: '', title: '', notes: '' });
+    }
+  }
 }
 
 /** Apply the "after restoring tabs" rule. Locked groups always keep their tabs. */
@@ -244,4 +290,13 @@ export async function afterOpen(tx: Tx, tabIds: Id[], mode: Settings['afterResto
     parents.add(rec.parentId);
   }
   if (mode === 'remove') for (const p of parents) await trashIfEmpty(tx, p);
+}
+
+/** A tab's title and notes live on its URL's link, so the edit shows on every copy. */
+export async function editTab(tx: Tx, tabId: Id, patch: { title?: string; notes?: string }): Promise<void> {
+  const tab = await tx.get(tabId);
+  if (!isKind(tab, 'tab')) return;
+  const link = await ensureLink(tx, tab.url, tab.title);
+  await tx.write(link.id, patch);
+  await tx.write(tabId, { modifiedAt: tx.now });
 }

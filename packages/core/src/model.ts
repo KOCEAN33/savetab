@@ -2,7 +2,7 @@ export type Id = string;
 /** Hybrid logical clock. Lexical order equals causal order, see hlc.ts. */
 export type Hlc = string;
 
-export type Kind = 'folder' | 'group' | 'tab' | 'settings';
+export type Kind = 'folder' | 'group' | 'tab' | 'link' | 'settings';
 export type TaskState = 'none' | 'pending' | 'done';
 
 export interface CommonFields {
@@ -24,6 +24,9 @@ export interface CommonFields {
   star: boolean;
   task: TaskState;
   archived: boolean;
+  collapsed: boolean;
+  /** Fractional index key in the quick list. null = not listed. */
+  quickOrder: string | null;
 }
 
 export interface FolderFields extends CommonFields {
@@ -44,6 +47,18 @@ export interface TabFields extends CommonFields {
   pinOnOpen: boolean;
 }
 
+/** Title and notes shared by every tab whose URL normalizes to `url`. */
+export interface LinkFields {
+  kind: 'link';
+  url: string;
+  title: string;
+  notes: string;
+  /** Tombstone left once no tab has the URL. Content fields are blanked. */
+  purged: boolean;
+}
+
+export type CopyFormat = 'rich' | 'urlTitle' | 'titleUrl' | 'url' | 'markdown';
+
 export interface SettingsFields {
   kind: 'settings';
   excludedDomains: string[];
@@ -55,11 +70,13 @@ export interface SettingsFields {
   switchToRestored: boolean;
   groupTitleClick: 'edit' | 'restore';
   urlDisplay: 'full' | 'abbreviated' | 'domain' | 'none';
+  copyFormat: CopyFormat;
 }
 
 export type Folder = { id: Id } & FolderFields;
 export type Group = { id: Id } & GroupFields;
 export type Tab = { id: Id } & TabFields;
+export type Link = { id: Id } & LinkFields;
 export type Settings = { id: Id } & SettingsFields;
 export type Item = Folder | Group | Tab;
 
@@ -69,7 +86,9 @@ type FieldsOf<K extends Kind> = K extends 'folder'
     ? GroupFields
     : K extends 'tab'
       ? TabFields
-      : SettingsFields;
+      : K extends 'link'
+        ? LinkFields
+        : SettingsFields;
 
 /**
  * Stored form of any record. Fields arrive one op at a time from other devices,
@@ -100,7 +119,11 @@ export const defaultSettings: SettingsFields = {
   switchToRestored: false,
   groupTitleClick: 'edit',
   urlDisplay: 'none',
+  copyFormat: 'rich',
 };
+
+/** Character limit of a notes field. */
+export const NOTES_MAX = 5000;
 
 export function isKind<K extends Kind>(
   rec: ItemRecord | undefined,

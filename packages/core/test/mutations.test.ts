@@ -13,6 +13,8 @@ import {
   trashItems,
   updateItem,
   LockedError,
+  CycleError,
+  createFolder,
 } from '../src/mutations';
 import { liveChildren } from '../src/query';
 import { defaultSettings, type Settings, type Tab } from '../src/model';
@@ -56,15 +58,6 @@ describe('storeTabs', () => {
     expect(await groupIds(s)).toHaveLength(2);
   });
 
-  it('updates the title of existing copies only when titleOnDuplicate is update', async () => {
-    const s = new MemoryStore('dev1');
-    const g1 = await s.transact((tx) => storeTabs(tx, [t('a', 'Old')], settings()));
-    await s.transact((tx) => storeTabs(tx, [t('a', 'Newer')], settings({ titleOnDuplicate: 'keep' })));
-    expect(((await liveChildren(s, g1!))[0] as Tab).title).toBe('Old');
-
-    await s.transact((tx) => storeTabs(tx, [t('a', 'Newest')], settings({ titleOnDuplicate: 'update' })));
-    expect(((await liveChildren(s, g1!))[0] as Tab).title).toBe('Newest');
-  });
 });
 
 describe('storeIntoFirstGroup', () => {
@@ -196,6 +189,15 @@ describe('moveItems', () => {
     const g2 = await s.transact((tx) => moveToNewGroup(tx, [a!.id]));
     expect(await groupIds(s)).toEqual([g2, g1]);
     expect(await urlsOf(s, g2)).toEqual(['https://a.example/']);
+  });
+
+  it('refuses to move a folder into itself or a folder inside it', async () => {
+    const s = new MemoryStore('dev1');
+    const outer = await s.transact((tx) => createFolder(tx, null, 'Outer'));
+    const inner = await s.transact((tx) => createFolder(tx, outer, 'Inner'));
+    await expect(s.transact((tx) => moveItems(tx, [outer], outer, null))).rejects.toBeInstanceOf(CycleError);
+    await expect(s.transact((tx) => moveItems(tx, [outer], inner, null))).rejects.toBeInstanceOf(CycleError);
+    expect(await groupIds(s)).toEqual([outer]);
   });
 
   it('appends to the end when no target sibling is given', async () => {

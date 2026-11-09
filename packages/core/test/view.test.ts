@@ -1,0 +1,46 @@
+import { describe, expect, it } from 'vitest';
+import { MemoryStore } from '../src/memory';
+import { createFolder, editTab, moveItems, storeTabs, updateItem } from '../src/mutations';
+import { ListView } from '../src/view';
+import { defaultSettings } from '../src/model';
+
+const settings = { ...defaultSettings, id: 'settings' };
+const tab = (n: string, title = `T${n}`) => ({ url: `https://${n}.example/`, title, favIconUrl: '' });
+
+async function viewOf(s: MemoryStore): Promise<ListView> {
+  return new ListView(s.all());
+}
+
+describe('ListView', () => {
+  it('lists folders and groups in display order and hides an empty unnamed group', async () => {
+    const s = new MemoryStore('dev1');
+    const g1 = (await s.transact((tx) => storeTabs(tx, [tab('a')], settings)))!;
+    const folder = await s.transact((tx) => createFolder(tx, null, 'Work'));
+    const g2 = (await s.transact((tx) => storeTabs(tx, [tab('b')], settings)))!;
+    const [b] = (await viewOf(s)).tabs(g2);
+    await s.transact((tx) => moveItems(tx, [b!.id], g1, null));
+    // moveItems trashes the emptied unnamed group, so revive it as an empty live group.
+    await s.transact((tx) => updateItem(tx, g2, { trashedAt: null }));
+
+    const v = await viewOf(s);
+    expect(v.children(null).map((i) => i.id)).toEqual([folder, g1]);
+  });
+
+  it('shows a tab by its link title, counts tabs through folders, and gives the folder path', async () => {
+    const s = new MemoryStore('dev1');
+    const outer = await s.transact((tx) => createFolder(tx, null, 'Outer'));
+    const inner = await s.transact((tx) => createFolder(tx, outer, 'Inner'));
+    const g = (await s.transact((tx) => storeTabs(tx, [tab('a'), tab('b')], settings)))!;
+    await s.transact((tx) => moveItems(tx, [g], inner, null));
+    const [a] = (await viewOf(s)).tabs(g);
+    await s.transact((tx) => editTab(tx, a!.id, { title: 'Shown', notes: 'n' }));
+
+    const v = await viewOf(s);
+    expect(v.title(v.tabs(g)[0]!)).toBe('Shown');
+    expect(v.notes(v.tabs(g)[0]!)).toBe('n');
+    expect(v.title(v.tabs(g)[1]!)).toBe('Tb');
+    expect(v.tabCount(outer)).toBe(2);
+    expect(v.tabCount(null)).toBe(2);
+    expect(v.path(g).map((i) => i.id)).toEqual([outer, inner]);
+  });
+});
