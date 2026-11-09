@@ -7,7 +7,7 @@ export default defineConfig({
     name: '__MSG_extName__',
     description: '__MSG_extDescription__',
     default_locale: 'en',
-    permissions: ['tabs', 'storage', 'unlimitedStorage', 'contextMenus', ...(browser === 'firefox' ? [] : ['favicon'])],
+    permissions: ['tabs', 'tabGroups', 'storage', 'unlimitedStorage', 'contextMenus', ...(browser === 'firefox' ? [] : ['favicon'])],
     omnibox: { keyword: '11' },
     action: { default_title: 'savetab', ...(browser === 'firefox' ? { default_area: 'navbar' } : {}) },
     commands: {

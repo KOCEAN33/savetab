@@ -161,6 +161,13 @@ textarea {
   cursor: pointer;
 }
 
+.menu-field {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  padding: var(--space-xs) var(--space-md);
+}
+
 .menu [aria-checked='true']::after {
   content: ' ✓';
 }

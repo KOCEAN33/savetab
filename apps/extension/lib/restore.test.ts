@@ -18,6 +18,13 @@ describe('restoreWindow', () => {
     expect(restoreWindow('incognito', s('current'), true, false)).toBe('incognito');
   });
 
+  it('follows tabGroupRestore instead for a group that opens as a browser tab group', () => {
+    const tg = (tabGroupRestore: Settings['tabGroupRestore']) => ({ ...s('new'), tabGroupRestore });
+    expect(restoreWindow('default', tg('current'), false, false, true)).toBe('current');
+    expect(restoreWindow('default', { ...tg('new'), restoreGroupTarget: 'current' }, true, false, true)).toBe('new');
+    expect(restoreWindow('current', tg('new'), false, false, true)).toBe('current');
+  });
+
   it('opens a new window on Shift, except for an incognito group', () => {
     expect(restoreWindow('default', s('current'), true, true)).toBe('new');
     expect(restoreWindow('current', s('current'), true, true)).toBe('new');

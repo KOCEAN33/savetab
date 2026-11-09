@@ -13,8 +13,10 @@
     type ListView,
     type Placement,
     type RestoreTarget,
+    type TabGroupColor,
     type TaskState,
   } from '@savetab/core';
+  import { browser } from 'wxt/browser';
   import { copyLinks } from '@/lib/clipboard';
   import { clickIntent, restoreGroup } from '@/lib/restore';
   import { act, chooser, editing } from '@/lib/ui.svelte';
@@ -56,14 +58,29 @@
 
   /** A restore choice sticks to the group: Restore all and a title click use it until "Use default restore". */
   function restoreIn(e: MouseEvent, restoreTarget: RestoreTarget) {
-    if (item.kind !== 'group') return;
-    const tabs = view.tabs(item.id);
+    const group = item;
+    if (group.kind !== 'group') return;
+    const tabs = view.tabs(group.id);
     const intent = clickIntent(e, view.settings);
     close(async () => {
-      await act((tx) => updateItem(tx, item.id, { restoreTarget }));
-      await restoreGroup(tabs, intent, view.settings, restoreTarget);
+      await act((tx) => updateItem(tx, group.id, { restoreTarget }));
+      await restoreGroup(tabs, intent, view.settings, { ...group, restoreTarget });
     });
   }
+
+  /** Browsers without the tab group API, such as Firefox before 139, hide the tab group entries. */
+  const hasTabGroups = !!browser.tabGroups;
+  const COLORS = [
+    ['grey', 'colorGrey'],
+    ['blue', 'colorBlue'],
+    ['red', 'colorRed'],
+    ['yellow', 'colorYellow'],
+    ['green', 'colorGreen'],
+    ['pink', 'colorPink'],
+    ['purple', 'colorPurple'],
+    ['cyan', 'colorCyan'],
+    ['orange', 'colorOrange'],
+  ] as const satisfies [TabGroupColor, string][];
 
   const TASK_NEXT: Record<TaskState, [TaskState, string]> = {
     none: ['pending', t('menuMakeTask')],
@@ -99,6 +116,37 @@
         <button role="menuitem" onclick={(e) => restoreIn(e, 'incognito')}>{t('menuRestoreIncognito')}</button>
         {#if item.restoreTarget !== 'default'}
           <button role="menuitem" onclick={() => set({ restoreTarget: 'default' })}>{t('menuUseDefaultRestore')}</button>
+        {/if}
+        {#if hasTabGroups}
+          {@const openAs = item.openAs}
+          <button
+            role="menuitemcheckbox"
+            aria-checked={openAs.mode === 'tabGroup'}
+            onclick={() => set({ openAs: { ...openAs, mode: openAs.mode === 'tabGroup' ? 'window' : 'tabGroup' } })}
+          >
+            {t('menuOpenAsTabGroup')}
+          </button>
+          {#if openAs.mode === 'tabGroup'}
+            <label class="menu-field">
+              {t('tabGroupColor')}
+              <select
+                value={openAs.color}
+                onchange={(e) => {
+                  const color = e.currentTarget.value as TabGroupColor;
+                  void act((tx) => updateItem(tx, item.id, { openAs: { ...openAs, color } }));
+                }}
+              >
+                {#each COLORS as [c, key] (c)}<option value={c}>{t(key)}</option>{/each}
+              </select>
+            </label>
+            <button
+              role="menuitemcheckbox"
+              aria-checked={openAs.collapsed}
+              onclick={() => set({ openAs: { ...openAs, collapsed: !openAs.collapsed } })}
+            >
+              {t('tabGroupCollapsed')}
+            </button>
+          {/if}
         {/if}
         <hr />
       {/if}

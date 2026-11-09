@@ -1,5 +1,14 @@
 import { browser, type Browser } from 'wxt/browser';
-import { filterStorable, storeIntoFirstGroup, storeIntoGroup, storeTabs, type Id, type NewTab } from '@savetab/core';
+import {
+  filterStorable,
+  storeIntoFirstGroup,
+  storeIntoGroup,
+  storeTabs,
+  type BrowserGroup,
+  type Id,
+  type NewTab,
+  type TabGroupColor,
+} from '@savetab/core';
 import { transact } from './db';
 import { openOneTab } from './onetab-page';
 import { touchRecent } from './recent';
@@ -25,7 +34,7 @@ function ignorePrefixes(): string[] {
 // its _favicon endpoint anyway, so only Firefox depends on the stored value.
 const MAX_FAVICON_LENGTH = 4096;
 
-function toNewTab(t: Browser.tabs.Tab): NewTab & { pinned: boolean; id?: number } {
+function toNewTab(t: Browser.tabs.Tab, groups?: Map<number, BrowserGroup>): NewTab & { pinned: boolean; id?: number } {
   const icon = t.favIconUrl ?? '';
   return {
     id: t.id,
@@ -33,7 +42,20 @@ function toNewTab(t: Browser.tabs.Tab): NewTab & { pinned: boolean; id?: number 
     title: t.title ?? '',
     favIconUrl: icon.length <= MAX_FAVICON_LENGTH ? icon : '',
     pinned: t.pinned,
+    browserGroup: groups?.get(t.groupId ?? -1) ?? null,
   };
+}
+
+/** The browser tab groups `tabs` belong to, by id. Empty where the browser has no tab group API. */
+async function browserGroups(tabs: Browser.tabs.Tab[]): Promise<Map<number, BrowserGroup>> {
+  const out = new Map<number, BrowserGroup>();
+  if (!browser.tabGroups) return out;
+  for (const id of new Set(tabs.map((t) => t.groupId ?? -1))) {
+    if (id === -1) continue;
+    const g = await browser.tabGroups.get(id);
+    out.set(id, { id, title: g.title ?? '', color: g.color as TabGroupColor, collapsed: g.collapsed });
+  }
+  return out;
 }
 
 async function focusedWindowId(tab?: Browser.tabs.Tab): Promise<number | undefined> {
@@ -50,7 +72,10 @@ export async function sendTabs(action: SendAction, origin?: Browser.tabs.Tab): P
     browser.tabs.query({ windowType: 'normal' }),
   ]);
   const single = action === 'current';
-  const candidates = selectTabs(action, windowTabs, allTabs).map(toNewTab);
+  const selected = selectTabs(action, windowTabs, allTabs);
+  // A single-tab send ignores browser tab groups.
+  const groups = single ? undefined : await browserGroups(selected);
+  const candidates = selected.map((t) => toNewTab(t, groups));
   const settings = await getSettings();
   const storable = filterStorable(candidates, settings, { single, ignorePrefixes: ignorePrefixes() });
   const blanks = single ? [] : candidates.filter((t) => BLANK_PAGES.some((p) => t.url.startsWith(p)));
