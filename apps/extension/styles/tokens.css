@@ -1,0 +1,36 @@
+/* Raw values from DESIGN.md. Every other stylesheet reads these variables. */
+:root {
+  --color-surface: #ffffff;
+  --color-on-surface: #444444;
+  --color-on-surface-weak: #767676;
+  --color-border: #eeeeee;
+  --color-primary: #234da7;
+  --color-primary-tint: #f1f4f9;
+  --color-danger: #d93025;
+
+  --font-family: system-ui, sans-serif;
+  --text-body: 13px;
+  --text-title: 17px;
+  --text-headline: 22px;
+  --font-weight-regular: 400;
+  --font-weight-bold: 600;
+  --line-height-body: 20px;
+  --line-height-title: 24px;
+  --line-height-headline: 28px;
+
+  --radius-sm: 4px;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 20px;
+  --space-xl: 32px;
+
+  --motion-duration: 150ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration: 0ms;
+  }
+}

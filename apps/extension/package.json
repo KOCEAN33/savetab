@@ -1,0 +1,35 @@
+{
+  "name": "@savetab/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip && wxt zip -b firefox",
+    "postinstall": "wxt prepare",
+    "test": "vitest run",
+    "test:e2e": "wxt build --mode e2e && playwright test",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "lint:css": "stylelint 'styles/**/*.css'"
+  },
+  "dependencies": {
+    "@savetab/core": "workspace:*",
+    "dexie": "4.4.7",
+    "svelte-dnd-action": "0.9.80"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "@wxt-dev/module-svelte": "2.0.5",
+    "fake-indexeddb": "6.2.8",
+    "stylelint": "18.0.0",
+    "svelte": "5.57.3",
+    "svelte-check": "4.7.8",
+    "typescript": "6.0.3",
+    "vitest": "5.1.0",
+    "web-ext": "10.8.0",
+    "wxt": "0.21.5"
+  }
+}
