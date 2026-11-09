@@ -2,7 +2,7 @@
 
 A OneTab-parity browser extension for Chrome and Firefox. Self-hosted multi-device sync on Postgres comes later.
 
-Feature target: `docs/specs/features.md`, plan and data model: `docs/plans/onetab-parity.md`, UI decisions: `DESIGN.md`. Read before changing shape.
+Feature target: `docs/specs/features.md`, plan and data model: `docs/plans/onetab-parity.md`, UI decisions: `DESIGN.md`, Firefox check: `docs/guides/firefox-check.md`, deferred: `docs/candidates.md`, handoff: `docs/NEXT.md`. Read before changing shape.
 
 - Every list write goes through a `@savetab/core` mutation inside `transact` (`apps/extension/lib/db.ts`), so the outbox records it for sync.
 - TypeScript stays on 6.x. svelte-check 4 rejects TypeScript 7.

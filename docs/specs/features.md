@@ -1,6 +1,6 @@
 # OneTab feature inventory
 
-savetab targets feature parity with OneTab 2.24 (Chrome Web Store id `chphlpgkkbolifaimnlloiipkdnihall`), then adds self-hosted multi-device sync. Sources: the extension's `manifest.json` and `_locales/en/messages.json`, and https://www.one-tab.com/help. A line marked *(inferred)* is a reading of UI strings, not observed behavior. Verify it in the real extension before building it.
+savetab targets feature parity with OneTab 2.24 (Chrome Web Store id `chphlpgkkbolifaimnlloiipkdnihall`), then adds self-hosted multi-device sync. Sources: the extension's `manifest.json` and `_locales/en/messages.json`, https://www.one-tab.com/help, and a run of the real extension in a throwaway Chromium profile. A line marked *(inferred)* is a reading of UI strings, not observed behavior. Verify it in the real extension before building it.
 
 Phase tags (`P1`-`P5`) refer to `docs/plans/onetab-parity.md`.
 
@@ -49,8 +49,8 @@ Store rules `P1`:
 - The OneTab page itself is never stored.
 - Duplicates: allow, or silently reject a URL already in the list.
 - On a duplicate, keep the existing title or take the latest one.
-- Each store creates a new group with its creation time, at the top of the list *(inferred)*.
-- Option: open OneTab after storing.
+- Empty pages (`about:blank`, new tab pages) close with the rest but are not stored.
+- Each store creates a new group with its creation time, at the top of the list.
 
 Action popup `P3`: lists open tabs with checkboxes. Filters: include pinned, include grouped, include already stored, include per-domain. Destination chooser with search and recent destinations. Group title field. "Merge open tabs here", "Close tabs already stored in OneTab", "Close these duplicates". `/` focuses the destination search.
 
@@ -60,7 +60,7 @@ Action popup `P3`: lists open tabs with checkboxes. Filters: include pinned, inc
 - After restore, per option: remove from list, keep in list, or mark archived. Ctrl/Cmd keeps, Alt/Option archives. Locked groups always keep. `P1` (archive `P2`)
 - Restore all: open the group's tabs. Option: current window, new window unless OneTab is the only tab, or always a new window. `P1`
 - More menu: Restore in this window, Restore in a new window, Restore in a new incognito window. `P3`
-- Above a tab-count limit, confirm "You are about to open {N} tabs". Opening many groups caps the group count. `P1`
+- Restore all never asks for confirmation. Restoring more than 50 selected tabs asks "You are about to open {N} tabs", and one open is capped at 500 tabs. `P2`
 - Option: discard non-active tabs on first open to save memory. `P3`
 - URLs the browser refuses to open from an extension (`chrome://`, `about:`, `file:`) open a placeholder page with copy instructions. `P3`
 
@@ -94,37 +94,39 @@ Group and folder More menu: Rename / Add note `P1`/`P2`, Lock / Unlock `P1`, Sta
 - Copy to clipboard format: `URL | Title`, `Title URL`, URL only, Markdown, rich text where available. `P2`
 - Save a folder as a downloadable HTML file. `P3`
 
-Group separation in export is a blank line between groups *(inferred, from OneTab v1 behavior)*.
+Export puts one blank line between groups, newest group first, and omits group names.
 
 ## Options
+
+The default is the first value in each row, as observed on a fresh OneTab 2.24 install.
 
 | Option | Values | Phase |
 | --- | --- | --- |
 | Toolbar icon click | send window tabs / send whole window / send current tab / show popup | P1 (popup P3) |
 | Pinned tabs | don't send / allow | P1 |
 | At browser startup | open OneTab / don't | P1 |
-| When restoring tabs | remove / keep / archive | P1 |
-| Restoring a group | current window / new window unless OneTab alone / always new window | P1 |
-| Restore click | switch to tab / stay in OneTab | P1 |
+| When restoring tabs | remove (to trash) / keep / archive | P1 |
+| Restoring a group | new window unless OneTab alone / always new window / current window | P1 |
+| Restore click | stay in OneTab / switch to tab | P1 |
 | Duplicates | allow / silently reject | P1 |
 | Title of a re-stored tab | keep existing / use latest | P1 |
-| Open OneTab action | move OneTab tab to current window / switch to its window | P1 |
+| Open OneTab action | switch to its window / move OneTab tab to current window | P1 |
 | Group title click | edit title / restore group or open folder | P1 |
-| URL display | full / abbreviated / domain only / none | P1 |
+| URL display | none / domain only / abbreviated / full | P1 |
 | Context menu | enabled / disabled | P1 |
-| Excluded web sites | domain list | P1 |
-| Open OneTab after storing | on / off | P1 |
-| Copy to clipboard format | see Import and export | P2 |
+| Excluded web sites | exact host names, case-insensitive, empty by default | P1 |
+| Copy to clipboard format | rich text / URL and title / title and URL / URL only / Markdown | P2 |
 | Browser tab group restore | current window / new window | P3 |
-| Discard tabs on open | on / off | P3 |
-| Theme | light / dark / automatic | P3 |
+| Discard tabs on open | off / on | P3 |
+| Theme | automatic / light / dark, switched from the page header | P3 |
 | Language | browser locale, ko and en first | P3 |
+
+savetab adds "after storing tabs: show the list / stay" as an option. OneTab has it only in its popup flow.
 
 ## Robustness
 
 - Weekly local backup in a separate storage area, restored on detected data loss. `P3`
 - Incognito tabs are stored when the user allows the extension in incognito. `P3`
-- The OneTab page restarts itself when the extension updates, without closing other tabs *(inferred)*. `P1`
 
 ## Out of scope
 

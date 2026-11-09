@@ -64,7 +64,7 @@ Merge rule for incoming ops: a field takes the op's value when the op's HLC is g
 - WXT builds MV3 for Chrome and Firefox from one source, and has a Safari build path for `P5`.
 - IndexedDB through Dexie. `liveQuery` pushes changes to every open OneTab page.
 - Drag and drop: svelte-dnd-action.
-- Tests: Vitest for `core`, Playwright with a loaded extension for Chromium end to end, `web-ext` run for Firefox smoke.
+- Tests: Vitest for `core` and extension logic, Playwright with a loaded extension for Chromium end to end, and a GUI run for Firefox (`docs/guides/firefox-check.md`).
 - Lint and format: oxlint, oxfmt.
 - Server (`P4`): Go and Postgres in `apps/server`.
 
@@ -72,22 +72,7 @@ Merge rule for incoming ops: a field takes the op's value when the op's HLC is g
 
 ### P1: classic OneTab core
 
-Steps in order:
-
-1. Workspace scaffold: pnpm, TypeScript, oxlint, oxfmt, Vitest, WXT app that loads in Chrome and Firefox.
-2. `core` model: types, UUIDv7, HLC, fractional index, mutations (create, move, update field, trash, purge), outbox, merge. Unit tests.
-3. Storage adapter: Dexie schema for items, outbox, settings. Live queries.
-4. Capture: background worker with every store action from features.md "Storing tabs" except the popup. Context menu, keyboard commands, pinned, excluded domains, duplicates, title rule.
-5. OneTab page: header with total, group list, tab rows, restore and delete with modifier keys, Restore all with confirm limit, rename, lock, star, pin to top, trash view.
-6. Drag and drop: reorder tabs and groups, move tabs between groups, drop into blank space for a new group.
-7. Options page: every `P1` row of the options table.
-8. Import and export page: `URL | Title` text both ways.
-9. Startup and lifecycle: open at startup, "Open OneTab" window rule, page reload on extension update.
-
-Done when:
-- `pnpm test` passes, covering merge convergence for any two op orders, order keys, import and export round trip.
-- A Playwright run on Chromium stores a window of 5 tabs, restores one, restores all, and checks the remove, keep, and locked rules.
-- The Firefox build loads with `web-ext run` and the toolbar action stores tabs.
+Built. Every `P1` item in `docs/specs/features.md` works in Chrome and Firefox.
 
 ### P2: v2 organization
 
