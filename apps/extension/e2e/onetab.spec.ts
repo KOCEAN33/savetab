@@ -85,7 +85,11 @@ test('drags a tab into another group', async ({ context, worker, extensionId }) 
 
   const groups = list.locator('.group');
   await expect(groups).toHaveCount(2);
-  await drag(list, groups.nth(0).getByRole('link', { name: 'Page b1' }), groups.nth(1).getByRole('link', { name: 'Page a2' }));
+  await drag(
+    list,
+    groups.nth(0).getByRole('link', { name: 'Page b1' }),
+    groups.nth(1).getByRole('link', { name: 'Page a2' }),
+  );
 
   await expect(list.locator('.group')).toHaveCount(1);
   await expect(list.locator('.tab-link')).toHaveText(['Page a1', 'Page b1', 'Page a2']);

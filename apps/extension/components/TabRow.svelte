@@ -1,22 +1,28 @@
 <script lang="ts">
   import { browser } from 'wxt/browser';
-  import type { Settings, Tab } from '@savetab/core';
+  import { updateItem, type ListView, type Tab } from '@savetab/core';
+  import { act, editing } from '@/lib/ui.svelte';
+  import ItemMenu from './ItemMenu.svelte';
+  import NotesField from './NotesField.svelte';
+  import TitleField from './TitleField.svelte';
 
   let {
     tab,
-    title,
-    settings,
+    view,
     locked,
     onopen,
     ondelete,
   }: {
     tab: Tab;
-    title: string;
-    settings: Settings;
+    view: ListView;
     locked: boolean;
     onopen: (e: MouseEvent) => void;
     ondelete: () => void;
   } = $props();
+
+  const settings = $derived(view.settings);
+  const title = $derived(view.title(tab));
+  const notes = $derived(view.notes(tab));
 
   function iconUrl(t: Tab): string {
     if (import.meta.env.FIREFOX) return t.favIconUrl;
@@ -51,14 +57,34 @@
   {:else}
     <button class="tab-delete" title="Delete" aria-label="Delete {title || tab.url}" onclick={ondelete}>×</button>
   {/if}
+  {#if tab.task !== 'none'}
+    <input
+      type="checkbox"
+      aria-label="Task done"
+      checked={tab.task === 'done'}
+      onchange={(e) => {
+        const task = e.currentTarget.checked ? 'done' : 'pending';
+        void act((tx) => updateItem(tx, tab.id, { task }));
+      }}
+    />
+  {/if}
   {#if icon}
     <img class="tab-icon" src={icon} alt="" draggable="false" />
   {:else}
     <span class="tab-icon"></span>
   {/if}
-  <a class="tab-link" href={tab.url} draggable="false" onclick={click} onauxclick={(e) => e.button === 1 && click(e)}
-    >{title || tab.url}</a
-  >
+  {#if editing.title === tab.id}
+    <TitleField item={tab} {title} label="Tab title" />
+  {:else}
+    <a class="tab-link" href={tab.url} draggable="false" onclick={click} onauxclick={(e) => e.button === 1 && click(e)}
+      >{title || tab.url}</a
+    >
+  {/if}
   {#if shownUrl}<span class="tab-url meta">{shownUrl}</span>{/if}
   {#if tab.star}<span title="Starred">★</span>{/if}
+  {#if notes && editing.notes !== tab.id}<span class="tab-notes meta">{notes}</span>{/if}
+  <ItemMenu item={tab} {view} label="More" buttonClass="link-button tab-more" ariaLabel="More actions for {title || tab.url}" />
+  {#if editing.notes === tab.id}
+    <NotesField item={tab} {notes} />
+  {/if}
 </li>

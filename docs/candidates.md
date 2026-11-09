@@ -8,6 +8,7 @@ Deferred work, not scheduled.
 - The first group delete shows a tip: hover the group title and click X to move it to trash.
 - Install opens the OneTab help page in a tab.
 - Export strips the trailing slash when the URL path is only `/`.
+- Notes have an emoji picker shortcut. features.md does not say what the shortcut does or opens.
 - Group date line format is `M/D/YY h:mm AM/PM - <relative time>`, such as `11/9/26 8:09 PM - just now`. savetab shows `Created <locale date and time>`.
 
 ## UI review findings left open

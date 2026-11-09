@@ -1,61 +1,31 @@
 <script lang="ts">
   import { dragHandle } from 'svelte-dnd-action';
-  import { trashItems, updateItem, type Folder, type ListView } from '@savetab/core';
-  import { transact } from '@/lib/db';
+  import type { Folder, ListView } from '@savetab/core';
+  import { editing } from '@/lib/ui.svelte';
+  import ItemMenu from './ItemMenu.svelte';
+  import NotesField from './NotesField.svelte';
+  import TitleField from './TitleField.svelte';
 
-  let {
-    folder,
-    view,
-    editing = $bindable(false),
-    onopen,
-  }: {
-    folder: Folder;
-    view: ListView;
-    editing?: boolean;
-    onopen: () => void;
-  } = $props();
+  let { folder, view, onopen }: { folder: Folder; view: ListView; onopen: () => void } = $props();
 
-  let draft = $state('');
   const label = $derived(folder.title || 'Untitled folder');
   const count = $derived(view.tabCount(folder.id));
-
-  $effect(() => {
-    if (editing) draft = folder.title;
-  });
-
-  function run(fn: Parameters<typeof transact>[0]) {
-    return transact(fn).catch((err) => alert(err instanceof Error ? err.message : String(err)));
-  }
-
-  function save() {
-    if (!editing) return;
-    editing = false;
-    if (draft.trim() !== folder.title) void run((tx) => updateItem(tx, folder.id, { title: draft.trim() }));
-  }
 </script>
 
 <section class="group folder" id="item-{folder.id}" aria-label="Folder {label}">
   <div class="group-head">
     <span class="group-grip" use:dragHandle aria-label="Drag {label}">⠿</span>
-    {#if editing}
-      <!-- svelte-ignore a11y_autofocus -->
-      <input
-        class="group-title-input"
-        type="text"
-        aria-label="Folder name"
-        bind:value={draft}
-        autofocus
-        onblur={save}
-        onkeydown={(e) => {
-          if (e.key === 'Enter') save();
-          if (e.key === 'Escape') editing = false;
-        }}
-      />
+    {#if editing.title === folder.id}
+      <TitleField item={folder} title={folder.title} label="Folder name" />
     {:else}
       <button class="group-label" onclick={onopen}>{label}</button>
     {/if}
-    <span class="meta">Folder, {count} {count === 1 ? 'tab' : 'tabs'}</span>
-    <button class="link-button" onclick={() => (editing = true)}>Rename</button>
-    <button class="link-button" onclick={() => run((tx) => trashItems(tx, [folder.id]))}>Delete</button>
+    <span class="meta">{[folder.pinnedTop && 'Pinned', `Folder, ${count} ${count === 1 ? 'tab' : 'tabs'}`].filter(Boolean).join(', ')}</span>
+    <ItemMenu item={folder} {view} />
   </div>
+  {#if editing.notes === folder.id}
+    <NotesField item={folder} notes={folder.notes} />
+  {:else if folder.notes}
+    <p class="notes meta">{folder.notes}</p>
+  {/if}
 </section>

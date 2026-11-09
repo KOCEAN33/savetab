@@ -1,10 +1,13 @@
 <script lang="ts">
   import { dndzone, dragHandle, TRIGGERS, type DndEvent } from 'svelte-dnd-action';
   import { moveItems, trashItems, updateItem, type Group, type ListView, type Tab } from '@savetab/core';
-  import { transact } from '@/lib/db';
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { clickIntent, restoreGroup, restoreTab } from '@/lib/restore';
+  import { act, editing } from '@/lib/ui.svelte';
+  import ItemMenu from './ItemMenu.svelte';
+  import NotesField from './NotesField.svelte';
   import TabRow from './TabRow.svelte';
+  import TitleField from './TitleField.svelte';
 
   let {
     group,
@@ -20,41 +23,17 @@
   const settings = $derived(view.settings);
 
   let items = $derived(tabs);
-  let editing = $state(false);
-  let draft = $state('');
-  let menuOpen = $state(false);
-  let menuAnchor = $state<HTMLElement>();
 
   const label = $derived(group.title || `${tabs.length} ${tabs.length === 1 ? 'tab' : 'tabs'}`);
   const created = $derived(new Date(group.createdAt).toLocaleString());
 
-  function run(fn: Parameters<typeof transact>[0]) {
-    return transact(fn).catch((err) => {
-      items = tabs;
-      alert(err instanceof Error ? err.message : String(err));
-    });
-  }
-
-  function startEdit() {
-    draft = group.title;
-    editing = true;
-    menuOpen = false;
-  }
-
-  function saveTitle() {
-    if (!editing) return;
-    editing = false;
-    if (draft.trim() !== group.title) void run((tx) => updateItem(tx, group.id, { title: draft.trim() }));
+  function run(fn: Parameters<typeof act>[0]) {
+    return act(fn).finally(() => (items = tabs));
   }
 
   function labelClick(e: MouseEvent) {
-    if (settings.groupTitleClick === 'edit') startEdit();
+    if (settings.groupTitleClick === 'edit') editing.title = group.id;
     else void restoreGroup(tabs, clickIntent(e, settings), settings);
-  }
-
-  function menuAction(fn: () => unknown) {
-    menuOpen = false;
-    fn();
   }
 
   function consider(e: CustomEvent<DndEvent<Tab>>) {
@@ -73,64 +52,42 @@
   }
 </script>
 
-<svelte:window
-  onclick={(e) => {
-    if (menuOpen && !menuAnchor?.contains(e.target as Node)) menuOpen = false;
-  }}
-  onkeydown={(e) => {
-    if (e.key === 'Escape') menuOpen = false;
-  }}
-/>
-
-<section class="group" id="item-{group.id}" aria-label={label}>
+<section class="group" class:archived={group.archived} id="item-{group.id}" aria-label={label}>
   <div class="group-head">
     <span class="group-grip" use:dragHandle aria-label="Drag {label}">⠿</span>
-    {#if editing}
-      <!-- svelte-ignore a11y_autofocus -->
+    {#if group.task !== 'none'}
       <input
-        class="group-title-input"
-        type="text"
-        bind:value={draft}
-        autofocus
-        onblur={saveTitle}
-        onkeydown={(e) => {
-          if (e.key === 'Enter') saveTitle();
-          if (e.key === 'Escape') editing = false;
-        }}
+        type="checkbox"
+        aria-label="Task done"
+        checked={group.task === 'done'}
+        onchange={(e) => {
+        const task = e.currentTarget.checked ? 'done' : 'pending';
+        void act((tx) => updateItem(tx, group.id, { task }));
+      }}
       />
+    {/if}
+    {#if editing.title === group.id}
+      <TitleField item={group} title={group.title} label="Group name" />
     {:else}
       <button class="group-label" onclick={labelClick}>{label}</button>
     {/if}
     {#if group.star}<span title="Starred">★</span>{/if}
-    <span class="meta">{[group.pinnedTop && 'Pinned', group.locked && 'Locked', `Created ${created}`].filter(Boolean).join(', ')}</span>
+    <span class="meta"
+      >{[group.pinnedTop && 'Pinned', group.locked && 'Locked', group.archived && 'Archived', `Created ${created}`]
+        .filter(Boolean)
+        .join(', ')}</span
+    >
     <button class="link-button" onclick={(e) => restoreGroup(tabs, clickIntent(e, settings), settings)}>Restore all</button>
     {#if !group.locked}
       <button class="link-button" onclick={() => run((tx) => trashItems(tx, [group.id]))}>Delete all</button>
     {/if}
-    <span class="menu-anchor" bind:this={menuAnchor}>
-    <button class="link-button" aria-expanded={menuOpen} onclick={() => (menuOpen = !menuOpen)}>More…</button>
-    {#if menuOpen}
-      <div class="menu" role="menu">
-        <button role="menuitem" onclick={startEdit}>Rename</button>
-        <button role="menuitem" onclick={() => menuAction(() => run((tx) => updateItem(tx, group.id, { locked: !group.locked })))}>
-          {group.locked ? 'Unlock this tab group' : 'Lock this tab group'}
-        </button>
-        <button role="menuitem" onclick={() => menuAction(() => run((tx) => updateItem(tx, group.id, { star: !group.star })))}>
-          {group.star ? 'Remove star' : 'Star this tab group'}
-        </button>
-        <button
-          role="menuitem"
-          onclick={() => menuAction(() => run((tx) => updateItem(tx, group.id, { pinnedTop: !group.pinnedTop })))}
-        >
-          {group.pinnedTop ? 'Unpin' : 'Pin to top of list'}
-        </button>
-        {#if !group.locked}
-          <button role="menuitem" onclick={() => menuAction(() => run((tx) => trashItems(tx, [group.id])))}>Move to trash</button>
-        {/if}
-      </div>
-    {/if}
-    </span>
+    <ItemMenu item={group} {view} />
   </div>
+  {#if editing.notes === group.id}
+    <NotesField item={group} notes={group.notes} />
+  {:else if group.notes}
+    <p class="notes meta">{group.notes}</p>
+  {/if}
 
   <ul
     class="tabs"
@@ -148,8 +105,7 @@
     {#each items as tab (tab.id)}
       <TabRow
         {tab}
-        title={view.title(tab)}
-        {settings}
+        {view}
         locked={group.locked}
         onopen={(e) => restoreTab(tab, clickIntent(e, settings))}
         ondelete={() => run((tx) => trashItems(tx, [tab.id]))}

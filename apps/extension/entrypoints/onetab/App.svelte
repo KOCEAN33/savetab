@@ -17,6 +17,7 @@
   import { db, transact } from '@/lib/db';
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { touchRecent } from '@/lib/recent';
+  import { editing } from '@/lib/ui.svelte';
   import FolderRow from '@/components/FolderRow.svelte';
   import GroupView from '@/components/GroupView.svelte';
   import NavColumn from '@/components/NavColumn.svelte';
@@ -32,7 +33,6 @@
   let showTrash = $state(false);
   let draggingTab = $state(false);
   let current = $state<Id | null>(location.hash.slice(1) || null);
-  let editingFolder = $state<Id | null>(null);
 
   const all = $derived(($records ?? []) as ItemRecord[]);
   const view = $derived(new ListView(all));
@@ -73,7 +73,7 @@
 
   async function newFolder() {
     const id = await run((tx) => createFolder(tx, folder, ''));
-    if (id) editingFolder = id;
+    if (id) editing.title = id;
   }
 
   function finalizeItems(e: CustomEvent<DndEvent<Item>>) {
@@ -140,12 +140,7 @@
       >
         {#each items as item (item.id)}
           {#if item.kind === 'folder'}
-            <FolderRow
-              folder={item}
-              {view}
-              bind:editing={() => editingFolder === item.id, (on) => (editingFolder = on ? item.id : null)}
-              onopen={() => open(item)}
-            />
+            <FolderRow folder={item} {view} onopen={() => open(item)} />
           {:else if item.kind === 'group'}
             <GroupView group={item} {view} ondragging={(on) => (draggingTab = on)} />
           {/if}

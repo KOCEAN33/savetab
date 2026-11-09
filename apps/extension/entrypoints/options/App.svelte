@@ -161,6 +161,18 @@
     onchange={(v) => setSettings({ urlDisplay: v })}
   />
   <Choice
+    legend="Copy to clipboard format:"
+    value={s.copyFormat}
+    options={[
+      ['rich', 'Rich text (links)'],
+      ['urlTitle', 'URL | Title'],
+      ['titleUrl', 'Title URL'],
+      ['url', 'URL only'],
+      ['markdown', 'Markdown'],
+    ]}
+    onchange={(v) => setSettings({ copyFormat: v })}
+  />
+  <Choice
     legend="At browser startup:"
     value={device.openAtStartup}
     options={[
