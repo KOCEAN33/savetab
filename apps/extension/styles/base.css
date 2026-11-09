@@ -161,6 +161,10 @@ textarea {
   cursor: pointer;
 }
 
+.menu [aria-checked='true']::after {
+  content: ' ✓';
+}
+
 .menu hr {
   width: 100%;
   margin: var(--space-xs) 0;
@@ -335,6 +339,11 @@ textarea {
   width: 100%;
   min-height: 240px;
   box-sizing: border-box;
+  font-family: ui-monospace, monospace;
+}
+
+.placeholder-url {
+  flex: 1;
   font-family: ui-monospace, monospace;
 }
 

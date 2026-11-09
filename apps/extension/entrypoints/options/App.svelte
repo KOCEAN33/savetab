@@ -148,6 +148,15 @@
     ]}
     onchange={(v) => setSettings({ groupTitleClick: v })}
   />
+  <Choice
+    legend={t('discardLegend')}
+    value={s.discardOnOpen}
+    options={[
+      [false, t('discardOff')],
+      [true, t('discardOn')],
+    ]}
+    onchange={(v) => setSettings({ discardOnOpen: v })}
+  />
 
   <h2 class="section-title">{t('display')}</h2>
   <Choice

@@ -18,7 +18,7 @@ Chrome and Firefox differences that shape savetab's P3 steps (`docs/plans/onetab
 ## Discarded tabs
 
 - Firefox: `tabs.create({ discarded: true, title })` opens a tab unloaded. `title` is allowed only with `discarded: true`.
-- Chrome: `tabs.create` has no `discarded`. Create with `active: false`, then `tabs.discard(tabId)`. `tabs.discard` fails on the active tab. Whether a tab discarded before its first navigation commits keeps its URL is _(unverified)_.
+- Chrome: `tabs.create` has no `discarded`. Create with `active: false`, then `tabs.discard(tabId)`. `tabs.discard` fails on the active tab. A tab discarded after its first `tabs.onUpdated` with a `url` keeps that URL (savetab e2e, `restore-targets.spec.ts`).
 - Sources: [MDN tabs.create](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/tabs/create), [Chrome tabs](https://developer.chrome.com/docs/extensions/reference/api/tabs).
 
 ## Private windows
@@ -30,7 +30,7 @@ Chrome and Firefox differences that shape savetab's P3 steps (`docs/plans/onetab
 
 ## URLs an extension cannot open
 
-- Chrome rejects `javascript:`, `devtools://`, `chrome-untrusted://`, `chrome://feedback`, crash and kill pages such as `chrome://crash`, and `file:` without "Allow access to file URLs". Other `chrome://` pages and `about:blank` open.
+- Chrome rejects `javascript:`, `devtools://`, `chrome-untrusted://`, `chrome://feedback`, crash and kill pages such as `chrome://crash` (savetab e2e confirms `tabs.create` rejects it), and `file:` without "Allow access to file URLs". Other `chrome://` pages and `about:blank` open.
 - Firefox rejects privileged `about:` pages (`about:config`, `about:addons`, `about:debugging`), `chrome:`, `javascript:`, `data:`, and `file:`, with `Illegal URL: <url>`.
 - Sources: [Chromium extension_tab_util.cc](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/browser/extensions/extension_tab_util.cc), [Firefox ext-tabs.js](https://github.com/mozilla-firefox/firefox/blob/main/browser/components/extensions/parent/ext-tabs.js).
 

@@ -97,6 +97,12 @@
   "menuCopyLink": "링크를 클립보드에 복사",
   "menuCopyLinks": "링크를 클립보드에 복사",
   "moveToTrash": "휴지통으로 이동",
+  "menuRestoreCurrent": "이 창에서 복원",
+  "menuRestoreNew": "새 창에서 복원",
+  "menuRestoreIncognito": "새 시크릿 창에서 복원",
+  "menuUseDefaultRestore": "기본 복원 방식 사용",
+  "menuPinOnOpen": "열 때 탭 고정",
+  "incognitoNotAllowed": "브라우저의 확장 프로그램 페이지에서 savetab이 시크릿 창에서 실행되도록 허용하세요",
 
   "moveTo": "이동할 위치",
   "copyTo": "복사할 위치",
@@ -222,6 +228,9 @@
   "groupTitleClickLegend": "그룹 제목을 누르면:",
   "groupTitleEdit": "제목 편집",
   "groupTitleRestore": "그룹 복원",
+  "discardLegend": "그룹을 복원할 때 뒤쪽 탭:",
+  "discardOff": "모든 탭을 바로 불러오기",
+  "discardOn": "열 때 탭 비우기 (탭으로 전환할 때 불러옴)",
   "display": "표시",
   "urlDisplayLegend": "URL 표시:",
   "urlNone": "표시 안 함",
@@ -249,5 +258,9 @@
   "languageKo": "한국어",
   "keyboardShortcuts": "단축키",
   "configureShortcuts": "단축키 설정",
-  "firefoxShortcuts": "about:addons를 열고 톱니바퀴 아이콘을 누른 뒤 \"확장 기능 단축키 관리\"를 고르세요."
+  "firefoxShortcuts": "about:addons를 열고 톱니바퀴 아이콘을 누른 뒤 \"확장 기능 단축키 관리\"를 고르세요.",
+  "placeholderMessage": "브라우저가 확장 프로그램에서 이 주소를 열지 못하게 합니다. 주소를 복사해 주소 표시줄에 붙여 넣으세요.",
+  "placeholderAddress": "주소",
+  "copy": "복사",
+  "copied": "복사함"
 }

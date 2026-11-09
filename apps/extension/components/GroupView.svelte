@@ -47,7 +47,7 @@
 
   function labelClick(e: MouseEvent) {
     if (settings.groupTitleClick === 'edit') editing.title = group.id;
-    else void restoreGroup(tabs, clickIntent(e, settings), settings);
+    else void restoreGroup(tabs, clickIntent(e, settings), settings, group.restoreTarget);
   }
 
   function consider(e: CustomEvent<DndEvent<Tab>>) {
@@ -96,7 +96,7 @@
         .filter(Boolean)
         .join(', ')}</span
     >
-    <button class="link-button restore-all" onclick={(e) => restoreGroup(tabs, clickIntent(e, settings), settings)}
+    <button class="link-button restore-all" onclick={(e) => restoreGroup(tabs, clickIntent(e, settings), settings, group.restoreTarget)}
       >{t('restoreAll')}</button
     >
     {#if !group.locked}

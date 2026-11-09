@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { afterOpen, type Settings, type Tab } from '@savetab/core';
+import { afterOpen, type RestoreTarget, type Settings, type Tab } from '@savetab/core';
 import { transact } from './db';
 import { t } from './i18n';
 import { RESTORE_CAP, restoreCount } from './selection';
@@ -23,52 +23,123 @@ export function clickIntent(e: MouseEvent, s: Settings): Intent {
   };
 }
 
-/** Open tabs, then apply the after-restore rule to the ones that opened. */
-async function open(tabs: Tab[], intent: Intent, windowId: number | undefined): Promise<void> {
+export type RestoreWindow = 'current' | 'new' | 'incognito';
+
+/** Where a group opens: its own menu choice first, then restoreGroupTarget. Shift asks for a new window. */
+export function restoreWindow(target: RestoreTarget, s: Settings, alone: boolean, shift: boolean): RestoreWindow {
+  if (target === 'incognito') return 'incognito';
+  if (shift || target === 'new') return 'new';
+  if (target === 'current') return 'current';
+  return s.restoreGroupTarget === 'new' || (s.restoreGroupTarget === 'newUnlessAlone' && !alone) ? 'new' : 'current';
+}
+
+export function placeholderUrl(url: string): string {
+  return `${browser.runtime.getURL('/placeholder.html')}?url=${encodeURIComponent(url)}`;
+}
+
+/** How long Chrome waits for a background tab's first URL before leaving it loaded. */
+const DISCARD_WAIT_MS = 10_000;
+
+/**
+ * Chrome cannot create a tab discarded, and `tabs.discard` before the tab has a URL would
+ * lose it. So each tab is discarded once `tabs.onUpdated` reports its first URL.
+ */
+function chromeDiscarder() {
+  const navigated = new Set<number>();
+  const waiting = new Map<number, () => void>();
+  const listener = (id: number, change: { url?: string }) => {
+    if (!change.url) return;
+    navigated.add(id);
+    waiting.get(id)?.();
+  };
+  browser.tabs.onUpdated.addListener(listener);
+  const jobs: Promise<void>[] = [];
+  return {
+    add(id: number) {
+      const ready = navigated.has(id)
+        ? Promise.resolve(true)
+        : new Promise<boolean>((resolve) => {
+            waiting.set(id, () => resolve(true));
+            setTimeout(() => resolve(false), DISCARD_WAIT_MS);
+          });
+      jobs.push(
+        ready.then(async (ok) => {
+          try {
+            if (!ok) throw new Error(`no URL after ${DISCARD_WAIT_MS} ms`);
+            await browser.tabs.discard(id);
+          } catch (err) {
+            console.warn('savetab: could not discard tab', id, err);
+          }
+        }),
+      );
+    },
+    async done() {
+      await Promise.all(jobs);
+      browser.tabs.onUpdated.removeListener(listener);
+    },
+  };
+}
+
+/**
+ * Open tabs, then apply the after-restore rule to the ones that opened their own URL. A URL
+ * the browser refuses opens the placeholder page instead, and its tab stays listed.
+ */
+async function open(tabs: Tab[], intent: Intent, windowId: number | undefined, discard: boolean): Promise<void> {
   const opened: string[] = [];
-  for (const t of tabs) {
+  const discarder = discard && !import.meta.env.FIREFOX ? chromeDiscarder() : null;
+  for (const [i, t] of tabs.entries()) {
+    const active = intent.active && i === 0;
+    const unloaded = discard && !active;
     try {
-      await browser.tabs.create({
+      const tab = await browser.tabs.create({
         url: t.url,
-        active: intent.active && opened.length === 0,
+        active,
         windowId,
         pinned: t.pinOnOpen,
+        ...(unloaded && import.meta.env.FIREFOX ? { discarded: true, title: t.title || undefined } : {}),
       });
+      if (unloaded && tab.id !== undefined) discarder?.add(tab.id);
       opened.push(t.id);
     } catch (err) {
-      // Browsers refuse some URLs (about:, file:, chrome://) from extensions. Keep those listed.
       console.warn('savetab: could not open', t.url, err);
+      await browser.tabs.create({ url: placeholderUrl(t.url), active, windowId, pinned: t.pinOnOpen });
     }
   }
+  await discarder?.done();
   if (opened.length > 0) await transact((tx) => afterOpen(tx, opened, intent.mode));
 }
 
-export async function restoreTab(tab: Tab, intent: Intent): Promise<void> {
-  if (intent.newWindow) {
-    const win = await browser.windows.create({ focused: intent.active });
-    const blank = win?.tabs?.[0]?.id;
-    await open([tab], { ...intent, active: true }, win?.id);
-    if (blank !== undefined) await browser.tabs.remove(blank);
-    return;
-  }
-  await open([tab], intent, (await browser.windows.getCurrent()).id);
+async function openInNewWindow(tabs: Tab[], intent: Intent, focused: boolean, discard: boolean): Promise<void> {
+  const win = await browser.windows.create({ focused });
+  const blank = win?.tabs?.[0]?.id;
+  await open(tabs, { ...intent, active: true }, win?.id, discard);
+  if (blank !== undefined) await browser.tabs.remove(blank);
 }
 
-export async function restoreGroup(all: Tab[], intent: Intent, s: Settings): Promise<void> {
+async function openIncognito(tabs: Tab[], intent: Intent): Promise<void> {
+  if (!(await browser.extension.isAllowedIncognitoAccess())) {
+    alert(t('incognitoNotAllowed'));
+    return;
+  }
+  await browser.windows.create({ incognito: true, url: tabs.map((tab) => tab.url) });
+  await transact((tx) => afterOpen(tx, tabs.map((tab) => tab.id), intent.mode));
+}
+
+export async function restoreTab(tab: Tab, intent: Intent): Promise<void> {
+  if (intent.newWindow) return openInNewWindow([tab], intent, intent.active, false);
+  await open([tab], intent, (await browser.windows.getCurrent()).id, false);
+}
+
+/** Restore a group's tabs, in the window its `restoreTarget` or the `restoreGroupTarget` setting picks. */
+export async function restoreGroup(all: Tab[], intent: Intent, s: Settings, target: RestoreTarget = 'default'): Promise<void> {
   const tabs = all.slice(0, RESTORE_CAP);
   if (tabs.length === 0) return;
   const current = await browser.windows.getCurrent({ populate: true });
   const alone = (current.tabs?.length ?? 0) <= 1;
-  const newWindow =
-    intent.newWindow || s.restoreGroupTarget === 'new' || (s.restoreGroupTarget === 'newUnlessAlone' && !alone);
-  if (!newWindow) {
-    await open(tabs, { ...intent, active: false }, current.id);
-    return;
-  }
-  const win = await browser.windows.create({ focused: true });
-  const blank = win?.tabs?.[0]?.id;
-  await open(tabs, { ...intent, active: true }, win?.id);
-  if (blank !== undefined) await browser.tabs.remove(blank);
+  const where = restoreWindow(target, s, alone, intent.newWindow);
+  if (where === 'incognito') return openIncognito(tabs, intent);
+  if (where === 'new') return openInNewWindow(tabs, intent, true, s.discardOnOpen);
+  await open(tabs, { ...intent, active: false }, current.id, s.discardOnOpen);
 }
 
 /** Restore a selection. Above 50 tabs the user confirms first, as in OneTab. */

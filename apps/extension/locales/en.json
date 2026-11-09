@@ -97,6 +97,12 @@
   "menuCopyLink": "Copy link to clipboard",
   "menuCopyLinks": "Copy links to clipboard",
   "moveToTrash": "Move to trash",
+  "menuRestoreCurrent": "Restore in this window",
+  "menuRestoreNew": "Restore in a new window",
+  "menuRestoreIncognito": "Restore in a new incognito window",
+  "menuUseDefaultRestore": "Use default restore",
+  "menuPinOnOpen": "Pin tab when opened",
+  "incognitoNotAllowed": "Allow savetab in private windows on the browser's extensions page",
 
   "moveTo": "Move to",
   "copyTo": "Copy to",
@@ -222,6 +228,9 @@
   "groupTitleClickLegend": "When you click on a group's title:",
   "groupTitleEdit": "Edit the title",
   "groupTitleRestore": "Restore the group",
+  "discardLegend": "Background tabs when restoring a group:",
+  "discardOff": "Load every tab right away",
+  "discardOn": "Discard tabs on open (each tab loads when you switch to it)",
   "display": "Display",
   "urlDisplayLegend": "URL display:",
   "urlNone": "None",
@@ -249,5 +258,9 @@
   "languageKo": "한국어",
   "keyboardShortcuts": "Keyboard shortcuts",
   "configureShortcuts": "Configure shortcuts",
-  "firefoxShortcuts": "Open about:addons, click the cog icon, then choose \"Manage Extension Shortcuts\"."
+  "firefoxShortcuts": "Open about:addons, click the cog icon, then choose \"Manage Extension Shortcuts\".",
+  "placeholderMessage": "Your browser does not let extensions open this address. Copy it into the address bar.",
+  "placeholderAddress": "Address",
+  "copy": "Copy",
+  "copied": "Copied"
 }

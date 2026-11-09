@@ -12,9 +12,11 @@
     type Item,
     type ListView,
     type Placement,
+    type RestoreTarget,
     type TaskState,
   } from '@savetab/core';
   import { copyLinks } from '@/lib/clipboard';
+  import { clickIntent, restoreGroup } from '@/lib/restore';
   import { act, chooser, editing } from '@/lib/ui.svelte';
   import { t } from '@/lib/i18n';
 
@@ -52,6 +54,17 @@
     });
   }
 
+  /** A restore choice sticks to the group: Restore all and a title click use it until "Use default restore". */
+  function restoreIn(e: MouseEvent, restoreTarget: RestoreTarget) {
+    if (item.kind !== 'group') return;
+    const tabs = view.tabs(item.id);
+    const intent = clickIntent(e, view.settings);
+    close(async () => {
+      await act((tx) => updateItem(tx, item.id, { restoreTarget }));
+      await restoreGroup(tabs, intent, view.settings, restoreTarget);
+    });
+  }
+
   const TASK_NEXT: Record<TaskState, [TaskState, string]> = {
     none: ['pending', t('menuMakeTask')],
     pending: ['done', t('menuMarkTaskDone')],
@@ -79,6 +92,19 @@
       {#if item.kind === 'group'}
         <button role="menuitem" onclick={() => set({ locked: !item.locked })}>
           {item.locked ? t('menuUnlockGroup') : t('menuLockGroup')}
+        </button>
+        <hr />
+        <button role="menuitem" onclick={(e) => restoreIn(e, 'current')}>{t('menuRestoreCurrent')}</button>
+        <button role="menuitem" onclick={(e) => restoreIn(e, 'new')}>{t('menuRestoreNew')}</button>
+        <button role="menuitem" onclick={(e) => restoreIn(e, 'incognito')}>{t('menuRestoreIncognito')}</button>
+        {#if item.restoreTarget !== 'default'}
+          <button role="menuitem" onclick={() => set({ restoreTarget: 'default' })}>{t('menuUseDefaultRestore')}</button>
+        {/if}
+        <hr />
+      {/if}
+      {#if item.kind === 'tab'}
+        <button role="menuitemcheckbox" aria-checked={item.pinOnOpen} onclick={() => set({ pinOnOpen: !item.pinOnOpen })}>
+          {t('menuPinOnOpen')}
         </button>
       {/if}
       {#if item.kind !== 'folder'}
