@@ -475,3 +475,23 @@ textarea {
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
 }
+
+.search {
+  margin-bottom: var(--space-md);
+}
+
+.search-input {
+  flex: 1;
+  max-width: 480px;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-on-surface-weak);
+  border-radius: var(--radius-sm);
+  font: inherit;
+}
+
+.search-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-lg);
+  margin-top: var(--space-sm);
+}

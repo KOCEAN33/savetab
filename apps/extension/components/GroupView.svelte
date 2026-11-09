@@ -22,18 +22,22 @@
     group,
     view,
     ondragging,
+    shown,
   }: {
     group: Group;
     view: ListView;
     ondragging: (active: boolean) => void;
+    /** Search results show only the matching tabs, and dragging is off. */
+    shown?: Tab[];
   } = $props();
 
-  const tabs = $derived(view.tabs(group.id));
+  const tabs = $derived(shown ?? view.tabs(group.id));
   const settings = $derived(view.settings);
 
   let items = $derived(tabs);
 
-  const label = $derived(group.title || `${tabs.length} ${tabs.length === 1 ? 'tab' : 'tabs'}`);
+  const count = $derived(view.tabs(group.id).length);
+  const label = $derived(group.title || `${count} ${count === 1 ? 'tab' : 'tabs'}`);
   const created = $derived(new Date(group.createdAt).toLocaleString());
 
   function run(fn: Parameters<typeof act>[0]) {
@@ -110,7 +114,7 @@
       type: 'tab',
       flipDurationMs: FLIP_MS,
       ...DROP_TARGET,
-      dragDisabled: group.locked,
+      dragDisabled: group.locked || shown !== undefined,
       dropFromOthersDisabled: group.locked,
     }}
     onconsider={consider}

@@ -3,10 +3,11 @@ import { browser } from 'wxt/browser';
 import { db } from '@/lib/db';
 import { hostnameOf, sendLink, sendTabs, toggleExcluded } from '@/lib/capture';
 import { MENU_SEND, rebuildMenus, refreshExcludeItem } from '@/lib/menus';
-import { openOneTab } from '@/lib/onetab-page';
+import { omniboxSuggestions } from '@/lib/omnibox';
+import { onetabUrl, openOneTab } from '@/lib/onetab-page';
 import type { SendAction } from '@/lib/select';
 import { deviceSettingsItem, getDeviceSettings } from '@/lib/settings';
-import { SETTINGS_ID } from '@savetab/core';
+import { ListView, SETTINGS_ID } from '@savetab/core';
 
 const COMMAND_SEND: Record<string, SendAction> = {
   'send-current-tab-to-onetab': 'current',
@@ -57,6 +58,17 @@ export default defineBackground(() => {
     if (id === 'exclude') return toggleExcluded(hostnameOf(tab?.url ?? info.pageUrl));
     const action = MENU_SEND[id];
     if (action) await sendTabs(action, tab);
+  });
+
+  browser.omnibox.onInputChanged.addListener(async (text, suggest) => {
+    suggest(omniboxSuggestions(new ListView(await db.items.toArray()), text, !import.meta.env.FIREFOX));
+  });
+
+  // A chosen suggestion arrives as its URL. Other text opens the list with that search.
+  browser.omnibox.onInputEntered.addListener(async (text, disposition) => {
+    const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `${onetabUrl()}?q=${encodeURIComponent(text)}`;
+    if (disposition === 'currentTab') await browser.tabs.update({ url });
+    else await browser.tabs.create({ url, active: disposition === 'newForegroundTab' });
   });
 
   browser.runtime.onInstalled.addListener(() => void rebuildMenus());

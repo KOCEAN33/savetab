@@ -6,13 +6,17 @@
   import {
     copyItems,
     createFolder,
+    emptyQuery,
+    isActive,
     ListView,
+    search,
     moveItems,
     moveToNewGroup,
     tabTitle,
     type Id,
     type Item,
     type ItemRecord,
+    type SearchQuery,
     type Tab,
   } from '@savetab/core';
   import { db, transact } from '@/lib/db';
@@ -24,6 +28,7 @@
   import LocationDialog from '@/components/LocationDialog.svelte';
   import SelectionBar from '@/components/SelectionBar.svelte';
   import NavColumn from '@/components/NavColumn.svelte';
+  import SearchBar from '@/components/SearchBar.svelte';
   import TrashView from '@/components/TrashView.svelte';
 
   // Enter stays free for opening links; Space starts a keyboard drag.
@@ -34,6 +39,8 @@
   const records = liveQuery(() => db.items.toArray());
 
   let showTrash = $state(false);
+  // The omnibox opens the page with ?q=<text>.
+  let query = $state<SearchQuery>({ ...emptyQuery, text: new URLSearchParams(location.search).get('q') ?? '' });
   let draggingTab = $state(false);
   let current = $state<Id | null>(location.hash.slice(1) || null);
 
@@ -45,6 +52,8 @@
   const total = $derived(view.tabCount(null));
   const countAll = (id: string) => all.filter((r) => r.parentId === id && r.kind === 'tab' && !r.purged).length;
   const trashTitle = (r: ItemRecord) => tabTitle(r as Tab, view.link(r as Tab));
+
+  const results = $derived(isActive(query) ? search(view, query) : null);
 
   let items = $derived(view.children(folder));
   /** Visible folders, groups, and tabs, top to bottom, for the tick menu's range commands. */
@@ -127,8 +136,20 @@
       </nav>
     </header>
 
+    {#if !showTrash}
+      <SearchBar bind:query {view} count={results?.count ?? null} />
+    {/if}
+
     {#if showTrash}
       <TrashView trashed={view.trashed} tabCount={countAll} tabTitle={trashTitle} />
+    {:else if results}
+      <SelectionBar {view} order={results.groups.flatMap((r) => [r.group.id, ...r.tabs.map((t) => t.id)])} />
+      {#each results.folders as f (f.id)}
+        <FolderRow folder={f} {view} onopen={() => ((query = { ...emptyQuery }), open(f))} />
+      {/each}
+      {#each results.groups as r (r.group.id)}
+        <GroupView group={r.group} {view} shown={r.tabs} ondragging={() => {}} />
+      {/each}
     {:else}
       <div class="folder-bar">
         <nav class="breadcrumb" aria-label="Breadcrumb">

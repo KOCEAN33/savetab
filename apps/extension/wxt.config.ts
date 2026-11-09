@@ -7,6 +7,7 @@ export default defineConfig({
     name: 'savetab',
     description: 'Convert tabs into a list, restore them later, and sync the list across devices.',
     permissions: ['tabs', 'storage', 'unlimitedStorage', 'contextMenus', ...(browser === 'firefox' ? [] : ['favicon'])],
+    omnibox: { keyword: '11' },
     action: { default_title: 'savetab', ...(browser === 'firefox' ? { default_area: 'navbar' } : {}) },
     commands: {
       _execute_action: { description: 'Same as clicking the savetab toolbar icon' },
