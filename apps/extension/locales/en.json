@@ -98,6 +98,7 @@
   "menuCopy": "Copy…",
   "menuCopyLink": "Copy link to clipboard",
   "menuCopyLinks": "Copy links to clipboard",
+  "menuSaveHtml": "Save as HTML file",
   "moveToTrash": "Move to trash",
   "menuRestoreCurrent": "Restore in this window",
   "menuRestoreNew": "Restore in a new window",

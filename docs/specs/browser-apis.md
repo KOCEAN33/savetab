@@ -47,7 +47,7 @@ Chrome and Firefox differences that shape savetab's P3 steps (`docs/plans/onetab
 
 ## Downloads
 
-- A Blob URL with `<a download>` needs no permission in Chrome _(unverified)_. Firefox ignored `download` on extension pages for `data:` URLs in 2017 _(unverified on current Firefox)_. `downloads.download` needs the `downloads` permission, which can be optional in both browsers.
+- A Blob URL with `<a download>` needs no permission in Chrome: the savetab e2e catches the download. Firefox ignored `download` on extension pages for `data:` URLs in 2017 _(unverified on current Firefox)_. `downloads.download` needs the `downloads` permission, which can be optional in both browsers.
 - Source: [Mozilla bug 1379960](https://bugzilla.mozilla.org/show_bug.cgi?id=1379960).
 
 ## Storage lifetime

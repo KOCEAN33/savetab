@@ -19,6 +19,7 @@
   import { browser } from 'wxt/browser';
   import { copyLinks } from '@/lib/clipboard';
   import { clickIntent, restoreGroup } from '@/lib/restore';
+  import { saveHtml } from '@/lib/save-html';
   import { act, chooser, editing } from '@/lib/ui.svelte';
   import { t } from '@/lib/i18n';
 
@@ -212,6 +213,9 @@
       <button role="menuitem" onclick={() => close(() => Object.assign(chooser, { ids: [item.id], mode: 'copy' }))}>
         {t('menuCopy')}
       </button>
+      {#if item.kind !== 'tab'}
+        <button role="menuitem" onclick={() => close(() => saveHtml(view, item))}>{t('menuSaveHtml')}</button>
+      {/if}
       <button role="menuitem" onclick={() => close(() => copyLinks(view, [item]))}>
         {item.kind === 'tab' ? t('menuCopyLink') : t('menuCopyLinks')}
       </button>
