@@ -3,6 +3,8 @@
   "tabCount_other": "{n} tabs",
   "groupCount_one": "{n} group",
   "groupCount_other": "{n} groups",
+  "folderCount_one": "{n} folder",
+  "folderCount_other": "{n} folders",
   "untitledFolder": "Untitled folder",
   "allTabs": "All tabs",
 
@@ -202,6 +204,14 @@
   "import": "Import",
   "noLinksFound": "No links found. Each line needs a URL with its protocol, such as https://example.com | Title",
   "imported": "Imported {tabs} in {groups}.",
+  "bookmarksTitle": "Bookmarks",
+  "importBookmarks": "Import bookmarks",
+  "bookmarksHint": "Each chosen bookmark folder becomes a savetab folder, with its bookmarks as one group.",
+  "importChosenFolders": "Import chosen folders",
+  "importedFolders": "Imported {folders}.",
+  "readingListTitle": "Reading list",
+  "importReadingList": "Import reading list",
+  "readingListEmpty": "The reading list is empty.",
 
   "optionsTitle": "savetab options",
   "storingTabs": "Storing tabs",

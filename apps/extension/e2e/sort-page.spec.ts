@@ -18,8 +18,8 @@ test('pages a long folder, and sorts groups A-Z', async ({ context, extensionId 
     '\n\n',
   );
   await page.getByRole('textbox', { name: 'Links to import' }).fill(text);
-  await page.getByRole('button', { name: 'Import' }).click();
-  await expect(page.getByRole('status')).toHaveText('Imported 52 tabs in 52 groups.');
+  await page.getByRole('button', { name: 'Import', exact: true }).click();
+  await expect(page.getByRole('status').first()).toHaveText('Imported 52 tabs in 52 groups.');
 
   await page.goto(`chrome-extension://${extensionId}/onetab.html`);
   const main = page.getByRole('main');

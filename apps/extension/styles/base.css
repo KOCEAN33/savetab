@@ -349,6 +349,12 @@ textarea {
   font-family: ui-monospace, monospace;
 }
 
+.bookmark-tree {
+  margin: 0;
+  padding-left: var(--space-lg);
+  list-style: none;
+}
+
 .placeholder-url {
   flex: 1;
   font-family: ui-monospace, monospace;

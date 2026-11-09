@@ -22,7 +22,7 @@ for (const [name, w, h] of [
     await p.setViewportSize({ width: w, height: h });
     await p.goto(`chrome-extension://${extensionId}/import-export.html`);
     await p.getByRole('textbox', { name: 'Links to import' }).fill(DATA);
-    await p.getByRole('button', { name: 'Import' }).click();
+    await p.getByRole('button', { name: 'Import', exact: true }).click();
     await p.screenshot({ path: `/tmp/savetab-shots/import-export-${name}.png`, fullPage: true });
     await p.goto(`chrome-extension://${extensionId}/onetab.html`);
     const first = p.locator('.group').first();

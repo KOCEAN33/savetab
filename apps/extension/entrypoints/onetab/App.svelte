@@ -6,6 +6,7 @@
   import {
     copyItems,
     createFolder,
+    importGroups,
     emptyQuery,
     isActive,
     ListView,
@@ -25,6 +26,7 @@
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { touchRecent } from '@/lib/recent';
   import { navigate } from '@/lib/keynav';
+  import { linksFromData } from '@/lib/links-in';
   import { editing, keys } from '@/lib/ui.svelte';
   import { t, tn } from '@/lib/i18n';
   import { deviceSettingsItem, getDeviceSettings, setDeviceSettings } from '@/lib/settings';
@@ -157,6 +159,18 @@
     });
   }
 
+  const LINK_TYPES = ['text/uri-list', 'text/html', 'text/plain'];
+
+  /** Links dropped from outside the page become a new group at the top of the open folder. */
+  function dropLinks(e: DragEvent) {
+    const data = e.dataTransfer;
+    if (!data || !LINK_TYPES.some((type) => data.types.includes(type))) return;
+    e.preventDefault();
+    const links = linksFromData(data).map((l) => ({ ...l, favIconUrl: '' }));
+    const parent = folder;
+    if (links.length > 0) void run((tx) => importGroups(tx, [links], parent));
+  }
+
   function finalizeNewGroup(e: CustomEvent<DndEvent<Tab>>) {
     draggingTab = false;
     const { id, trigger } = e.detail.info;
@@ -176,7 +190,14 @@
 <div class="layout">
   <NavColumn {view} current={folder} onopen={open} />
 
-  <main bind:this={mainEl}>
+  <!-- svelte-dnd-action drags with pointer events, so a native drop here always comes from outside. -->
+  <main
+    bind:this={mainEl}
+    ondragover={(e) => {
+      if (e.dataTransfer && LINK_TYPES.some((type) => e.dataTransfer!.types.includes(type))) e.preventDefault();
+    }}
+    ondrop={dropLinks}
+  >
     <header class="page-header">
       <h1 class="page-total">{tn('pageTotal', total)}</h1>
       <nav class="page-nav">

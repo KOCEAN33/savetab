@@ -100,7 +100,7 @@ test('imports "URL | Title" text and exports it back', async ({ context, extensi
   await page.goto(`chrome-extension://${extensionId}/import-export.html`);
   const text = 'https://a.example/ | A\nhttps://b.example/\n\nhttps://c.example/ | C\n';
   await page.getByRole('textbox', { name: 'Links to import' }).fill(text);
-  await page.getByRole('button', { name: 'Import' }).click();
-  await expect(page.getByRole('status')).toHaveText('Imported 3 tabs in 2 groups.');
+  await page.getByRole('button', { name: 'Import', exact: true }).click();
+  await expect(page.getByRole('status').first()).toHaveText('Imported 3 tabs in 2 groups.');
   await expect(page.getByRole('textbox', { name: 'Exported links' })).toHaveValue(text);
 });

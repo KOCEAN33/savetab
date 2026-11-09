@@ -63,8 +63,8 @@ test('a URL the browser refuses opens the placeholder page and stays listed', as
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/import-export.html`);
   await page.getByRole('textbox', { name: 'Links to import' }).fill('chrome://crash | Crash page');
-  await page.getByRole('button', { name: 'Import' }).click();
-  await expect(page.getByRole('status')).toHaveText('Imported 1 tab in 1 group.');
+  await page.getByRole('button', { name: 'Import', exact: true }).click();
+  await expect(page.getByRole('status').first()).toHaveText('Imported 1 tab in 1 group.');
   await page.goto(`chrome-extension://${extensionId}/onetab.html`);
 
   const opened = context.waitForEvent('page', { predicate: (p) => p.url().includes('/placeholder.html') });

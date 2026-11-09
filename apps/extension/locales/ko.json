@@ -3,6 +3,8 @@
   "tabCount_other": "탭 {n}개",
   "groupCount_one": "그룹 {n}개",
   "groupCount_other": "그룹 {n}개",
+  "folderCount_one": "폴더 {n}개",
+  "folderCount_other": "폴더 {n}개",
   "untitledFolder": "이름 없는 폴더",
   "allTabs": "모든 탭",
 
@@ -202,6 +204,14 @@
   "import": "가져오기",
   "noLinksFound": "링크가 없습니다. 각 줄에 프로토콜이 붙은 URL이 있어야 합니다. 예: https://example.com | Title",
   "imported": "{groups}에 {tabs}을(를) 가져왔습니다.",
+  "bookmarksTitle": "북마크",
+  "importBookmarks": "북마크 가져오기",
+  "bookmarksHint": "고른 북마크 폴더마다 savetab 폴더가 되고, 그 안의 북마크는 그룹 하나가 됩니다.",
+  "importChosenFolders": "고른 폴더 가져오기",
+  "importedFolders": "{folders}를 가져왔습니다.",
+  "readingListTitle": "읽기 목록",
+  "importReadingList": "읽기 목록 가져오기",
+  "readingListEmpty": "읽기 목록이 비어 있습니다.",
 
   "optionsTitle": "savetab 옵션",
   "storingTabs": "탭 저장",

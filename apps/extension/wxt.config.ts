@@ -3,11 +3,21 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   modules: ['@wxt-dev/module-svelte'],
   manifestVersion: 3,
-  manifest: ({ browser }) => ({
+  manifest: ({ browser, mode }) => ({
     name: '__MSG_extName__',
     description: '__MSG_extDescription__',
     default_locale: 'en',
-    permissions: ['tabs', 'tabGroups', 'storage', 'unlimitedStorage', 'contextMenus', ...(browser === 'firefox' ? [] : ['favicon'])],
+    permissions: [
+      'tabs',
+      'tabGroups',
+      'storage',
+      'unlimitedStorage',
+      'contextMenus',
+      ...(browser === 'firefox' ? [] : ['favicon']),
+      // Playwright cannot click a permission prompt, so e2e builds hold bookmarks from the start.
+      ...(mode === 'e2e' ? ['bookmarks'] : []),
+    ],
+    optional_permissions: [...(mode === 'e2e' ? [] : ['bookmarks']), ...(browser === 'firefox' ? [] : ['readingList'])],
     omnibox: { keyword: '11' },
     action: { default_title: 'savetab', ...(browser === 'firefox' ? { default_area: 'navbar' } : {}) },
     commands: {

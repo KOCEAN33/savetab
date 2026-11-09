@@ -11,7 +11,7 @@ Chrome and Firefox differences that shape savetab's P3 steps (`docs/plans/onetab
 
 ## Reading list and bookmarks
 
-- Chrome has `readingList` (Chrome 120+, MV3 only). It can be an optional permission _(unverified: Chromium source lists no cannot-be-optional flag)_. Firefox has no reading list API.
+- Chrome has `readingList` (Chrome 120+, MV3 only). It can be an optional permission: the savetab e2e build lists it in `optional_permissions` and loads. Firefox has no reading list API.
 - `bookmarks` is allowed in `optional_permissions` in both browsers. `permissions.request` must run inside a user gesture, and resolves to `true` or `false` for the whole set.
 - Sources: [Chrome readingList](https://developer.chrome.com/docs/extensions/reference/api/readingList), [MDN permissions.request](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/permissions/request).
 
