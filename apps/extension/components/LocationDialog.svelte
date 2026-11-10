@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { copyItems, moveItems, type Id, type Item, type ListView } from '@savetab/core';
+  import { copyItems, moveItems, TOP, type Id, type Item, type ListView } from '@savetab/core';
   import { touchRecent } from '@/lib/recent';
   import { act, chooser } from '@/lib/ui.svelte';
   import { t, tn } from '@/lib/i18n';
@@ -59,10 +59,9 @@
   async function choose(target: Id | null) {
     const { ids, mode } = chooser;
     close();
-    const first = view.children(target)[0]?.id ?? null;
     await act(async (tx) => {
-      if (mode === 'copy') await copyItems(tx, ids, target, first);
-      else await moveItems(tx, ids, target, first);
+      if (mode === 'copy') await copyItems(tx, ids, target, TOP);
+      else await moveItems(tx, ids, target, TOP);
     });
     if (target && view.get(target)?.kind === 'group') void touchRecent(target);
   }

@@ -70,7 +70,7 @@ test('a URL the browser refuses opens the placeholder page and stays listed', as
   const opened = context.waitForEvent('page', { predicate: (p) => p.url().includes('/placeholder.html') });
   await page.getByRole('link', { name: 'Crash page' }).click();
   const placeholder = await opened;
-  await expect(placeholder.getByRole('textbox', { name: 'Address' })).toHaveValue('chrome://crash');
+  await expect(placeholder.getByRole('textbox', { name: 'Address' })).toHaveValue('chrome://crash/');
   await expect(page.getByRole('link', { name: 'Crash page' })).toBeVisible();
 });
 

@@ -14,14 +14,14 @@ describe('exportHtml', () => {
     const sub = await s.transact((tx) => createFolder(tx, f, 'Sub'));
     await s.transact((tx) => importGroups(tx, [[tab('https://s1.example/', 'S1'), tab('https://s2.example/', 'S2')]], sub));
     const [g] = await s.transact((tx) =>
-      importGroups(tx, [[tab('https://a.example/?q="x"&y=1', '<script>alert(1)</script>')]], f),
+      importGroups(tx, [[tab('http://[a"x"&y=1', '<script>alert(1)</script>')]], f),
     );
     await s.transact((tx) => updateItem(tx, g!, { title: 'Work' }));
     const html = exportHtml(new ListView(s.all()), f);
 
     expect(headings(html)).toEqual(['h1 Research &amp; &lt;notes&gt;', 'h2 Work', 'h2 Sub', 'h3 2 tabs']);
     expect(html).toContain('<title>Research &amp; &lt;notes&gt;</title>');
-    expect(html).toContain('href="https://a.example/?q=&quot;x&quot;&amp;y=1"');
+    expect(html).toContain('href="http://[a&quot;x&quot;&amp;y=1"');
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;</a>');
     expect(html).not.toContain('<script>');
     expect(html).not.toMatch(/<link|<style/);

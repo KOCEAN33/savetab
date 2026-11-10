@@ -86,18 +86,55 @@ function baseFields(tx: Tx, parentId: Id | null, order: string) {
   };
 }
 
-/** Siblings in key order, ignoring display pinning, so new keys always fall between neighbours. */
+/** Placement before every child of the destination, pinned ones included. */
+export const TOP: unique symbol = Symbol('top');
+export type Before = Id | null | typeof TOP;
+
+/** Siblings in key order, ignoring display pinning, so new keys always fall between neighbours. Ties break by id. */
 async function keyOrdered(tx: Tx, parentId: Id | null, exclude: Set<Id> = new Set()): Promise<ItemRecord[]> {
   return (await tx.children(parentId))
     .filter((r) => r.kind !== undefined && r.purged !== true && !exclude.has(r.id))
-    .sort((a, b) => ((a.order ?? '') < (b.order ?? '') ? -1 : (a.order ?? '') > (b.order ?? '') ? 1 : 0));
+    .sort((a, b) => compareSiblings({ id: a.id, order: a.order }, { id: b.id, order: b.order }));
 }
 
-async function createGroupAtTop(tx: Tx, parentId: Id | null, title = '', extra: Partial<GroupFields> = {}): Promise<Id> {
-  const first = (await keyOrdered(tx, parentId))[0];
+/**
+ * `n` order keys for new children of `parentId`: before `before`, at the top, or at the end when
+ * it is null or gone. Siblings can share a key after two devices insert at the same place, and no
+ * key fits between equal keys, so a tied run around the slot is re-keyed with it.
+ */
+async function orderKeys(
+  tx: Tx,
+  parentId: Id | null,
+  before: Before,
+  n: number,
+  exclude: Set<Id> = new Set(),
+): Promise<string[]> {
+  const siblings = await keyOrdered(tx, parentId, exclude);
+  const found = before === TOP ? 0 : before == null ? -1 : siblings.findIndex((s) => s.id === before);
+  const idx = found === -1 ? siblings.length : found;
+  const key = (i: number) => siblings[i]?.order ?? null;
+  let lo = idx;
+  let hi = idx;
+  if (idx > 0 && idx < siblings.length && key(idx - 1) === key(idx)) {
+    while (lo > 0 && key(lo - 1) === key(idx)) lo--;
+    while (hi < siblings.length && key(hi) === key(idx)) hi++;
+  }
+  const keys = generateNKeysBetween(key(lo - 1), key(hi), hi - lo + n);
+  const fresh = keys.splice(idx - lo, n);
+  for (const [i, rec] of siblings.slice(lo, hi).entries()) await tx.write(rec.id, { order: keys[i]! });
+  return fresh;
+}
+
+async function createGroupAtTop(
+  tx: Tx,
+  parentId: Id | null,
+  title = '',
+  extra: Partial<GroupFields> = {},
+): Promise<Id> {
+  const [order] = await orderKeys(tx, parentId, TOP, 1);
   const id = uuidv7(tx.now);
   await tx.write(id, {
-    ...baseFields(tx, parentId, generateKeyBetween(null, first?.order ?? null)),
+    ...baseFields(tx, parentId, order!),
     kind: 'group',
     title,
     pinnedTop: false,
@@ -108,10 +145,10 @@ async function createGroupAtTop(tx: Tx, parentId: Id | null, title = '', extra: 
 }
 
 export async function createFolder(tx: Tx, parentId: Id | null, title: string): Promise<Id> {
-  const first = (await keyOrdered(tx, parentId))[0];
+  const [order] = await orderKeys(tx, parentId, TOP, 1);
   const id = uuidv7(tx.now);
   await tx.write(id, {
-    ...baseFields(tx, parentId, generateKeyBetween(null, first?.order ?? null)),
+    ...baseFields(tx, parentId, order!),
     kind: 'folder',
     title,
     pinnedTop: false,
@@ -163,13 +200,12 @@ async function acceptTabs(tx: Tx, tabs: NewTab[], settings: Settings): Promise<N
 
 /** Insert tabs at the top of a group, keeping their given order. */
 async function insertTabs(tx: Tx, groupId: Id, tabs: NewTab[]): Promise<void> {
-  const first = (await keyOrdered(tx, groupId))[0];
-  const keys = generateNKeysBetween(null, first?.order ?? null, tabs.length);
+  const keys = await orderKeys(tx, groupId, TOP, tabs.length);
   for (const [i, tab] of tabs.entries()) {
     await tx.write(uuidv7(tx.now), {
       ...baseFields(tx, groupId, keys[i]!),
       kind: 'tab',
-      url: tab.url,
+      url: normalizeUrl(tab.url),
       title: tab.title,
       favIconUrl: tab.favIconUrl,
       pinOnOpen: tab.pinned === true,
@@ -229,8 +265,8 @@ export async function updateItem(tx: Tx, id: Id, patch: Record<string, unknown>)
   await tx.write(id, { ...patch, modifiedAt: tx.now });
 }
 
-/** Move items under `parentId`, placed just before `beforeId`, or at the end when it is null. */
-export async function moveItems(tx: Tx, ids: Id[], parentId: Id | null, beforeId: Id | null): Promise<void> {
+/** Move items under `parentId`, placed just before `beforeId`, at the top for `TOP`, or at the end when it is null. */
+export async function moveItems(tx: Tx, ids: Id[], parentId: Id | null, beforeId: Before): Promise<void> {
   const target = parentId == null ? undefined : await tx.get(parentId);
   if (parentId != null && !isLive(target)) throw new MissingError();
   if (isKind(target, 'group') && target.locked) throw new LockedError();
@@ -245,10 +281,7 @@ export async function moveItems(tx: Tx, ids: Id[], parentId: Id | null, beforeId
     moving.push(rec);
   }
 
-  const siblings = await keyOrdered(tx, parentId, new Set(ids));
-  const at = beforeId == null ? siblings.length : siblings.findIndex((s) => s.id === beforeId);
-  const idx = at === -1 ? siblings.length : at;
-  const keys = generateNKeysBetween(siblings[idx - 1]?.order ?? null, siblings[idx]?.order ?? null, moving.length);
+  const keys = await orderKeys(tx, parentId, beforeId, moving.length, new Set(ids));
   for (const [i, rec] of moving.entries()) {
     await tx.write(rec.id, { parentId, order: keys[i]!, modifiedAt: tx.now });
   }
@@ -314,25 +347,33 @@ export async function trashItems(tx: Tx, ids: Id[]): Promise<void> {
   for (const rec of recs) if (rec.kind === 'tab') await trashIfEmpty(tx, rec.parentId);
 }
 
+/**
+ * Restore items with every trashed ancestor, so each is reachable from the root again. Under a
+ * purged ancestor, the highest surviving item moves to the root, a tab inside a new group.
+ */
 export async function restoreFromTrash(tx: Tx, ids: Id[]): Promise<void> {
   for (const id of ids) {
     const rec = await tx.get(id);
     if (!rec || rec.purged) continue;
-    await tx.write(id, { trashedAt: null, modifiedAt: tx.now });
-    if (rec.kind !== 'tab') continue;
-    const parent = rec.parentId == null ? undefined : await tx.get(rec.parentId);
-    if (parent && parent.purged !== true) {
-      if (parent.trashedAt != null) await tx.write(parent.id, { trashedAt: null, modifiedAt: tx.now });
-    } else {
-      await moveItems(tx, [id], await createGroupAtTop(tx, null), null);
+    let top: ItemRecord | undefined;
+    for (
+      let at: ItemRecord | undefined = rec;
+      at && at.purged !== true;
+      at = at.parentId == null ? undefined : await tx.get(at.parentId)
+    ) {
+      if (at.trashedAt != null) await tx.write(at.id, { trashedAt: null, modifiedAt: tx.now });
+      top = at;
     }
+    if (!top || top.parentId == null) continue;
+    if (top.kind === 'tab') await moveItems(tx, [top.id], await createGroupAtTop(tx, null), null);
+    else await moveItems(tx, [top.id], null, TOP);
   }
 }
 
 async function purgeTree(tx: Tx, id: Id, urls: Set<string>): Promise<void> {
   for (const child of await tx.children(id)) await purgeTree(tx, child.id, urls);
   const rec = await tx.get(id);
-  if (rec?.url) urls.add(rec.url);
+  if (rec?.url) urls.add(normalizeUrl(rec.url));
   await tx.write(id, { purged: true, title: '', notes: '', url: '', favIconUrl: '', modifiedAt: tx.now });
 }
 
@@ -384,16 +425,11 @@ export async function createNear(tx: Tx, kind: 'folder' | 'group', anchorId: Id,
   if (!anchor) throw new Error('The item no longer exists');
   const parentId = where === 'within' ? anchorId : ((anchor.parentId as Id | null | undefined) ?? null);
   const siblings = await keyOrdered(tx, parentId);
-  const at = siblings.findIndex((r) => r.id === anchorId);
-  const [lo, hi] =
-    where === 'within'
-      ? [null, siblings[0]]
-      : where === 'above'
-        ? [siblings[at - 1], anchor]
-        : [anchor, siblings[at + 1]];
+  const below = siblings[siblings.findIndex((r) => r.id === anchorId) + 1]?.id ?? null;
+  const [order] = await orderKeys(tx, parentId, where === 'within' ? TOP : where === 'above' ? anchorId : below, 1);
   const id = uuidv7(tx.now);
   await tx.write(id, {
-    ...baseFields(tx, parentId, generateKeyBetween(lo?.order ?? null, hi?.order ?? null)),
+    ...baseFields(tx, parentId, order!),
     kind,
     title: kind === 'group' ? 'New group' : '',
     pinnedTop: false,
@@ -505,8 +541,8 @@ async function copyTree(tx: Tx, rec: ItemRecord, parentId: Id | null, order: str
   return id;
 }
 
-/** Copy items and everything under them to `parentId`, before `beforeId` or at the end. Copies of a tab share its link. */
-export async function copyItems(tx: Tx, ids: Id[], parentId: Id | null, beforeId: Id | null): Promise<Id[]> {
+/** Copy items and everything under them to `parentId`, placed as `moveItems` places them. Copies of a tab share its link. */
+export async function copyItems(tx: Tx, ids: Id[], parentId: Id | null, beforeId: Before): Promise<Id[]> {
   const target = parentId == null ? undefined : await tx.get(parentId);
   if (parentId != null && !isLive(target)) throw new MissingError();
   if (isKind(target, 'group') && target.locked) throw new LockedError();
@@ -515,10 +551,7 @@ export async function copyItems(tx: Tx, ids: Id[], parentId: Id | null, beforeId
     const rec = await tx.get(id);
     if (rec && isLive(rec)) sources.push(rec);
   }
-  const siblings = await keyOrdered(tx, parentId);
-  const at = beforeId == null ? siblings.length : siblings.findIndex((r) => r.id === beforeId);
-  const idx = at === -1 ? siblings.length : at;
-  const keys = generateNKeysBetween(siblings[idx - 1]?.order ?? null, siblings[idx]?.order ?? null, sources.length);
+  const keys = await orderKeys(tx, parentId, beforeId, sources.length);
   const out: Id[] = [];
   for (const [i, rec] of sources.entries()) out.push(await copyTree(tx, rec, parentId, keys[i]!));
   return out;

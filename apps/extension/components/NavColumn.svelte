@@ -1,6 +1,6 @@
 <script lang="ts">
   import { dndzone, TRIGGERS, type DndEvent } from 'svelte-dnd-action';
-  import { mergeGroups, moveItems, type Id, type Item, type ListView } from '@savetab/core';
+  import { mergeGroups, moveItems, TOP, type Id, type Item, type ListView } from '@savetab/core';
   import { act } from '@/lib/ui.svelte';
   import { t, tn } from '@/lib/i18n';
   import { DROP_TARGET } from '@/lib/motion';
@@ -47,8 +47,7 @@
       if (view.get(id)?.kind === 'group') void act((tx) => mergeGroups(tx, id, target.id));
       return;
     }
-    const first = view.children(targetId)[0]?.id ?? null;
-    void act((tx) => moveItems(tx, [id], targetId, first === id ? null : first));
+    void act((tx) => moveItems(tx, [id], targetId, TOP));
   }
 </script>
 
