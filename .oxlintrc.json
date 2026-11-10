@@ -1,0 +1,103 @@
+{
+  "plugins": ["typescript", "unicorn", "oxc", "import", "vitest", "promise"],
+  "categories": { "correctness": "error" },
+  "ignorePatterns": ["**/.output/**", "**/.wxt/**", "**/test-results/**"],
+  "rules": {
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "no-console": ["error", { "allow": ["warn", "error"] }],
+    "no-param-reassign": "error",
+    "max-depth": ["error", 4],
+    "max-lines": ["error", { "max": 400, "skipBlankLines": true, "skipComments": true }],
+    "import/no-cycle": "error",
+    "import/no-self-import": "error",
+    "import/no-duplicates": "error",
+    "promise/no-nesting": "error",
+    "oxc/no-accumulating-spread": "error",
+    "vitest/no-focused-tests": "error",
+    "vitest/no-disabled-tests": "error",
+    "typescript/no-explicit-any": "error"
+  },
+  "overrides": [
+    {
+      "files": ["**/packages/core/src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              { "name": "dexie" },
+              { "name": "svelte" },
+              { "name": "wxt" },
+              { "name": "webextension-polyfill" }
+            ],
+            "patterns": [
+              {
+                "group": [
+                  "wxt/*",
+                  "svelte/*",
+                  "@/*",
+                  "@savetab/extension",
+                  "@savetab/extension/*",
+                  "**/apps/**",
+                  "node:*"
+                ],
+                "message": "core runs in the extension, server tests, and future clients"
+              }
+            ]
+          }
+        ],
+        "no-restricted-globals": [
+          "error",
+          "browser",
+          "chrome",
+          "window",
+          "document",
+          "indexedDB",
+          "localStorage",
+          "sessionStorage",
+          "navigator",
+          "alert",
+          "confirm",
+          "fetch",
+          "setTimeout",
+          "setInterval"
+        ],
+        "no-restricted-properties": [
+          "error",
+          {
+            "object": "crypto",
+            "property": "subtle",
+            "message": "async: an await on it commits a Dexie transaction early"
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/apps/extension/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "dexie",
+                "importNames": ["default", "Dexie", "Table", "Collection"],
+                "message": "storage goes through lib/db.ts; only liveQuery may be imported"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    { "files": ["**/apps/extension/lib/db.ts"], "rules": { "no-restricted-imports": "off" } },
+    {
+      "files": ["**/packages/core/src/mutations.ts"],
+      "rules": { "max-lines": ["error", { "max": 600, "skipBlankLines": true, "skipComments": true }] }
+    },
+    { "files": ["**/scripts/**"], "rules": { "no-console": "off" } },
+    {
+      "files": ["**/e2e/**", "**/e2e-firefox/**", "**/*.test.ts", "**/test/**"],
+      "rules": { "typescript/no-explicit-any": "off", "max-lines": "off" }
+    }
+  ]
+}

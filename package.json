@@ -7,8 +7,9 @@
     "dev": "pnpm --filter @savetab/extension dev",
     "test": "pnpm -r test",
     "test:e2e": "pnpm --filter @savetab/extension test:e2e",
+    "test:e2e:firefox": "pnpm --filter @savetab/extension test:e2e:firefox",
     "check": "pnpm -r check",
-    "lint": "oxlint packages apps && pnpm --filter @savetab/extension lint:css",
+    "lint": "oxlint packages apps scripts && node scripts/lint-conventions.mjs && pnpm --filter @savetab/extension lint:css",
     "fmt": "oxfmt packages apps",
     "fmt:check": "oxfmt --check packages apps"
   },
