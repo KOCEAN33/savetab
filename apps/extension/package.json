@@ -12,6 +12,7 @@
     "postinstall": "wxt prepare",
     "test": "vitest run",
     "test:e2e": "wxt build --mode e2e && playwright test",
+    "test:e2e:firefox": "wxt build -b firefox --mode e2e && vitest run --config e2e-firefox/vitest.config.ts",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "lint:css": "stylelint 'styles/**/*.css'"
   },
@@ -22,8 +23,10 @@
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",
+    "@types/selenium-webdriver": "4.35.7",
     "@wxt-dev/module-svelte": "2.0.5",
     "fake-indexeddb": "6.2.8",
+    "selenium-webdriver": "4.52.0",
     "stylelint": "18.0.0",
     "svelte": "5.57.3",
     "svelte-check": "4.7.8",

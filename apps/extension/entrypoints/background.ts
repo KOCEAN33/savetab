@@ -47,15 +47,9 @@ async function onMenuClick(info: Browser.contextMenus.OnClickData, tab?: Browser
 }
 
 export default defineBackground(() => {
-  // Playwright cannot click the toolbar icon or a context menu, so e2e builds expose their handlers.
+  // Playwright and WebDriver cannot click the toolbar icon or a context menu, so e2e builds expose their handlers.
   if (import.meta.env.MODE === 'e2e') {
     Object.assign(globalThis, { savetabTest: { sendTabs, onMenuClick, sendTargets: () => builtTargets } });
-    // WebDriver BiDi cannot navigate to moz-extension:// pages, so give the Firefox smoke test one to drive.
-    if (import.meta.env.FIREFOX) {
-      browser.runtime.onInstalled.addListener(
-        () => void browser.tabs.create({ url: browser.runtime.getURL('/options.html') }),
-      );
-    }
   }
 
   browser.action.onClicked.addListener(async (tab) => {
