@@ -36,29 +36,22 @@ From the screenshot review of the P1 pages. The list keeps OneTab's plain look o
 
 ## Code review findings
 
-Each defect has a repro in the review run. None is fixed.
-
-Defects:
-
-- Emptying trash can purge a link a live tab still uses, which clears that tab's title and notes. `insertTabs` (`packages/core/src/mutations.ts:165`) stores an imported URL without `normalizeUrl`, while `emptyTrash` (`:343`) looks up live copies by the raw URL and purges by the normalized link id. The same raw URL also slips past `duplicates: 'reject'`. Fix: normalize in `insertTabs`, look up `byUrl(normalizeUrl(url))` in `emptyTrash`, and normalize stored URLs once.
-- Restoring an item whose ancestor is in trash leaves it unreachable from the root and absent from the trash list, and the next "empty trash" purges it. `restoreFromTrash` (`mutations.ts:317`) handles only a tab's direct parent. Fix: walk the ancestor chain, restore trashed ancestors, and move the item to the root when an ancestor is purged.
-- Two siblings with the same order key make a move or copy between them throw ` >= `. `sortGroups` skips trashed siblings and reissues their keys, so restoring one creates the tie. The neighbour-key logic is copied at `mutations.ts:97`, `:111`, `:166`, `:248`, `:386`, `:518`, `:572`. Fix: one helper that sorts by (order, id) and re-keys a tied run in the same transaction.
-- "Move to" lands at the bottom when the destination's first shown child is pinned. `LocationDialog.svelte:62` and `NavColumn.svelte:50` pass the first displayed child as `beforeId`. Fix: an at-top mode in `moveItems` and `copyItems`.
-
 Before P4 pushes its first op:
 
-- Order-key ties, above: two devices that each insert at the top produce one on every merge.
 - `applyOp` (`packages/core/src/merge.ts:6`) applies any field, so an op can overwrite `id` or `clocks`. Core needs a per-kind allowlist of syncable fields, shared with `updateItem`, plus a format version and device id on `Op`.
 - `excludedDomains` is one last-writer-wins array (`lib/settings.ts:43`, `lib/capture.ts:145`), so two devices that each add a domain offline keep only one addition.
 - A live item under a purged parent is invisible after a merge. Core needs one re-home rule, used by `restoreFromTrash` and by remote apply.
 - `restoreSnapshot` (`mutations.ts:582`) stamps fresh clocks, so a backup restore on a synced device overrides newer edits from other devices.
 - The plan puts the server in Go, while its invariant says server tests reuse `core`. Without end-to-end encryption the server reimplements `applyOp`, `tick`, and `observe`, so core's sync tests should export JSON vectors for it.
+- `normalizeUrl` is `new URL(raw).href`, which differs by engine for non-special schemes: Chromium gives `chrome://crash/`, Node gives `chrome://crash`. `linkId` hashes that form, so two engines can derive different link ids for one URL.
 - `observe` (`packages/core/src/hlc.ts:19`) accepts any remote clock. A device whose clock runs ahead wins every field until a max-skew check exists.
 
 Structure:
 
 - `db` is exported from `lib/db.ts:38` and read in 10 files. Exporting read functions instead lets `no-restricted-imports` ban table access outside `lib/db.ts`. `scripts/lint-conventions.mjs` catches direct table writes until then.
 - `lib/settings.ts:45` calls `tx.write` directly, and `updateItem` (`mutations.ts:228`) takes `Record<string, unknown>`, so a UI patch can set `kind`, `parentId`, or `order` past the lock checks.
+- Tabs imported before import normalized URLs keep their raw `url`. Emptying trash can still purge a link such a tab shares, since `byUrl` looks up the normalized form. A one-time pass that rewrites stored tab URLs through a core mutation would close it.
+- `sortGroups` reissues keys over live siblings only, so a trashed sibling can share a key with a live one. `orderKeys` re-keys the tie when something is inserted there.
 - `mutations.ts` holds capture policy, tree edits, trash, quick list, sort, and snapshot. Its `max-lines` limit in `.oxlintrc.json` is 600 until it splits into `order.ts`, `capture.ts`, `tree.ts`, `trash.ts`.
 
 Lint rules not turned on:
