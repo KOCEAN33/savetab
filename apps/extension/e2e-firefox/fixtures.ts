@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { By, type WebDriver, type WebElement } from 'selenium-webdriver';
+import { By, until, type WebDriver, type WebElement } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 import { test as base, expect } from 'vitest';
 
@@ -137,6 +137,11 @@ export async function onetabPage({ driver }: Firefox): Promise<void> {
 
 export async function openUrls({ driver }: Firefox): Promise<string[]> {
   return [...(await urls(driver)).values()].filter((u) => u.startsWith(SITE));
+}
+
+/** A page mounts its UI after `driver.get` returns, so a lookup waits for the element. */
+export function find(driver: WebDriver, by: By): Promise<WebElement> {
+  return driver.wait(until.elementLocated(by), 10_000);
 }
 
 export async function texts(driver: WebDriver, css: string): Promise<string[]> {

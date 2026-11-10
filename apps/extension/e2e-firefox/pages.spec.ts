@@ -1,5 +1,5 @@
 import { By } from 'selenium-webdriver';
-import { EXT, expect, test } from './fixtures';
+import { EXT, expect, find, test } from './fixtures';
 
 test('an options choice persists across a reload', async ({ ff: { driver } }) => {
   await driver.get(`${EXT}/options.html`);
@@ -15,11 +15,11 @@ test('an options choice persists across a reload', async ({ ff: { driver } }) =>
 test('imports "URL | Title" text and exports it back', async ({ ff: { driver } }) => {
   await driver.get(`${EXT}/import-export.html`);
   const text = 'https://a.example/ | A\nhttps://b.example/\n\nhttps://c.example/ | C\n';
-  await driver.findElement(By.css('textarea[aria-label="Links to import"]')).sendKeys(text);
-  await driver.findElement(By.xpath(`//button[normalize-space()='Import']`)).click();
+  await (await find(driver, By.css('textarea[aria-label="Links to import"]'))).sendKeys(text);
+  await (await find(driver, By.xpath(`//button[normalize-space()='Import']`))).click();
 
-  const status = driver.findElement(By.css('[role="status"]'));
+  const status = await find(driver, By.css('[role="status"]'));
   await expect.poll(() => status.getText()).toBe('Imported 3 tabs in 2 groups.');
-  const exported = driver.findElement(By.css('textarea[aria-label="Exported links"]'));
+  const exported = await find(driver, By.css('textarea[aria-label="Exported links"]'));
   await expect.poll(() => exported.getAttribute('value')).toBe(text);
 });
