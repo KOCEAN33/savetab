@@ -37,7 +37,16 @@ export default defineConfig({
     },
     browser_specific_settings:
       browser === 'firefox'
-        ? { gecko: { id: 'savetab@kocean33', data_collection_permissions: { required: ['none'] } } }
+        ? {
+            gecko: {
+              id: 'savetab@kocean33',
+              data_collection_permissions: { required: ['none'] },
+              // A listed add-on updates from AMO, so only the GitHub Releases build sets update_url.
+              ...(process.env.SAVETAB_SELF_DISTRIBUTED === '1'
+                ? { update_url: 'https://github.com/KOCEAN33/savetab/releases/latest/download/updates.json' }
+                : {}),
+            },
+          }
         : undefined,
   }),
 });
