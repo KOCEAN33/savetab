@@ -229,6 +229,8 @@ HTTP API, JSON, under `/v1`, with `Authorization: Bearer <access token>`:
   - `GET /v1/pairings/{id}` returns the pairing. Both devices poll it for the other side's message.
   - `PUT /v1/pairings/{id}` takes exactly one of `{ oldPublic }`, `{ newPublic }`, `{ wrappedKey }`. The order is `oldPublic` from a signed-in device, `newPublic` from the new device, `wrappedKey` from a signed-in device, each set once. A message out of order or sent twice answers 409 `pairing_conflict`, and a message from the wrong side answers 403 `forbidden`.
   - An expired pairing and another user's pairing answer 404 `not_found`.
+- `GET /v1/devices` returns `{ devices: [{ id, name, createdAt, current }] }`, the user's devices that are not revoked, oldest first. `createdAt` is Unix milliseconds. `current` is true for the caller's device.
+- `DELETE /v1/devices/{id}` revokes a device of the user and answers 204. A revoked device's access and refresh tokens answer 401 from then on. A device revokes itself to sign out. An unknown id, an already revoked device, and another user's device answer 404 `not_found`.
 - A write with no body to return answers 204. An error answers `{ error: <code> }`.
 - Every answer carries `Access-Control-Allow-Origin: *`, and an `OPTIONS` request answers 204 with the allowed methods and headers, so an extension calls the API from its own origin without a host permission. A request carries a bearer token and never a cookie.
 - Login, with no bearer token. The server talks to one issuer, set by `OIDC_ISSUER` *(savetab choice)*. Anyone the issuer logs in gets an account.

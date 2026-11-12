@@ -91,9 +91,41 @@ func (s *Store) CreateDevice(ctx context.Context, userID, name string) (id strin
 	return id, err
 }
 
-func (s *Store) RevokeDevice(ctx context.Context, deviceID string) error {
-	_, err := s.pool.Exec(ctx, `UPDATE devices SET revoked_at = now() WHERE id = $1`, deviceID)
-	return err
+type Device struct {
+	ID        string
+	Name      string
+	CreatedAt time.Time
+}
+
+// Devices returns the user's devices that are not revoked, oldest first.
+func (s *Store) Devices(ctx context.Context, userID string) ([]Device, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, name, created_at FROM devices
+		WHERE user_id = $1 AND revoked_at IS NULL
+		ORDER BY created_at, id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Device, error) {
+		var d Device
+		err := row.Scan(&d.ID, &d.Name, &d.CreatedAt)
+		return d, err
+	})
+}
+
+// RevokeDevice revokes one of the user's devices, which ends its sessions. A device of another
+// user and one already revoked give ErrNotFound.
+func (s *Store) RevokeDevice(ctx context.Context, userID, deviceID string) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE devices SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL`,
+		deviceID, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 type SessionKind string

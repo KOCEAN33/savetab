@@ -50,6 +50,8 @@ func New(s *store.Store, login *Login) http.Handler {
 	mux.HandleFunc("GET /v1/pairings", srv.authed(srv.listPairings))
 	mux.HandleFunc("GET /v1/pairings/{id}", srv.authed(srv.getPairing))
 	mux.HandleFunc("PUT /v1/pairings/{id}", srv.authed(srv.putPairing))
+	mux.HandleFunc("GET /v1/devices", srv.authed(srv.listDevices))
+	mux.HandleFunc("DELETE /v1/devices/{id}", srv.authed(srv.revokeDevice))
 	return cors(mux)
 }
 
@@ -60,7 +62,7 @@ func cors(next http.Handler) http.Handler {
 		h := w.Header()
 		h.Set("Access-Control-Allow-Origin", "*")
 		if r.Method == http.MethodOptions {
-			h.Set("Access-Control-Allow-Methods", "GET, POST, PUT")
+			h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
 			h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 			h.Set("Access-Control-Max-Age", "86400")
 			w.WriteHeader(http.StatusNoContent)

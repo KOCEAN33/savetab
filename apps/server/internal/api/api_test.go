@@ -306,7 +306,7 @@ func TestRequestsWithoutAValidAccessTokenGet401(t *testing.T) {
 		t.Fatal(err)
 	}
 	revoked := newDevice(t, user)
-	if err := db.RevokeDevice(ctx, revoked.id); err != nil {
+	if err := db.RevokeDevice(ctx, user, revoked.id); err != nil {
 		t.Fatal(err)
 	}
 
@@ -327,6 +327,7 @@ func TestRequestsWithoutAValidAccessTokenGet401(t *testing.T) {
 	for _, route := range []string{
 		"GET /v1/key", "PUT /v1/key", "GET /v1/snapshot", "PUT /v1/snapshot",
 		"POST /v1/pairings", "GET /v1/pairings", "GET /v1/pairings/" + opID(1), "PUT /v1/pairings/" + opID(1),
+		"GET /v1/devices", "DELETE /v1/devices/" + opID(1),
 	} {
 		method, path, _ := strings.Cut(route, " ")
 		res := request(t, method, path, "", map[string]any{"data": []byte("x")})
@@ -385,7 +386,7 @@ func TestBrowserOriginsMayCallTheAPI(t *testing.T) {
 	}
 	for header, want := range map[string]string{
 		"Access-Control-Allow-Origin":  "*",
-		"Access-Control-Allow-Methods": "GET, POST, PUT",
+		"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE",
 		"Access-Control-Allow-Headers": "Authorization, Content-Type",
 	} {
 		if got := res.Header.Get(header); got != want {
