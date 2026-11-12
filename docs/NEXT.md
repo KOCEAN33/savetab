@@ -6,7 +6,7 @@ Build the self-hosted sync server (plan phase P4), so the stored tab list syncs 
 
 ## Start
 
-Continue P4 at step 4 of `docs/plans/onetab-parity.md` `### P4: sync server`: client crypto in `packages/core`. Steps 1 to 3 are built in `apps/server`: the op log, the wrapped key, the snapshot, the pairing relay, and the OIDC login with device tokens, which is every endpoint of the plan's "HTTP API" list. `core` holds the op format and the merge rule the client steps build on. Server tests need the tailnet, see `apps/server/README.md`.
+Continue P4 at step 5 of `docs/plans/onetab-parity.md` `### P4: sync server`: the sync client in the extension. Steps 1 to 4 are built. `apps/server` has every endpoint of the plan's "HTTP API" list. `packages/core` holds the op format, the merge rule, and the client crypto in `src/crypto.ts`. No code calls the server or the crypto yet. Server tests need the tailnet, see `apps/server/README.md`.
 
 Orders from the owner that bind P4:
 
@@ -15,7 +15,8 @@ Orders from the owner that bind P4:
 
 ## Next steps
 
-- P4 steps 5 to 9 follow step 4 in the plan's order.
+- P4 steps 6 to 9 follow step 5 in the plan's order.
+- Step 6 needs a real OIDC issuer to log in against. None is chosen. The server tests use a fake one.
 
 ## Pointers
 

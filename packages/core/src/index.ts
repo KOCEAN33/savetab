@@ -13,3 +13,4 @@ export * from './textio';
 export * from './link';
 export * from './view';
 export * from './search';
+export * from './crypto';

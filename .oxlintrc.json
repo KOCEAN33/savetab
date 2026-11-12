@@ -73,6 +73,10 @@
       }
     },
     {
+      "files": ["**/packages/core/src/crypto.ts"],
+      "rules": { "no-restricted-properties": "off" }
+    },
+    {
       "files": ["**/apps/extension/**"],
       "rules": {
         "no-restricted-imports": [
