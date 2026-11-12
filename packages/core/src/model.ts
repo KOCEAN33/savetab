@@ -76,6 +76,7 @@ export type CopyFormat = 'rich' | 'urlTitle' | 'titleUrl' | 'url' | 'markdown';
 
 export interface SettingsFields {
   kind: 'settings';
+  /** Read form of the record's `exclude:<host>` fields, sorted. */
   excludedDomains: string[];
   duplicates: 'allow' | 'reject';
   titleOnDuplicate: 'keep' | 'update';
@@ -116,11 +117,63 @@ export type ItemRecord = { id: Id; clocks: Record<string, Hlc>; kind?: Kind } & 
 > &
   Record<string, unknown>;
 
+/** Format version of `Op`. A device stops applying at an op with a higher version and asks for an update. */
+export const OP_VERSION = 1;
+
 export interface Op {
+  v: number;
   opId: Id;
   itemId: Id;
+  /** Carried on every op, since a field op can arrive before the op that created its record. */
+  kind: Kind;
   hlc: Hlc;
+  /** Syncable fields only, see `isSyncField`. */
   fields: Record<string, unknown>;
+}
+
+const COMMON_SYNC = [
+  'parentId',
+  'order',
+  'createdAt',
+  'modifiedAt',
+  'accessedAt',
+  'trashedAt',
+  'purged',
+  'title',
+  'notes',
+  'star',
+  'collapsed',
+];
+
+const SYNC_FIELDS: Record<Kind, ReadonlySet<string>> = {
+  folder: new Set([...COMMON_SYNC, 'pinnedTop']),
+  group: new Set([...COMMON_SYNC, 'pinnedTop', 'locked', 'openAs', 'restoreTarget']),
+  tab: new Set([...COMMON_SYNC, 'url', 'favIconUrl', 'pinOnOpen']),
+  link: new Set(['url', 'title', 'notes', 'purged']),
+  settings: new Set([
+    'duplicates',
+    'titleOnDuplicate',
+    'pinnedTabs',
+    'afterRestore',
+    'restoreGroupTarget',
+    'switchToRestored',
+    'groupTitleClick',
+    'urlDisplay',
+    'copyFormat',
+    'tabGroupRestore',
+    'discardOnOpen',
+  ]),
+};
+
+/**
+ * Each excluded host is its own settings field, `exclude:<host>` = true or false, so hosts that
+ * two devices add offline merge on separate clocks.
+ */
+export const EXCLUDE_PREFIX = 'exclude:';
+
+/** True when an op of `kind` may carry `field`. Every other name, `id` and `clocks` included, never syncs. */
+export function isSyncField(kind: Kind, field: string): boolean {
+  return SYNC_FIELDS[kind].has(field) || (kind === 'settings' && field.startsWith(EXCLUDE_PREFIX));
 }
 
 export const SETTINGS_ID = 'settings';
@@ -157,7 +210,16 @@ export function isLive(rec: ItemRecord | undefined): boolean {
 }
 
 export function readSettings(rec: ItemRecord | undefined): Settings {
-  const s: Settings = { ...defaultSettings, ...(rec as Partial<SettingsFields> | undefined), id: SETTINGS_ID };
+  const excludedDomains = Object.keys(rec ?? {})
+    .filter((k) => k.startsWith(EXCLUDE_PREFIX) && rec![k] === true)
+    .map((k) => k.slice(EXCLUDE_PREFIX.length))
+    .sort();
+  const s: Settings = {
+    ...defaultSettings,
+    ...(rec as Partial<SettingsFields> | undefined),
+    excludedDomains,
+    id: SETTINGS_ID,
+  };
   // Older records may hold an afterRestore value no longer offered, such as 'archive'. It kept tabs listed.
   return s.afterRestore === 'remove' ? s : { ...s, afterRestore: 'keep' };
 }

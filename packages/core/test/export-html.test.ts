@@ -12,10 +12,10 @@ describe('exportHtml', () => {
     const s = new MemoryStore('dev1');
     const f = await s.transact((tx) => createFolder(tx, null, 'Research & <notes>'));
     const sub = await s.transact((tx) => createFolder(tx, f, 'Sub'));
-    await s.transact((tx) => importGroups(tx, [[tab('https://s1.example/', 'S1'), tab('https://s2.example/', 'S2')]], sub));
-    const [g] = await s.transact((tx) =>
-      importGroups(tx, [[tab('http://[a"x"&y=1', '<script>alert(1)</script>')]], f),
+    await s.transact((tx) =>
+      importGroups(tx, [[tab('https://s1.example/', 'S1'), tab('https://s2.example/', 'S2')]], sub),
     );
+    const [g] = await s.transact((tx) => importGroups(tx, [[tab('http://[a"x"&y=1', '<script>alert(1)</script>')]], f));
     await s.transact((tx) => updateItem(tx, g!, { title: 'Work' }));
     const html = exportHtml(new ListView(s.all()), f);
 
@@ -29,7 +29,9 @@ describe('exportHtml', () => {
 
   it('exports a group with its shown tab titles and notes under them', async () => {
     const s = new MemoryStore('dev1');
-    const [g] = await s.transact((tx) => importGroups(tx, [[tab('https://a.example/', 'A'), tab('https://b.example/', '')]]));
+    const [g] = await s.transact((tx) =>
+      importGroups(tx, [[tab('https://a.example/', 'A'), tab('https://b.example/', '')]]),
+    );
     const view0 = new ListView(s.all());
     const a = view0.tabs(g!)[0]!;
     await s.transact((tx) => editTab(tx, a.id, { title: 'Renamed', notes: 'read <first>' }));

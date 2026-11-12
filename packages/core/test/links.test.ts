@@ -57,8 +57,8 @@ describe('Link records', () => {
     await a.transact((tx) => storeTabs(tx, [tab('https://a.example/', 'From A')], settings()));
     await b.transact((tx) => storeTabs(tx, [tab('https://a.example/', 'From B')], settings()));
     const aLog = [...a.log];
-    a.applyRemote(b.log);
-    b.applyRemote(aLog);
+    await a.applyRemote(b.log);
+    await b.applyRemote(aLog);
 
     const id = linkId('https://a.example/');
     expect(await a.get(id)).toEqual(await b.get(id));

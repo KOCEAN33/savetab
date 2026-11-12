@@ -39,22 +39,13 @@ Deferred work, not scheduled.
 
 ## Code review findings
 
-Before P4 pushes its first op:
-
-- `applyOp` (`packages/core/src/merge.ts:6`) applies any field, so an op can overwrite `id` or `clocks`. Core needs a per-kind allowlist of syncable fields, shared with `updateItem`, plus a format version and device id on `Op`.
-- `excludedDomains` is one last-writer-wins array (`lib/settings.ts:43`, `lib/capture.ts:145`), so two devices that each add a domain offline keep only one addition.
-- A live item under a purged parent is invisible after a merge. Core needs one re-home rule, used by `restoreFromTrash` and by remote apply.
-- `restoreSnapshot` (`mutations.ts:582`) stamps fresh clocks, so a backup restore on a synced device overrides newer edits from other devices.
-- `normalizeUrl` is `new URL(raw).href`, which differs by engine for non-special schemes: Chromium gives `chrome://crash/`, Node gives `chrome://crash`. `linkId` hashes that form, so two engines can derive different link ids for one URL.
-- `observe` (`packages/core/src/hlc.ts:19`) accepts any remote clock. A device whose clock runs ahead wins every field until a max-skew check exists.
-
 Structure:
 
 - `db` is exported from `lib/db.ts:38` and read in 10 files. Exporting read functions instead lets `no-restricted-imports` ban table access outside `lib/db.ts`. `scripts/lint-conventions.mjs` catches direct table writes until then.
-- `lib/settings.ts:45` calls `tx.write` directly, and `updateItem` (`mutations.ts:228`) takes `Record<string, unknown>`, so a UI patch can set `kind`, `parentId`, or `order` past the lock checks.
 - Tabs imported before import normalized URLs keep their raw `url`. Emptying trash can still purge a link such a tab shares, since `byUrl` looks up the normalized form. A one-time pass that rewrites stored tab URLs through a core mutation would close it.
 - `sortGroups` reissues keys over live siblings only, so a trashed sibling can share a key with a live one. `orderKeys` re-keys the tie when something is inserted there.
-- `mutations.ts` holds capture policy, tree edits, trash, sort, and snapshot. Its `max-lines` limit in `.oxlintrc.json` is 600 until it splits into `order.ts`, `capture.ts`, `tree.ts`, `trash.ts`.
+- `mutations.ts` holds capture policy, tree edits, and trash. Its `max-lines` limit in `.oxlintrc.json` is 600 until it splits into `capture.ts`, `tree.ts`, `trash.ts`.
+- A backup taken before database version 3 holds the excluded hosts as one `excludedDomains` array. `restoreSnapshot` drops that field, so a restore from such a backup loses the excluded hosts. The weekly backup replaces it within 7 days.
 
 Lint rules not turned on:
 

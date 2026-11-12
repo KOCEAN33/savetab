@@ -327,7 +327,7 @@ describe('sync readiness', () => {
 
     const shuffled = [...s.log].reverse();
     const other = new MemoryStore('dev2');
-    other.applyRemote(shuffled);
+    await other.applyRemote(shuffled);
     expect(await groupIds(other)).toEqual(await groupIds(s));
     for (const g of [g1, g2]) {
       expect(await liveChildren(other, g)).toEqual(await liveChildren(s, g));

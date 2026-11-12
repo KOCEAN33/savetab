@@ -39,12 +39,7 @@ export interface SearchResult {
 /** A query that filters nothing shows the plain list instead of results. */
 export function isActive(q: SearchQuery): boolean {
   return (
-    q.text.trim() !== '' ||
-    q.createdFrom !== null ||
-    q.createdTo !== null ||
-    q.starred ||
-    q.hasNotes ||
-    q.namedOnly
+    q.text.trim() !== '' || q.createdFrom !== null || q.createdTo !== null || q.starred || q.hasNotes || q.namedOnly
   );
 }
 

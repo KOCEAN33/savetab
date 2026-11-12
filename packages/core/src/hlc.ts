@@ -15,6 +15,11 @@ function format(ms: number, counter: number, deviceId: string): Hlc {
   return `${String(ms).padStart(MS_WIDTH, '0')}-${counter.toString(16).padStart(COUNTER_WIDTH, '0')}-${deviceId}`;
 }
 
+/** Wall-clock part of a clock, in ms. */
+export function hlcMs(h: Hlc): number {
+  return parse(h).ms;
+}
+
 /** Next clock value for a local write. Never goes backwards, even if `now` does. */
 export function tick(prev: Hlc | null, now: number, deviceId: string): Hlc {
   if (prev === null) return format(now, 0, deviceId);

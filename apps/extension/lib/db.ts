@@ -1,5 +1,16 @@
 import Dexie, { type Table } from 'dexie';
-import { Tx, tick, uuidv7, type Hlc, type Id, type ItemRecord, type ItemSource, type Op } from '@savetab/core';
+import {
+  applyOp,
+  EXCLUDE_PREFIX,
+  SETTINGS_ID,
+  Tx,
+  uuidv7,
+  type Hlc,
+  type Id,
+  type ItemRecord,
+  type ItemSource,
+  type Op,
+} from '@savetab/core';
 
 /**
  * IndexedDB does not index null, so root children are indexed under ''. Records without
@@ -32,6 +43,38 @@ class SavetabDb extends Dexie {
           if (r.parentId === undefined) delete r.parentKey;
         }),
     );
+    // Ops gain a format version and their record's kind, and the excluded hosts move from one
+    // array field to one field per host under the array's clock.
+    this.version(3).upgrade(async (tx) => {
+      const items = tx.table<StoredRecord, string>('items');
+      const outbox = tx.table<{ seq?: number; op: Op }, number>('outbox');
+      const kinds = new Map((await items.toArray()).map((r) => [r.id, r.kind]));
+      await outbox.toCollection().modify((row, ref) => {
+        const kind = kinds.get(row.op.itemId);
+        if (kind === undefined) {
+          delete (ref as { value?: unknown }).value;
+          return;
+        }
+        const { kind: _kind, excludedDomains: _hosts, ...fields } = row.op.fields;
+        row.op = { ...row.op, v: 1, kind, fields };
+      });
+      const settings = await items.get(SETTINGS_ID);
+      const hosts = settings?.excludedDomains;
+      if (!settings || !Array.isArray(hosts)) return;
+      const hlc = settings.clocks.excludedDomains!;
+      const { excludedDomains: _hosts, ...rest } = settings;
+      const { excludedDomains: _clock, ...clocks } = settings.clocks;
+      const op: Op = {
+        v: 1,
+        opId: uuidv7(),
+        itemId: SETTINGS_ID,
+        kind: 'settings',
+        hlc,
+        fields: Object.fromEntries(hosts.map((h) => [EXCLUDE_PREFIX + h, true])),
+      };
+      await items.put(applyOp({ ...rest, clocks }, op));
+      await outbox.add({ op });
+    });
   }
 }
 
@@ -68,12 +111,12 @@ async function deviceId(): Promise<string> {
 export function transact<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.transaction('rw', db.items, db.outbox, db.meta, async () => {
     const device = await deviceId();
-    let clock = ((await db.meta.get('hlc'))?.value as Hlc | undefined) ?? null;
-    const tx = new Tx(source, () => (clock = tick(clock, Date.now(), device)));
+    const clock = ((await db.meta.get('hlc'))?.value as Hlc | undefined) ?? null;
+    const tx = new Tx(source, clock, device);
     const result = await fn(tx);
     await db.items.bulkPut(tx.changed().map(stored));
     await db.outbox.bulkAdd(tx.ops.map((op) => ({ op })));
-    await db.meta.put({ key: 'hlc', value: clock });
+    await db.meta.put({ key: 'hlc', value: tx.clock });
     return result;
   });
 }

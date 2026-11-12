@@ -89,7 +89,10 @@
         ]
       }
     },
-    { "files": ["**/apps/extension/lib/db.ts"], "rules": { "no-restricted-imports": "off" } },
+    {
+      "files": ["**/apps/extension/lib/db.ts", "**/apps/extension/lib/db-upgrade.test.ts"],
+      "rules": { "no-restricted-imports": "off" }
+    },
     {
       "files": ["**/packages/core/src/mutations.ts"],
       "rules": { "max-lines": ["error", { "max": 600, "skipBlankLines": true, "skipComments": true }] }

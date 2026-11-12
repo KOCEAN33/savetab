@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { trashItems, updateItem, type Id, type Item, type ListView, type Tab } from '@savetab/core';
+  import { trashItems, updateItem, type Id, type Item, type ItemPatch, type ListView, type Tab } from '@savetab/core';
   import { copyLinks } from '@/lib/clipboard';
   import { clickIntent, restoreSelected } from '@/lib/restore';
   import { selectCommand, type SelectCommand } from '@/lib/selection';
@@ -27,7 +27,7 @@
     selection.clear();
   }
 
-  function setAll(patch: Record<string, unknown>) {
+  function setAll(patch: ItemPatch) {
     const ids = items.filter((i) => i.kind !== 'folder').map((i) => i.id);
     done(() =>
       act(async (tx) => {

@@ -78,7 +78,11 @@ describe('import normalizes URLs', () => {
     const s = new MemoryStore('dev1');
     await s.transact((tx) => importGroups(tx, [[{ url: 'https://example.com', title: 'Imported', favIconUrl: '' }]]));
     await s.transact((tx) =>
-      storeTabs(tx, [{ url: 'https://example.com/', title: 'Example', favIconUrl: '' }], settings({ duplicates: 'reject' })),
+      storeTabs(
+        tx,
+        [{ url: 'https://example.com/', title: 'Example', favIconUrl: '' }],
+        settings({ duplicates: 'reject' }),
+      ),
     );
     const live = s
       .all()
@@ -164,10 +168,10 @@ describe('tied order keys', () => {
     await s1.transact((tx) => moveItems(tx, [existing], f, null));
 
     const s2 = new MemoryStore('dev2');
-    s2.applyRemote(s1.log);
+    await s2.applyRemote(s1.log);
     const fromDev1 = await s1.transact((tx) => createWithin(tx, 'group', f));
     const fromDev2 = await s2.transact((tx) => createWithin(tx, 'group', f));
-    s1.applyRemote(s2.log);
+    await s1.applyRemote(s2.log);
 
     // Setup check: both devices inserted at the top, so the merged keys tie.
     expect(await orderOf(s1, fromDev1)).toBe(await orderOf(s1, fromDev2));
@@ -191,8 +195,8 @@ describe('move or copy to the top', () => {
     const [u1, u2, p] = groups as [string, string, string];
     await s.transact((tx) => updateItem(tx, p, { pinnedTop: true }));
     // Setup check: the pinned group has the highest order key.
-    expect(await orderOf(s, p) > (await orderOf(s, u2))).toBe(true);
-    expect(await orderOf(s, p) > (await orderOf(s, u1))).toBe(true);
+    expect((await orderOf(s, p)) > (await orderOf(s, u2))).toBe(true);
+    expect((await orderOf(s, p)) > (await orderOf(s, u1))).toBe(true);
     const x = await store(s, ['x']);
     return { s, f, u1, u2, p, x };
   }

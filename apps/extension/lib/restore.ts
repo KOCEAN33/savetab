@@ -151,7 +151,13 @@ async function openIncognito(tabs: Tab[], intent: Intent): Promise<void> {
     return;
   }
   await browser.windows.create({ incognito: true, url: tabs.map((tab) => tab.url) });
-  await transact((tx) => afterOpen(tx, tabs.map((tab) => tab.id), intent.mode));
+  await transact((tx) =>
+    afterOpen(
+      tx,
+      tabs.map((tab) => tab.id),
+      intent.mode,
+    ),
+  );
 }
 
 export async function restoreTab(tab: Tab, intent: Intent): Promise<void> {

@@ -1,5 +1,5 @@
 import { storage } from 'wxt/utils/storage';
-import { readSettings, SETTINGS_ID, type Settings, type SettingsFields } from '@savetab/core';
+import { readSettings, SETTINGS_ID, updateSettings, type Settings, type SettingsFields } from '@savetab/core';
 import { db, transact } from './db';
 
 /** Settings that describe this browser rather than the list. They never sync. */
@@ -41,7 +41,5 @@ export async function getSettings(): Promise<Settings> {
 }
 
 export function setSettings(patch: Partial<Omit<SettingsFields, 'kind'>>): Promise<void> {
-  return transact(async (tx) => {
-    await tx.write(SETTINGS_ID, { kind: 'settings', ...patch });
-  });
+  return transact((tx) => updateSettings(tx, patch));
 }

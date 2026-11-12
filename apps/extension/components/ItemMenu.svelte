@@ -7,6 +7,7 @@
     trashItems,
     updateItem,
     type Item,
+    type ItemPatch,
     type ListView,
     type RestoreTarget,
     type TabGroupColor,
@@ -48,7 +49,7 @@
     menu.id = null;
   }
 
-  const set = (patch: Record<string, unknown>) => close(() => act((tx) => updateItem(tx, id, patch)));
+  const set = (patch: ItemPatch) => close(() => act((tx) => updateItem(tx, id, patch)));
 
   function create(kind: 'folder' | 'group') {
     close(async () => {

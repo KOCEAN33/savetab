@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { defaultSettings, type Settings } from '@savetab/core';
 import { restoreWindow } from './restore';
 
-const s = (restoreGroupTarget: Settings['restoreGroupTarget']): Settings => ({ ...defaultSettings, id: 'settings', restoreGroupTarget });
+const s = (restoreGroupTarget: Settings['restoreGroupTarget']): Settings => ({
+  ...defaultSettings,
+  id: 'settings',
+  restoreGroupTarget,
+});
 
 describe('restoreWindow', () => {
   it('follows restoreGroupTarget while the group restoreTarget is default', () => {

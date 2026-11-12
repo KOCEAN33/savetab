@@ -1,6 +1,5 @@
-import { observe, tick } from './hlc';
-import { applyOp } from './merge';
 import type { Hlc, Id, ItemRecord, Op } from './model';
+import { mergeRemote } from './remote';
 import { Tx, type ItemSource } from './tx';
 
 /** In-memory adapter for tests and for code that runs outside a browser. */
@@ -32,19 +31,20 @@ export class MemoryStore implements ItemSource {
   }
 
   async transact<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-    let clock = this.clock;
-    const tx = new Tx(this, () => (clock = tick(clock, Date.now(), this.deviceId)));
+    const tx = new Tx(this, this.clock, this.deviceId);
     const result = await fn(tx);
     for (const r of tx.changed()) this.records.set(r.id, r);
     this.log.push(...tx.ops);
-    this.clock = clock;
+    this.clock = tx.clock;
     return result;
   }
 
-  applyRemote(ops: Op[]): void {
-    for (const op of ops) {
-      this.records.set(op.itemId, applyOp(this.records.get(op.itemId) ?? { id: op.itemId, clocks: {} }, op));
-      this.clock = observe(this.clock, op.hlc);
-    }
+  applyRemote(ops: Op[], receivedAt = Date.now()): Promise<void> {
+    return this.transact((tx) =>
+      mergeRemote(
+        tx,
+        ops.map((op) => ({ op, receivedAt })),
+      ),
+    );
   }
 }

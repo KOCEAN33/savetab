@@ -61,7 +61,8 @@ export function formatLinks(links: LinkLine[], format: CopyFormat): { text: stri
   return { text, html };
 }
 
-const PAGE_STYLE = 'font-family:system-ui,sans-serif;font-size:14px;line-height:1.5;color:#444;max-width:960px;margin:32px auto;padding:0 20px';
+const PAGE_STYLE =
+  'font-family:system-ui,sans-serif;font-size:14px;line-height:1.5;color:#444;max-width:960px;margin:32px auto;padding:0 20px';
 const LIST_STYLE = 'list-style:none;padding:0;margin:0 0 20px';
 const NOTE_STYLE = 'margin:0 0 4px;color:#767676;white-space:pre-wrap';
 
@@ -97,7 +98,13 @@ export function exportHtml(
   const body = (item: Item, level: number): string => {
     if (item.kind === 'group') return heading(level, item) + tabs(item.id);
     if (item.kind !== 'folder') return '';
-    return heading(level, item) + view.children(item.id).map((child) => body(child, level + 1)).join('');
+    return (
+      heading(level, item) +
+      view
+        .children(item.id)
+        .map((child) => body(child, level + 1))
+        .join('')
+    );
   };
   const title = escapeHtml(label(root));
   return `<!doctype html>\n<html><head><meta charset="utf-8"><title>${title}</title></head><body style="${PAGE_STYLE}">${body(root, 1)}</body></html>\n`;

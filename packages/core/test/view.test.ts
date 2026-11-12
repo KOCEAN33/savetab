@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../src/memory';
-import {
-  createFolder,
-  editTab,
-  moveItems,
-  storeTabs,
-  updateItem,
-} from '../src/mutations';
+import { createFolder, editTab, moveItems, storeTabs } from '../src/mutations';
 import { ListView } from '../src/view';
 import { defaultSettings, type ItemRecord } from '../src/model';
 
@@ -26,7 +20,7 @@ describe('ListView', () => {
     const [b] = (await viewOf(s)).tabs(g2);
     await s.transact((tx) => moveItems(tx, [b!.id], g1, null));
     // moveItems trashes the emptied unnamed group, so revive it as an empty live group.
-    await s.transact((tx) => updateItem(tx, g2, { trashedAt: null }));
+    await s.transact((tx) => tx.write(g2, { trashedAt: null }));
 
     const v = await viewOf(s);
     expect(v.children(null).map((i) => i.id)).toEqual([folder, g1]);

@@ -12,11 +12,11 @@ import {
   MissingError,
   moveItems,
   removeDuplicates,
-  sortGroups,
   storeTabs,
   trashItems,
   updateItem,
 } from '../src/mutations';
+import { sortGroups } from '../src/order';
 import { formatLinks } from '../src/textio';
 import { ListView } from '../src/view';
 import { defaultSettings, type Tab } from '../src/model';

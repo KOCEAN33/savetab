@@ -1,8 +1,16 @@
 import { isKind, type Link, type Tab } from './model';
 import type { ItemSource } from './tx';
 
-/** The URL form copies are compared by. A string the URL parser rejects stays as given. */
+// Engines agree on how these schemes serialize. For any other scheme they differ: Chromium
+// turns chrome://crash into chrome://crash/, Node and Firefox do not.
+const SPECIAL_SCHEME = /^\s*(https?|ftp|wss?|file):/i;
+
+/**
+ * The URL form copies are compared by, the same on every engine. A URL of another scheme, or a
+ * string the URL parser rejects, stays as given.
+ */
 export function normalizeUrl(raw: string): string {
+  if (!SPECIAL_SCHEME.test(raw)) return raw;
   try {
     return new URL(raw).href;
   } catch {

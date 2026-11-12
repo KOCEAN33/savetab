@@ -58,16 +58,18 @@ interface Group extends ItemBase {
 interface Tab extends ItemBase { kind: 'tab'; url: string; favIconUrl: string; pinOnOpen: boolean }
 
 interface Op {                    // outbox entry, one per item write
+  v: number;                        // format version, OP_VERSION
   opId: Id; itemId: Id; hlc: Hlc;
-  fields: Record<string, unknown>;  // each field merges on its own clock
+  kind: Kind;                       // on every op: a field op can arrive before the record's first op
+  fields: Record<string, unknown>;  // syncable fields of the kind only, each merges on its own clock
 }
 ```
 
-Settings split in two. Synced settings (exclusions, duplicate rule, restore rules, display rules) are the record with id `settings` in the item store, so they merge like an item. Device settings (toolbar action, startup, context menu, theme) stay in `browser.storage.local`.
+Settings split in two. Synced settings (exclusions, duplicate rule, restore rules, display rules) are the record with id `settings` in the item store, so they merge like an item. Each excluded host is its own field, `exclude:<host>`, so hosts added on two devices both stay. Device settings (toolbar action, startup, context menu, theme) stay in `browser.storage.local`.
 
 A tab's title and notes live on a `Link` record shared by every copy of its URL (features.md "Data hierarchy"). See P2 step 1.
 
-Merge rule for incoming ops: a field takes the op's value when the op's HLC is greater than the field's clock. Only clients run this rule. The server stores encrypted ops and never merges (`P4`).
+Merge rule for incoming ops (`mergeRemote` in `core`): a field takes the op's value when the op's HLC is greater than the field's clock. A field outside the kind's syncable list is dropped. An op whose clock runs more than `MAX_SKEW_MS` ahead of the server's receive time is skipped on every device. A live item left under a purged parent moves to the root, a tab into a group there. Only clients run this rule. The server stores encrypted ops and never merges (`P4`).
 
 ## Stack
 
@@ -92,7 +94,7 @@ Built, in Chrome and Firefox. The steps below record what each one built.
 Steps run in this order. Each step is done when its check passes plus `pnpm test`, `pnpm test:e2e`, `pnpm check`, and `pnpm lint`. A value marked *(savetab choice)* has no observed OneTab counterpart.
 
 1. **Data model.** Shape changes land before any UI.
-   - `Link` record: `{ id, kind: 'link', url, title, notes, purged }`. `url` is the normalized URL: `new URL(raw).href`, or the raw string when parsing fails. `id` is `link-` plus a 106-bit hex hash of the normalized URL (two cyrb53 runs with different seeds). It is synchronous, since a Dexie transaction commits on any non-IndexedDB await. Two devices that store the same URL make the same id, so their writes merge.
+   - `Link` record: `{ id, kind: 'link', url, title, notes, purged }`. `url` is the normalized URL: `new URL(raw).href` for http, https, ftp, ws, wss, and file, and the raw string for any other scheme or when parsing fails, since engines serialize other schemes differently. `id` is `link-` plus a 106-bit hex hash of the normalized URL (two cyrb53 runs with different seeds). It is synchronous, since a Dexie transaction commits on any non-IndexedDB await. Two devices that store the same URL make the same id, so their writes merge.
    - A tab shows its `Link` title when the `Link` exists, else its own `Tab.title`. Storing a tab creates the `Link` with the tab's title when none exists. `titleOnDuplicate: 'update'` writes the `Link` title. Renaming or noting a tab writes the `Link`.
    - Emptying trash purges a `Link` when no live or trashed tab has its URL.
    - `ItemBase` adds `collapsed: boolean` and `quickOrder: string | null` (fractional key in the quick list, null = not listed).
@@ -188,7 +190,7 @@ Ops are end-to-end encrypted:
 - The first device makes a random recovery key and shows it to the user once, with a warning that the data cannot be recovered without it. The server never sees it.
 - A new device gets the data key in one of two ways. The user enters the recovery key, or the new device pairs with a device already signed in: the two run ECDH P-256 through the server, and the user confirms a 6-digit pairing code shown on both before the signed-in device sends the wrapped data key.
 - The first build of pairing has the user start it by hand and check the code. A later build starts the exchange by itself once the new device logs in. The signed-in device still asks its user to approve, since the server relays the exchange and could otherwise add a device of its own.
-- The server keeps an append-only log `ops(user_id, seq, device_id, ciphertext, created_at)` and never merges. Clients decrypt and merge. AAD binds `user_id` and `item_id`. Clients upload encrypted snapshots, and the server drops ops before the snapshot's `seq`.
+- The server keeps an append-only log `ops(user_id, seq, device_id, ciphertext, created_at)` and never merges. Clients decrypt and merge. A pull returns each op's `created_at`, which is the receive time the skew rule compares against. A device whose own clock runs more than `MAX_SKEW_MS` ahead of the server's does not push, since every other device would skip its ops. AAD binds `user_id` and `item_id`. Clients upload encrypted snapshots, and the server drops ops before the snapshot's `seq`.
 - A shared web page uses its own random key in the URL fragment.
 
 ### P5: more clients

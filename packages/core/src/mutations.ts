@@ -1,7 +1,22 @@
-import { generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from './id';
 import { linkId, normalizeUrl } from './link';
-import { isKind, isLive, type GroupFields, type Id, type ItemRecord, type Settings, type TabGroupColor } from './model';
+import {
+  EXCLUDE_PREFIX,
+  isKind,
+  isLive,
+  isSyncField,
+  readSettings,
+  SETTINGS_ID,
+  type CommonFields,
+  type GroupFields,
+  type Id,
+  type ItemRecord,
+  type Settings,
+  type SettingsFields,
+  type TabFields,
+  type TabGroupColor,
+} from './model';
+import { keyOrdered, orderKeys, TOP, type Before } from './order';
 import { compareSiblings, liveChildren } from './query';
 import type { Tx } from './tx';
 
@@ -83,53 +98,14 @@ function baseFields(tx: Tx, parentId: Id | null, order: string) {
   };
 }
 
-/** Placement before every child of the destination, pinned ones included. */
-export const TOP: unique symbol = Symbol('top');
-export type Before = Id | null | typeof TOP;
-
-/** Siblings in key order, ignoring display pinning, so new keys always fall between neighbours. Ties break by id. */
-async function keyOrdered(tx: Tx, parentId: Id | null, exclude: Set<Id> = new Set()): Promise<ItemRecord[]> {
-  return (await tx.children(parentId))
-    .filter((r) => r.kind !== undefined && r.purged !== true && !exclude.has(r.id))
-    .sort((a, b) => compareSiblings({ id: a.id, order: a.order }, { id: b.id, order: b.order }));
-}
-
-/**
- * `n` order keys for new children of `parentId`: before `before`, at the top, or at the end when
- * it is null or gone. Siblings can share a key after two devices insert at the same place, and no
- * key fits between equal keys, so a tied run around the slot is re-keyed with it.
- */
-async function orderKeys(
-  tx: Tx,
-  parentId: Id | null,
-  before: Before,
-  n: number,
-  exclude: Set<Id> = new Set(),
-): Promise<string[]> {
-  const siblings = await keyOrdered(tx, parentId, exclude);
-  const found = before === TOP ? 0 : before == null ? -1 : siblings.findIndex((s) => s.id === before);
-  const idx = found === -1 ? siblings.length : found;
-  const key = (i: number) => siblings[i]?.order ?? null;
-  let lo = idx;
-  let hi = idx;
-  if (idx > 0 && idx < siblings.length && key(idx - 1) === key(idx)) {
-    while (lo > 0 && key(lo - 1) === key(idx)) lo--;
-    while (hi < siblings.length && key(hi) === key(idx)) hi++;
-  }
-  const keys = generateNKeysBetween(key(lo - 1), key(hi), hi - lo + n);
-  const fresh = keys.splice(idx - lo, n);
-  for (const [i, rec] of siblings.slice(lo, hi).entries()) await tx.write(rec.id, { order: keys[i]! });
-  return fresh;
-}
-
 async function createGroupAtTop(
   tx: Tx,
   parentId: Id | null,
   title = '',
   extra: Partial<GroupFields> = {},
+  id: Id = uuidv7(tx.now),
 ): Promise<Id> {
   const [order] = await orderKeys(tx, parentId, TOP, 1);
-  const id = uuidv7(tx.now);
   await tx.write(id, {
     ...baseFields(tx, parentId, order!),
     kind: 'group',
@@ -156,7 +132,7 @@ export async function createFolder(tx: Tx, parentId: Id | null, title: string): 
 async function isInLockedGroup(tx: Tx, rec: ItemRecord): Promise<boolean> {
   if (rec.kind !== 'tab' || rec.parentId == null) return false;
   const parent = await tx.get(rec.parentId);
-  return isKind(parent, 'group') && parent.locked === true;
+  return isKind(parent, 'group') && parent.locked === true && parent.purged !== true;
 }
 
 /** OneTab drops a group once its last tab leaves. A named group stays, since the user gave it a purpose. */
@@ -258,8 +234,40 @@ export async function storeIntoGroup(tx: Tx, groupId: Id, tabs: NewTab[], settin
   if (accepted.length > 0) await insertTabs(tx, groupId, accepted);
 }
 
-export async function updateItem(tx: Tx, id: Id, patch: Record<string, unknown>): Promise<void> {
+/** The fields a user edits in place. Placement, trash state, and dates change through their own mutations. */
+export type ItemPatch = Partial<
+  Pick<CommonFields, 'title' | 'notes' | 'star' | 'collapsed'> &
+    Pick<GroupFields, 'pinnedTop' | 'locked' | 'openAs' | 'restoreTarget'> &
+    Pick<TabFields, 'pinOnOpen'>
+>;
+
+const EDITABLE: ReadonlySet<string> = new Set<keyof ItemPatch>([
+  'title',
+  'notes',
+  'star',
+  'collapsed',
+  'pinnedTop',
+  'locked',
+  'openAs',
+  'restoreTarget',
+  'pinOnOpen',
+]);
+
+export async function updateItem(tx: Tx, id: Id, patch: ItemPatch): Promise<void> {
+  const bad = Object.keys(patch).find((f) => !EDITABLE.has(f));
+  if (bad !== undefined) throw new Error(`Field ${bad} cannot be edited in place`);
   await tx.write(id, { ...patch, modifiedAt: tx.now });
+}
+
+/** Change synced settings. `excludedDomains` is the whole list: hosts it adds or drops are written one field each. */
+export async function updateSettings(tx: Tx, patch: Partial<Omit<SettingsFields, 'kind'>>): Promise<void> {
+  const { excludedDomains, ...fields }: Record<string, unknown> & { excludedDomains?: string[] } = patch;
+  if (excludedDomains) {
+    const have = readSettings(await tx.get(SETTINGS_ID)).excludedDomains;
+    for (const host of excludedDomains) if (!have.includes(host)) fields[EXCLUDE_PREFIX + host] = true;
+    for (const host of have) if (!excludedDomains.includes(host)) fields[EXCLUDE_PREFIX + host] = false;
+  }
+  await tx.write(SETTINGS_ID, { kind: 'settings', ...fields });
 }
 
 /** Move items under `parentId`, placed just before `beforeId`, at the top for `TOP`, or at the end when it is null. */
@@ -345,8 +353,26 @@ export async function trashItems(tx: Tx, ids: Id[]): Promise<void> {
 }
 
 /**
+ * Move a live item out from under a purged parent, to the top of the root, a tab into a group
+ * there. The group's id comes from the purged parent, so devices that re-home tabs of one parent
+ * at the same time make one group. Once the user has trashed that group, a later tab gets a fresh
+ * one, and two devices re-homing then can each leave a group.
+ */
+export async function rehome(tx: Tx, rec: ItemRecord): Promise<void> {
+  if (!isLive(rec) || rec.parentId == null) return;
+  const parent = await tx.get(rec.parentId);
+  if (parent?.purged !== true) return;
+  if (rec.kind !== 'tab') return moveItems(tx, [rec.id], null, TOP);
+  const shared = `rehome-${parent.id}`;
+  const group = await tx.get(shared);
+  const groupId = group === undefined || isLive(group) ? shared : uuidv7(tx.now);
+  if (group === undefined || groupId !== shared) await createGroupAtTop(tx, null, '', {}, groupId);
+  await moveItems(tx, [rec.id], groupId, null);
+}
+
+/**
  * Restore items with every trashed ancestor, so each is reachable from the root again. Under a
- * purged ancestor, the highest surviving item moves to the root, a tab inside a new group.
+ * purged ancestor, the highest surviving item is re-homed.
  */
 export async function restoreFromTrash(tx: Tx, ids: Id[]): Promise<void> {
   for (const id of ids) {
@@ -361,9 +387,7 @@ export async function restoreFromTrash(tx: Tx, ids: Id[]): Promise<void> {
       if (at.trashedAt != null) await tx.write(at.id, { trashedAt: null, modifiedAt: tx.now });
       top = at;
     }
-    if (!top || top.parentId == null) continue;
-    if (top.kind === 'tab') await moveItems(tx, [top.id], await createGroupAtTop(tx, null), null);
-    else await moveItems(tx, [top.id], null, TOP);
+    if (top) await rehome(tx, (await tx.get(top.id))!);
   }
 }
 
@@ -371,7 +395,8 @@ async function purgeTree(tx: Tx, id: Id, urls: Set<string>): Promise<void> {
   for (const child of await tx.children(id)) await purgeTree(tx, child.id, urls);
   const rec = await tx.get(id);
   if (rec?.url) urls.add(normalizeUrl(rec.url));
-  await tx.write(id, { purged: true, title: '', notes: '', url: '', favIconUrl: '', modifiedAt: tx.now });
+  const content = rec?.kind === 'tab' ? { url: '', favIconUrl: '' } : {};
+  await tx.write(id, { purged: true, title: '', notes: '', ...content, modifiedAt: tx.now });
 }
 
 /** Purge the trash, and every link whose last tab went with it. */
@@ -505,8 +530,8 @@ export async function removeDuplicates(tx: Tx, scopeId: Id): Promise<number> {
 
 /** Fields a copy takes from its source. Placement and clocks stay behind. */
 function copyFields(rec: ItemRecord, tx: Tx, parentId: Id | null, order: string): Record<string, unknown> {
-  const { id: _id, clocks: _clocks, ...fields } = rec;
-  return { ...fields, parentId, order, createdAt: tx.now, modifiedAt: tx.now };
+  const fields = Object.fromEntries(Object.entries(rec).filter(([f]) => isSyncField(rec.kind!, f)));
+  return { ...fields, kind: rec.kind, parentId, order, createdAt: tx.now, modifiedAt: tx.now };
 }
 
 async function copyTree(tx: Tx, rec: ItemRecord, parentId: Id | null, order: string): Promise<Id> {
@@ -543,37 +568,4 @@ export async function mergeGroups(tx: Tx, sourceId: Id, targetId: Id): Promise<v
     null,
   );
   if (isLive(await tx.get(sourceId))) await trashItems(tx, [sourceId]);
-}
-
-export type SortKey = 'title' | 'created' | 'modified' | 'accessed';
-
-const SORT_COMPARE: Record<SortKey, (a: ItemRecord, b: ItemRecord) => number> = {
-  title: (a, b) => (a.title ?? '').localeCompare(b.title ?? '', undefined, { sensitivity: 'base' }),
-  created: (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0),
-  modified: (a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0),
-  accessed: (a, b) => (b.accessedAt ?? -1) - (a.accessedAt ?? -1),
-};
-
-/**
- * Sort the groups directly under `parentId`: A-Z, or newest first by date. Folders keep their
- * slots and tabs keep their order. New order keys sync like a manual reorder.
- */
-export async function sortGroups(tx: Tx, parentId: Id | null, key: SortKey, reverse: boolean): Promise<void> {
-  const siblings = (await keyOrdered(tx, parentId)).filter(isLive);
-  const groups = siblings.filter((r) => r.kind === 'group').sort(SORT_COMPARE[key]);
-  if (reverse) groups.reverse();
-  let next = 0;
-  const sorted = siblings.map((r) => (r.kind === 'group' ? groups[next++]! : r));
-  const keys = generateNKeysBetween(null, null, sorted.length);
-  for (const [i, rec] of sorted.entries()) {
-    if (rec.order !== keys[i]) await tx.write(rec.id, { order: keys[i] });
-  }
-}
-
-/**
- * Write a backup's records back, each through the outbox so the restore syncs like any edit.
- * Every field takes a fresh clock, so the restored values win over older copies elsewhere.
- */
-export async function restoreSnapshot(tx: Tx, records: ItemRecord[]): Promise<void> {
-  for (const { id, clocks: _clocks, ...fields } of records) await tx.write(id, fields);
 }

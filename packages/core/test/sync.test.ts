@@ -24,8 +24,10 @@ describe('hlc', () => {
 });
 
 const op = (hlc: string, fields: Record<string, unknown>, itemId = 'i1'): Op => ({
+  v: 1,
   opId: `${itemId}-${hlc}`,
   itemId,
+  kind: 'tab',
   hlc,
   fields,
 });
@@ -40,7 +42,7 @@ function permutations<T>(xs: T[]): T[][] {
 }
 
 describe('applyOp', () => {
-  const create = op('0001', { kind: 'tab', title: 'first', url: 'https://a.example/', star: false });
+  const create = op('0001', { title: 'first', url: 'https://a.example/', star: false });
   const rename = op('0002', { title: 'second' });
   const starAndRename = op('0003', { star: true, title: 'third' });
   const move = op('0004', { parentId: 'g2', order: 'a5' });
