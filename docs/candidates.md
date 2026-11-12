@@ -13,7 +13,11 @@ Deferred work, not scheduled.
 
 ## UI review findings left open
 
-- The options page is one long form of radio groups.
+- The options page is one long form of radio groups. Short choices could be selects on one row, with a section nav.
+- The options, import, and send pages have their own header, not the list page's top bar.
+- The send page opens on a filter label, with no heading and no empty state when 0 tabs qualify.
+- On a 390px screen the item menu covers its own group. The top bar's icon buttons have tooltips only.
+- With 3,000 stored tabs the first groups paint about 130 ms after navigation. The page reads every record first (`db.items.toArray()` in `entrypoints/onetab/App.svelte`). A per-folder query is the next step. No measurement against OneTab exists.
 - Group heads use role `treeitem` for keyboard focus, but no element around them has role `tree`.
 - Folders cannot be reordered by drag. A folder chip shows in the order its `order` key gives, and "Sort groups" does not sort folders.
 - A folder has no tick, so a bulk move of several folders goes one folder at a time through the folder's menu.

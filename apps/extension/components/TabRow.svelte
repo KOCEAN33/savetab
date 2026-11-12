@@ -79,7 +79,9 @@
       aria-expanded={menu.id === tab.id}
       onclick={(e) => toggleMenu(tab.id, e.currentTarget)}><Icon name="more" /></button
     >
-    {#if !locked}
+    {#if locked}
+      <span class="row-action-slot"></span>
+    {:else}
       <button class="icon-button row-action tab-delete" title={t('delete')} aria-label={t('deleteItem', { name: title || tab.url })} onclick={ondelete}
         ><Icon name="close" /></button
       >

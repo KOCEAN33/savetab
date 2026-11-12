@@ -335,6 +335,12 @@ textarea {
 .list-tools select {
   min-height: 28px;
   padding: 0 var(--space-xs);
+  border-color: var(--color-surface);
+  color: var(--color-on-surface-weak);
+}
+
+.list-tools select:hover {
+  background: var(--color-surface-hover);
 }
 
 .folder-result {
@@ -374,7 +380,10 @@ textarea {
 }
 
 .group-head .meta {
-  flex: none;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .group-title-input {
@@ -550,6 +559,12 @@ textarea {
   visibility: hidden;
 }
 
+/* A locked group's rows have no delete button. The slot keeps their domains in line with other groups. */
+.row-action-slot {
+  flex: none;
+  width: 28px;
+}
+
 .tab:hover .row-action,
 .tab:focus-within .row-action,
 .row-action[aria-expanded='true'] {
@@ -714,8 +729,11 @@ textarea {
     padding: var(--space-sm) var(--space-md);
   }
 
+  /* A narrow row keeps the title and drops what the menu or a wider window also shows. */
   .brand-name,
-  .tab-url {
+  .tab-url,
+  .group-grip,
+  .group-head .meta {
     display: none;
   }
 
@@ -734,9 +752,5 @@ textarea {
 
   .list-tools {
     margin-left: 0;
-  }
-
-  .group-head {
-    flex-wrap: wrap;
   }
 }
