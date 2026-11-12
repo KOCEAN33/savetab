@@ -13,6 +13,7 @@ import {
   type ItemRecord,
   type Settings,
   type SettingsFields,
+  type Share,
   type TabFields,
   type TabGroupColor,
 } from './model';
@@ -257,6 +258,13 @@ export async function updateItem(tx: Tx, id: Id, patch: ItemPatch): Promise<void
   const bad = Object.keys(patch).find((f) => !EDITABLE.has(f));
   if (bad !== undefined) throw new Error(`Field ${bad} cannot be edited in place`);
   await tx.write(id, { ...patch, modifiedAt: tx.now });
+}
+
+/** Record the shared web page of a folder or group, or null once it is no longer shared. */
+export async function setShare(tx: Tx, id: Id, share: Share | null): Promise<void> {
+  const item = await tx.get(id);
+  if (!isLive(item) || (item!.kind !== 'folder' && item!.kind !== 'group')) throw new MissingError();
+  await tx.write(id, { share });
 }
 
 /** Change synced settings. `excludedDomains` is the whole list: hosts it adds or drops are written one field each. */

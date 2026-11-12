@@ -66,6 +66,14 @@ const PAGE_STYLE =
 const LIST_STYLE = 'list-style:none;padding:0;margin:0 0 20px';
 const NOTE_STYLE = 'margin:0 0 4px;color:#767676;white-space:pre-wrap';
 
+type TabCount = (n: number) => string;
+const englishTabCount: TabCount = (n) => `${n} ${n === 1 ? 'tab' : 'tabs'}`;
+
+/** The title an exported folder or group carries: its own, or the default label the list shows. */
+function exportLabel(view: ListView, item: Item, tabCount: TabCount): string {
+  return item.kind === 'group' ? item.title || tabCount(view.tabs(item.id).length) : item.title || 'savetab';
+}
+
 /**
  * One standalone HTML page for a folder or group: its title as `<h1>`, each group a heading with
  * its tabs as links, notes as text under their item, sub-folders one heading level deeper.
@@ -74,12 +82,11 @@ const NOTE_STYLE = 'margin:0 0 4px;color:#767676;white-space:pre-wrap';
 export function exportHtml(
   view: ListView,
   id: Id,
-  tabCount: (n: number) => string = (n) => `${n} ${n === 1 ? 'tab' : 'tabs'}`,
+  tabCount: TabCount = englishTabCount,
 ): string {
   const root = view.get(id);
   if (!root) return '';
-  const label = (item: Item): string =>
-    item.kind === 'group' ? item.title || tabCount(view.tabs(item.id).length) : item.title || 'savetab';
+  const label = (item: Item) => exportLabel(view, item, tabCount);
   const notes = (item: Item): string => {
     const text = view.notes(item);
     return text ? `<p style="${NOTE_STYLE}">${escapeHtml(text)}</p>` : '';
@@ -108,4 +115,41 @@ export function exportHtml(
   };
   const title = escapeHtml(label(root));
   return `<!doctype html>\n<html><head><meta charset="utf-8"><title>${title}</title></head><body style="${PAGE_STYLE}">${body(root, 1)}</body></html>\n`;
+}
+
+export interface SharedTab {
+  url: string;
+  /** Empty = the page shows the URL. */
+  title: string;
+  notes: string;
+}
+
+export type SharedItem =
+  | { kind: 'group'; title: string; notes: string; tabs: SharedTab[] }
+  | { kind: 'folder'; title: string; notes: string; items: SharedItem[] };
+
+/** The plaintext of a shared web page (plan P4, "Share blob"). */
+export interface ShareContent {
+  v: 1;
+  title: string;
+  notes: string;
+  items: SharedItem[];
+}
+
+/** A copy of a folder or group for a shared web page. A group becomes a root that holds that one group. */
+export function shareContent(view: ListView, id: Id, tabCount: TabCount = englishTabCount): ShareContent | undefined {
+  const root = view.get(id);
+  if (!root || root.kind === 'tab') return undefined;
+  const copy = (item: Item): SharedItem[] => {
+    const head = { title: exportLabel(view, item, tabCount), notes: item.notes };
+    if (item.kind === 'group') {
+      const tabs = view.tabs(item.id).map((t) => ({ url: t.url, title: view.title(t), notes: view.notes(t) }));
+      return [{ kind: 'group', ...head, tabs }];
+    }
+    if (item.kind !== 'folder') return [];
+    return [{ kind: 'folder', ...head, items: view.children(item.id).flatMap(copy) }];
+  };
+  const title = exportLabel(view, root, tabCount);
+  if (root.kind === 'group') return { v: 1, title, notes: '', items: copy(root) };
+  return { v: 1, title, notes: root.notes, items: view.children(root.id).flatMap(copy) };
 }

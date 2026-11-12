@@ -16,13 +16,15 @@
   import { copyLinks } from '@/lib/clipboard';
   import { clickIntent, restoreGroup } from '@/lib/restore';
   import { saveHtml } from '@/lib/save-html';
+  import { activeShare, shareItem, shareLink, stopSharing } from '@/lib/share';
   import { act, chooser, editing, menu } from '@/lib/ui.svelte';
   import { t } from '@/lib/i18n';
 
   /** Gap in px kept between the menu and the viewport edge. */
   const EDGE = 8;
 
-  let { item, view }: { item: Item; view: ListView } = $props();
+  /** `server` is the sync server's URL on a device with an account. Sharing needs one. */
+  let { item, view, server }: { item: Item; view: ListView; server?: string } = $props();
 
   // The page keys this component by item, and a mutation may run after the menu closed and unmounted.
   // svelte-ignore state_referenced_locally
@@ -42,6 +44,22 @@
   });
 
   const locked = $derived(item.kind === 'group' && item.locked);
+  const shared = $derived(activeShare(item));
+
+  /** The upload and the delete can fail on the network, which `act` does not cover. */
+  function sharing(fn: () => Promise<unknown>) {
+    close(() => fn().catch(() => alert(t('shareFailed'))));
+  }
+
+  function share() {
+    const shownView = view;
+    const shownItem = item;
+    sharing(async () => {
+      const url = await shareItem(shownView, shownItem);
+      // The page can lose focus during the upload, and the clipboard then refuses the write.
+      await navigator.clipboard.writeText(url).catch(() => alert(t('shareNotCopied')));
+    });
+  }
 
   /** `fn` runs first: closing unmounts this component, and `item` is gone after that. */
   function close(fn: () => unknown) {
@@ -194,6 +212,14 @@
   </button>
   {#if item.kind !== 'tab'}
     <button role="menuitem" onclick={() => close(() => saveHtml(view, item))}>{t('menuSaveHtml')}</button>
+    {#if server && shared}
+      <button role="menuitem" onclick={() => close(() => navigator.clipboard.writeText(shareLink(server, shared)))}>
+        {t('menuCopyShareLink')}
+      </button>
+      <button role="menuitem" onclick={() => sharing(() => stopSharing(item))}>{t('menuStopSharing')}</button>
+    {:else if server}
+      <button role="menuitem" onclick={share}>{t('menuShare')}</button>
+    {/if}
   {/if}
   <button role="menuitem" onclick={() => close(() => copyLinks(view, [item]))}>
     {item.kind === 'tab' ? t('menuCopyLink') : t('menuCopyLinks')}

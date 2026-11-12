@@ -1,4 +1,5 @@
 import type { ItemRecord, Op } from './model';
+import type { ShareContent } from './textio';
 
 /**
  * Client-side encryption for sync, on WebCrypto. The formats are in docs/plans/onetab-parity.md
@@ -141,6 +142,17 @@ export function sealSnapshot(key: CryptoKey, userId: string, seq: number, record
 /** Opens a snapshot. `seq` is the one the server lists the blob under, which the blob must have been sealed for. */
 export async function openSnapshot(key: CryptoKey, userId: string, seq: number, blob: Uint8Array): Promise<ItemRecord[]> {
   return JSON.parse(new TextDecoder().decode(await open(key, snapshotAad(userId, seq), blob))) as ItemRecord[];
+}
+
+const SHARE_AAD = 'savetab-share-v1';
+
+/** Seals a shared page under the key made for it, which travels in the share URL's fragment. */
+export async function sealShare(shareKey: Uint8Array, content: ShareContent): Promise<Bytes> {
+  return seal(await aesKey(shareKey), SHARE_AAD, utf8(JSON.stringify(content)));
+}
+
+export async function openShare(shareKey: Uint8Array, blob: Uint8Array): Promise<ShareContent> {
+  return JSON.parse(new TextDecoder().decode(await open(await aesKey(shareKey), SHARE_AAD, blob))) as ShareContent;
 }
 
 /** One side's key pair for a pairing. `publicKey` is the uncompressed point, 65 bytes. */

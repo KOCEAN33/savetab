@@ -23,7 +23,7 @@
     type SortKey,
     type Tab,
   } from '@savetab/core';
-  import { db, transact } from '@/lib/db';
+  import { db, syncAccount, transact } from '@/lib/db';
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { touchRecent } from '@/lib/recent';
   import { navigate } from '@/lib/keynav';
@@ -49,6 +49,7 @@
   // Ceiling: the page reads every record on each change. Fine for tens of thousands of
   // tabs; switch to per-folder queries if large lists stutter.
   const records = liveQuery(() => db.items.toArray());
+  const account = liveQuery(() => syncAccount());
 
   let mode = $state<'list' | 'trash'>('list');
 
@@ -331,6 +332,6 @@
 </main>
 
 {#if menuItem}
-  {#key menuItem.id}<ItemMenu item={menuItem} {view} />{/key}
+  {#key menuItem.id}<ItemMenu item={menuItem} {view} server={$account?.serverUrl} />{/key}
 {/if}
 <LocationDialog {view} />

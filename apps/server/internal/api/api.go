@@ -23,6 +23,7 @@ const (
 	maxMessageBytes = 1024
 	smallBodyBytes  = 8 << 10
 	pairingTTL      = 5 * time.Minute
+	shareTTL        = 30 * 24 * time.Hour
 )
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -52,6 +53,12 @@ func New(s *store.Store, login *Login) http.Handler {
 	mux.HandleFunc("PUT /v1/pairings/{id}", srv.authed(srv.putPairing))
 	mux.HandleFunc("GET /v1/devices", srv.authed(srv.listDevices))
 	mux.HandleFunc("DELETE /v1/devices/{id}", srv.authed(srv.revokeDevice))
+	mux.HandleFunc("POST /v1/shares", srv.authed(srv.createShare))
+	mux.HandleFunc("GET /v1/shares/{id}", srv.getShare)
+	mux.HandleFunc("DELETE /v1/shares/{id}", srv.authed(srv.deleteShare))
+	mux.HandleFunc("GET /s/{id}", viewerFile("text/html; charset=utf-8", viewerHTML))
+	mux.HandleFunc("GET /s/assets/share.js", viewerFile("text/javascript; charset=utf-8", viewerJS))
+	mux.HandleFunc("GET /s/assets/share.css", viewerFile("text/css; charset=utf-8", viewerCSS))
 	return cors(mux)
 }
 

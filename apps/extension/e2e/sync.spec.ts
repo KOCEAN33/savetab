@@ -49,3 +49,33 @@ test('a device that joins after a snapshot reads the list from it', async ({ fir
   await join(second, server, dataKey, 'second');
   await expectTabs(second, ['Page old']);
 });
+
+test('a shared group opens as a web page until sharing stops', async ({ first, server, dataKey }) => {
+  await join(first, server, dataKey, 'first');
+  await openPages(first.context, ['a', 'b']);
+  await sendWindow(first.worker);
+  const { list, context } = first;
+  await expect(list.locator('.tab-link')).toHaveText(['Page a', 'Page b']);
+  const stored = await list.locator('.tab-link').evaluateAll((links) => links.map((a) => (a as HTMLAnchorElement).href));
+
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await list.bringToFront();
+  await list.getByRole('button', { name: 'More…' }).click();
+  await list.getByRole('menuitem', { name: 'Share as a web page' }).click();
+  await expect(list.locator('.group-head .meta')).toContainText('Shared until');
+  const url = await list.evaluate(() => navigator.clipboard.readText());
+  expect(url).toMatch(new RegExp(`^${server}/s/[0-9a-f-]{36}#[A-Za-z0-9_-]{43}$`));
+
+  const shared = await context.newPage();
+  await shared.goto(url);
+  await expect(shared.locator('a.link')).toHaveText(['Page a', 'Page b']);
+  expect(await shared.locator('a.link').evaluateAll((links) => links.map((a) => (a as HTMLAnchorElement).href))).toEqual(stored);
+
+  await list.bringToFront();
+  await list.getByRole('button', { name: 'More…' }).click();
+  await list.getByRole('menuitem', { name: 'Stop sharing' }).click();
+  await expect(list.locator('.group-head .meta')).not.toContainText('Shared until');
+  await shared.reload();
+  await expect(shared.locator('p.message')).toHaveText('This shared page does not exist or has expired.');
+  await expect(shared.locator('a.link')).toHaveCount(0);
+});

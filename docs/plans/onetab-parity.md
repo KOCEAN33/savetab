@@ -191,13 +191,14 @@ Ops are end-to-end encrypted. The server stores ciphertext and never sees an ite
 - A new device gets the data key in one of two ways. The user enters the recovery key, or the new device pairs with a device already signed in.
 - The first build of pairing has the user start it by hand and check the code. A later build starts the exchange by itself once the new device logs in. The signed-in device still asks its user to approve, since the server relays the exchange and could otherwise add a device of its own.
 - The server keeps an append-only log and never merges. Clients decrypt and merge. A pull returns each op's receive time, which the skew rule compares against. A device whose own clock runs more than `MAX_SKEW_MS` ahead of the server's does not push, since every other device would skip its ops.
-- A shared web page uses its own random key in the URL fragment.
+- A shared web page uses its own random key in the URL fragment. The page is a copy taken when the user shares: later edits to the list do not change it.
 
 Formats:
 
 - Op blob: `0x01 | nonce (12 bytes) | AES-256-GCM ciphertext and tag`. The plaintext is the op as UTF-8 JSON. AAD is `savetab-op-v1|<user_id>|<op_id>`. The item id stays inside the ciphertext: a link id is a non-cryptographic hash of its URL, so a plaintext item id would let the server test URLs against it.
 - Every HKDF here is HKDF-SHA256 with an empty salt and a 32-byte output unless stated.
 - Snapshot blob: `0x01 | nonce (12 bytes) | AES-256-GCM ciphertext and tag`, under the data key. The plaintext is the JSON array of every item record the device holds, each with its field clocks, purged records included. AAD is `savetab-snapshot-v1|<user_id>|<seq>`, so the server cannot hand out an older snapshot under a newer `seq`.
+- Share blob: `0x01 | nonce (12 bytes) | AES-256-GCM ciphertext and tag`, under a random 32-byte key made for that share. AAD is `savetab-share-v1`. The plaintext is UTF-8 JSON `{ v: 1, title, notes, items }`, the shared folder or group. An item is `{ kind: 'group', title, notes, tabs: [{ url, title, notes }] }` or `{ kind: 'folder', title, notes, items }`. A shared group is a root with that one group in `items` and empty `notes`. A title is the text the list shows, so a group with no title carries its tab count label. The share URL is `<server>/s/<share id>#<key as unpadded base64url>`.
 - Recovery key: 32 random bytes, shown as Crockford base32 in 13 groups of 4, the last character carrying one bit. Reading it ignores case, hyphens, and spaces, and takes O as 0 and I or L as 1. The wrapping key is HKDF of it with info `savetab-wrap-v1`. Wrapped data key: `0x01 | nonce | AES-256-GCM(data key)`, AAD `savetab-wrap-v1|<user_id>`.
 - Pairing: both devices make an ephemeral ECDH P-256 key pair. The new device first sends `SHA-256(its public key)`, the signed-in device then sends its public key, and the new device then reveals its public key, which the signed-in device checks against the hash. A public key travels as the uncompressed point, 65 bytes, and the shared secret is the 32-byte ECDH output. The 6-digit code is 4 bytes of HKDF of the shared secret with info `savetab-pair-code-v1 | signed-in device's public key | new device's public key`, read as a big-endian integer mod 1,000,000. Without the hash sent first, the server could try key pairs until the codes match. After the user confirms the code on both, the signed-in device sends the data key as `0x01 | nonce | AES-256-GCM(data key)` with the key HKDF(shared secret, info `savetab-pair-key-v1`) and AAD `savetab-pair-key-v1|<user_id>`. A pairing expires after 5 minutes.
 
@@ -213,7 +214,7 @@ ops(user_id, seq bigint, op_id uuid, device_id, ciphertext bytea, received_at ti
 key_wraps(user_id PK, wrapped_key bytea, created_at)
 snapshots(user_id PK, seq bigint, ciphertext bytea, created_at)
 pairings(id uuid PK, user_id, new_device_id, commitment bytea, new_public bytea, old_public bytea, wrapped_key bytea, expires_at)
-shares(id uuid PK, user_id, ciphertext bytea, created_at)
+shares(id uuid PK, user_id, ciphertext bytea, created_at, expires_at)
 ```
 
 A push takes `users.next_seq` under a row lock, so one user's ops commit in `seq` order and a pull by `seq` never skips one.
@@ -232,6 +233,11 @@ HTTP API, JSON, under `/v1`, with `Authorization: Bearer <access token>`:
   - An expired pairing and another user's pairing answer 404 `not_found`.
 - `GET /v1/devices` returns `{ devices: [{ id, name, createdAt, current }] }`, the user's devices that are not revoked, oldest first. `createdAt` is Unix milliseconds. `current` is true for the caller's device.
 - `DELETE /v1/devices/{id}` revokes a device of the user and answers 204. A revoked device's access and refresh tokens answer 401 from then on. A device revokes itself to sign out. An unknown id, an already revoked device, and another user's device answer 404 `not_found`.
+- Shares. A share lives 30 days *(savetab choice)*.
+  - `POST /v1/shares` `{ data }` (base64 share blob) returns `{ id, expiresAt }` with 201. `id` is a random UUID and `expiresAt` is Unix milliseconds. Limit: 8 MiB per request. It also deletes every expired share.
+  - `GET /v1/shares/{id}`, with no bearer token, returns `{ data, expiresAt }`. An unknown id and an expired share answer 404 `not_found`.
+  - `DELETE /v1/shares/{id}` answers 204. An unknown id, an expired share, and another user's share answer 404 `not_found`.
+  - `GET /s/{id}`, with no bearer token, answers the viewer page, the same HTML for every id, with its script at `GET /s/assets/share.js` and its style at `GET /s/assets/share.css`. The script reads the id from the path and the key from the fragment, fetches `/v1/shares/{id}`, opens the blob with WebCrypto, and builds the page with DOM text nodes, never `innerHTML`. A link gets an `href` only when its URL is `http:` or `https:`. A missing share, a missing key, and a blob that does not open each show a message in place of the list. The three answers carry `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, `Referrer-Policy: no-referrer`, and `X-Robots-Tag: noindex`.
 - A write with no body to return answers 204. An error answers `{ error: <code> }`.
 - Every answer carries `Access-Control-Allow-Origin: *`, and an `OPTIONS` request answers 204 with the allowed methods and headers, so an extension calls the API from its own origin without a host permission. A request carries a bearer token and never a cookie.
 - Login, with no bearer token. The server talks to one issuer, set by `OIDC_ISSUER` *(savetab choice)*. Anyone the issuer logs in gets an account.
@@ -257,7 +263,8 @@ Steps run in this order. Each step is done when its check passes plus the five c
    - Check: e2e for first-device setup and for a join by recovery key.
 7. **Snapshots from the client.** A device uploads a snapshot when the log passes 5,000 ops since the last one *(savetab choice)*: at the end of a cycle that pushed, when its pull cursor is 5,000 or more above the `seq` of the last snapshot it uploaded or read. The snapshot's `seq` is the cursor. A 409 `stale_snapshot` counts as uploaded. A device whose pull answers 409 `snapshot_required` reads the snapshot, merges each field under its clock without queueing it for upload, moves its cursor to the snapshot's `seq`, and pulls on. Its own outbox stays and is pushed after.
    - Check: e2e with two browser profiles: the test pushes 5,000 ops as a third device, the first profile runs a cycle and `GET /v1/snapshot` then answers a `seq` of 5,000 or more, and the second profile joins after that and shows the tabs. Unit tests for the 5,000 threshold, a local tab kept and uploaded by a device that reads a snapshot, and a snapshot read queueing no upload.
-8. **Share as a web page.**
+8. **Share as a web page.** The menu of a folder or group has "Share as a web page" on a device with an account. It uploads the share, stores `share: { id, key, expiresAt }` on the record as a synced field, and copies the URL. While that share has not expired, the item's meta line shows "Shared until {date}" and the menu has "Copy share link" and "Stop sharing" instead. Stop sharing deletes the share on the server, taking 404 as deleted, and sets `share` to null. The key in the record is the base64url text of the URL. The viewer page's text is English.
+   - Check: e2e that shares a group from the list page, opens the copied URL in a tab with no extension context, and reads the group's link titles and URLs there, then stops sharing and reads the page's "not found" message after a reload. Go tests for a share read back without a token, an expired share answered 404 and deleted by the next `POST`, a delete by another user answered 404, and the viewer's three answers with their headers. Core tests for the share blob and for the content of a folder with a sub-folder.
 9. **Deployment.** Built ahead of steps 6 to 8: the container image, the homelab database, and the tailnet URL are in `apps/server/README.md` "Deployment". A public URL waits on the owner.
 
 ### P5: more clients

@@ -24,9 +24,18 @@ export interface CommonFields {
   collapsed: boolean;
 }
 
+/** A shared web page of a folder or group. `key` is the base64url text of the share URL's fragment. */
+export interface Share {
+  id: string;
+  key: string;
+  expiresAt: number;
+}
+
 export interface FolderFields extends CommonFields {
   kind: 'folder';
   pinnedTop: boolean;
+  /** Absent on records written before sharing existed. */
+  share?: Share | null;
 }
 
 /** Chrome's tab group colors. */
@@ -47,6 +56,8 @@ export interface GroupFields extends CommonFields {
   openAs: OpenAs;
   /** A restore choice from the group's menu. 'default' follows the restoreGroupTarget setting. */
   restoreTarget: RestoreTarget;
+  /** Absent on records written before sharing existed. */
+  share?: Share | null;
 }
 
 /** Groups stored before these fields existed read as these values. */
@@ -146,8 +157,8 @@ const COMMON_SYNC = [
 ];
 
 const SYNC_FIELDS: Record<Kind, ReadonlySet<string>> = {
-  folder: new Set([...COMMON_SYNC, 'pinnedTop']),
-  group: new Set([...COMMON_SYNC, 'pinnedTop', 'locked', 'openAs', 'restoreTarget']),
+  folder: new Set([...COMMON_SYNC, 'pinnedTop', 'share']),
+  group: new Set([...COMMON_SYNC, 'pinnedTop', 'locked', 'openAs', 'restoreTarget', 'share']),
   tab: new Set([...COMMON_SYNC, 'url', 'favIconUrl', 'pinOnOpen']),
   link: new Set(['url', 'title', 'notes', 'purged']),
   settings: new Set([

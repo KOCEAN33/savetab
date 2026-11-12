@@ -11,6 +11,7 @@
   } from '@savetab/core';
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { clickIntent, restoreGroup, restoreTab } from '@/lib/restore';
+  import { activeShare } from '@/lib/share';
   import { act, editing, keys, menu, toggleMenu } from '@/lib/ui.svelte';
   import { shortDate, t, tn } from '@/lib/i18n';
   import Icon from './Icon.svelte';
@@ -39,9 +40,16 @@
 
   const count = $derived(view.tabs(group.id).length);
   const label = $derived(group.title || tn('tabCount', count));
+  const shared = $derived(activeShare(group));
   const created = $derived(t('createdAt', { date: new Date(group.createdAt).toLocaleString() }));
   const meta = $derived(
-    [group.title && tn('tabCount', count), shortDate(group.createdAt), group.pinnedTop && t('pinned'), group.locked && t('locked')]
+    [
+      group.title && tn('tabCount', count),
+      shortDate(group.createdAt),
+      group.pinnedTop && t('pinned'),
+      group.locked && t('locked'),
+      shared && t('sharedUntil', { date: shortDate(shared.expiresAt) }),
+    ]
       .filter(Boolean)
       .join(' · '),
   );

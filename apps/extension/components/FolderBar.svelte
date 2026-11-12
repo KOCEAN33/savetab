@@ -1,8 +1,9 @@
 <script lang="ts">
   import { dndzone, TRIGGERS, type DndEvent } from 'svelte-dnd-action';
   import { moveItems, TOP, type Folder, type Id, type Item, type ListView } from '@savetab/core';
+  import { activeShare } from '@/lib/share';
   import { act, editing, menu, toggleMenu } from '@/lib/ui.svelte';
-  import { t } from '@/lib/i18n';
+  import { shortDate, t } from '@/lib/i18n';
   import { DROP_TARGET } from '@/lib/motion';
   import Icon from './Icon.svelte';
   import NotesField from './NotesField.svelte';
@@ -21,6 +22,7 @@
   } = $props();
 
   const open = $derived(current ? (view.get(current) as Folder | undefined) : undefined);
+  const shared = $derived(open && activeShare(open));
   const trail = $derived(open ? [...view.path(open.id), open] : []);
   const inside = $derived(view.children(current).filter((i) => i.kind === 'folder'));
 
@@ -74,6 +76,7 @@
       aria-expanded={menu.id === open.id}
       onclick={(e) => toggleMenu(open.id, e.currentTarget)}><Icon name="more" /></button
     >
+    {#if shared}<span class="meta">{t('sharedUntil', { date: shortDate(shared.expiresAt) })}</span>{/if}
   {/if}
   {#if inside.length > 0}<span class="chip-gap"></span>{/if}
   {#each inside as f (f.id)}
