@@ -183,9 +183,9 @@ Multi-user accounts, device registration, op push and pull with HLC merge, Postg
 
 Login is OIDC. The server is the relying party for any configured issuer, and maps `(issuer, sub)` to a user in its own table so other login methods can join later. The extension runs authorization code with PKCE through `browser.identity.launchWebAuthFlow`. The server then issues its own per-device access and refresh tokens. IdP tokens never reach the extension.
 
-Open before starting: whether ops are end-to-end encrypted. The E2E design under consideration:
-- A random AES-256-GCM data key, made on the first device, encrypts every op. The server stores only wrapped copies.
-- A new device gets the data key through device pairing (ECDH P-256 with a 6-digit confirmation code) or a one-time random recovery key.
+Ops are end-to-end encrypted:
+- A random AES-256-GCM data key, made on the first device, encrypts every op. The server stores only a copy wrapped by the recovery key.
+- The first device makes a random recovery key and shows it to the user once, with a warning that the data cannot be recovered without it. The server never sees it. A new device gets the data key when the user enters the recovery key.
 - The server keeps an append-only log `ops(user_id, seq, device_id, ciphertext, created_at)` and never merges. Clients decrypt and merge. AAD binds `user_id` and `item_id`. Clients upload encrypted snapshots, and the server drops ops before the snapshot's `seq`.
 - A shared web page uses its own random key in the URL fragment.
 
