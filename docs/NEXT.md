@@ -2,11 +2,11 @@
 
 ## Goal
 
-Put the built sync server (plan phase P4) to use: every step of `docs/plans/onetab-parity.md` `### P4: sync server` is built and passes its check, and the deployed server has not caught up.
+Put the built sync server (plan phase P4) to use: every step of `docs/plans/onetab-parity.md` `### P4: sync server` is built, passes its check, and is deployed.
 
 ## Start
 
-Deploy the current server and run the first real login. It is first because the deployed image is older than `/v1/devices` and `/v1/shares`, which the sync page and "Share as a web page" call, and no login has run against the deployed server and Zitadel. A push to `main` builds the image, and the deploy is a commit in homelab-workloads (`apps/server/README.md` "Deployment"). The server applies migration `0004_shares.sql` at start. Done when the sync page of an installed extension signs in at `https://savetab.lab.hiriri.com`, a second device joins and shows the first one's tabs, and a shared group's URL opens on the tailnet. The login needs the owner at the browser.
+Run the first real login against the deployed server. The deployed image is `e750e86a696f` (homelab-workloads `8a44a67`), which serves `/v1/devices`, `/v1/shares`, and the viewer at `/s/`, and no login has run against it and Zitadel yet. Done when the sync page of an installed extension signs in at `https://savetab.lab.hiriri.com`, a second device joins and shows the first one's tabs, and a shared group's URL opens on the tailnet. The login needs the owner at the browser.
 
 Orders from the owner that bind P4:
 
