@@ -79,6 +79,17 @@ describe('removeDuplicates', () => {
     expect(names(s, g)).toEqual(['a', 'b', 'c']);
   });
 
+  it('with no scope, keeps one copy of each URL across the whole list', async () => {
+    const s = new MemoryStore('dev1');
+    await store(s, ['a', 'c']);
+    await store(s, ['b', 'a']);
+    const f = await s.transact((tx) => createFolder(tx, null, 'F'));
+    const inF = await store(s, ['b']);
+    await s.transact((tx) => moveItems(tx, [inF], f, null));
+    expect(await s.transact((tx) => removeDuplicates(tx, null))).toBe(2);
+    expect(new ListView(s.all()).tabCount(null)).toBe(3);
+  });
+
   it('skips tabs in a locked group', async () => {
     const s = new MemoryStore('dev1');
     const locked = await store(s, ['a', 'a']);
