@@ -15,6 +15,7 @@ Orders from the owner that bind P4:
 
 ## Next steps
 
+- Check the first CI run that includes the server. `.github/workflows/ci.yml` gained a Postgres service container and `TEST_DATABASE_URL`, and no run has exercised them. It has no `setup-go` step and relies on the runner's Go. Done when the `checks` job passes on `main`, read with `gh run list --repo KOCEAN33/savetab`.
 - Measure the list page's first open against OneTab. The owner asked for a first open faster than OneTab, and no OneTab number exists. savetab paints its first groups about 130 ms after navigation with 3,000 stored tabs in 150 groups, measured in Playwright Chromium from navigation start to the frame after the first `.group` appears. Done when the same measurement on OneTab 2.24 with the same 3,000 links is recorded next to it, and savetab's number is the lower one.
 - If savetab is not faster, cut the read: the page loads every record with `db.items.toArray()` in `apps/extension/entrypoints/onetab/App.svelte` before it draws. Done when the measurement above beats OneTab and the five commands in `CLAUDE.md` pass.
 
