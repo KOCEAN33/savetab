@@ -1,4 +1,4 @@
-import type { Op } from './model';
+import type { ItemRecord, Op } from './model';
 
 /**
  * Client-side encryption for sync, on WebCrypto. The formats are in docs/plans/onetab-parity.md
@@ -129,6 +129,18 @@ export function sealOp(key: CryptoKey, userId: string, op: Op): Promise<Bytes> {
 /** Opens a pulled op. `opId` is the id the server lists the blob under, which the blob must have been sealed for. */
 export async function openOp(key: CryptoKey, userId: string, opId: string, blob: Uint8Array): Promise<Op> {
   return JSON.parse(new TextDecoder().decode(await open(key, opAad(userId, opId), blob))) as Op;
+}
+
+const snapshotAad = (userId: string, seq: number) => `savetab-snapshot-v1|${userId}|${seq}`;
+
+/** Seals every record a device holds as the snapshot of the log up to `seq`. */
+export function sealSnapshot(key: CryptoKey, userId: string, seq: number, records: ItemRecord[]): Promise<Bytes> {
+  return seal(key, snapshotAad(userId, seq), utf8(JSON.stringify(records)));
+}
+
+/** Opens a snapshot. `seq` is the one the server lists the blob under, which the blob must have been sealed for. */
+export async function openSnapshot(key: CryptoKey, userId: string, seq: number, blob: Uint8Array): Promise<ItemRecord[]> {
+  return JSON.parse(new TextDecoder().decode(await open(key, snapshotAad(userId, seq), blob))) as ItemRecord[];
 }
 
 /** One side's key pair for a pairing. `publicKey` is the uncompressed point, 65 bytes. */

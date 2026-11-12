@@ -1,10 +1,14 @@
-import { importDataKey, MAX_SKEW_MS, openOp, sealOp, type RemoteOp } from '@savetab/core';
+import { importDataKey, MAX_SKEW_MS, openOp, openSnapshot, sealOp, sealSnapshot, type RemoteOp } from '@savetab/core';
 import {
   dropOutbox,
   mergePulled,
+  mergeSnapshot,
   outboxHead,
+  saveSnapshotSeq,
   saveSyncStatus,
   saveTokens,
+  snapshotSeq,
+  snapshotSource,
   syncAccount,
   syncCursor,
   type SyncAccount,
@@ -13,6 +17,8 @@ import {
 /** The server takes 500 ops and 8 MiB per push (plan P4, "HTTP API"). The byte cap leaves room for the JSON around the blobs. */
 const PUSH_OPS = 500;
 const PUSH_BYTES = 6 << 20;
+/** A device uploads a snapshot once it has pulled this many ops past the last one (plan P4 step 7). */
+const SNAPSHOT_OPS = 5000;
 
 export const SYNC_ALARM = 'sync';
 
@@ -83,11 +89,30 @@ export function client(login: Login) {
 
 type Call = ReturnType<typeof client>;
 
-/** Pull and merge every op after the cursor. Returns the server's time. */
+type Page = { ops: PulledOp[]; more: boolean; serverTime: number };
+
+/** Read the server's snapshot, merge it, and return its `seq`, where the pull goes on. */
+async function readSnapshot(call: Call, account: SyncAccount, key: CryptoKey): Promise<number> {
+  const { seq, data } = await call<{ seq: number; data: string }>('/v1/snapshot');
+  await mergeSnapshot(await openSnapshot(key, account.userId, seq, fromBase64(data)), seq);
+  return seq;
+}
+
+/**
+ * Pull and merge every op after the cursor. Returns the server's time. When the server has
+ * dropped ops above the cursor, the snapshot that covers them is merged first.
+ */
 async function pull(call: Call, account: SyncAccount, key: CryptoKey): Promise<number> {
   let after = await syncCursor();
   for (;;) {
-    const page = await call<{ ops: PulledOp[]; more: boolean; serverTime: number }>(`/v1/ops?after=${after}`);
+    let page: Page;
+    try {
+      page = await call<Page>(`/v1/ops?after=${after}`);
+    } catch (err) {
+      if (!(err instanceof SyncError && err.code === 'snapshot_required')) throw err;
+      after = await readSnapshot(call, account, key);
+      continue;
+    }
     const remote: RemoteOp[] = [];
     for (const row of page.ops) {
       if (row.deviceId === account.deviceId) continue;
@@ -122,7 +147,22 @@ async function push(call: Call, account: SyncAccount, key: CryptoKey): Promise<v
   }
 }
 
-/** One sync cycle: pull and merge, then push the outbox. It rejects when a step fails, and the next cycle repeats that step. */
+// Ceiling: a snapshot is one JSON body of every record, and the server takes 64 MiB. Each device
+// also counts from the last snapshot it saw itself, so two devices can upload the same one.
+async function uploadSnapshot(call: Call, account: SyncAccount, key: CryptoKey): Promise<void> {
+  if ((await syncCursor()) - (await snapshotSeq()) < SNAPSHOT_OPS) return;
+  const { seq, records } = await snapshotSource();
+  const data = toBase64(await sealSnapshot(key, account.userId, seq, records));
+  try {
+    await call('/v1/snapshot', { method: 'PUT', body: JSON.stringify({ seq, data }) });
+  } catch (err) {
+    // Another device's snapshot already covers these ops.
+    if (!(err instanceof SyncError && err.code === 'stale_snapshot')) throw err;
+  }
+  await saveSnapshotSeq(seq);
+}
+
+/** One sync cycle: pull and merge, push the outbox, then upload a snapshot when one is due. It rejects when a step fails, and the next cycle repeats that step. */
 export async function syncOnce(): Promise<void> {
   const account = await syncAccount();
   if (!account) return;
@@ -132,6 +172,7 @@ export async function syncOnce(): Promise<void> {
   // Every device skips an op whose clock runs this far ahead of the server's (`mergeRemote`).
   if (Date.now() > serverTime + MAX_SKEW_MS) return;
   await push(call, account, key);
+  await uploadSnapshot(call, account, key);
 }
 
 let running: Promise<void> | undefined;

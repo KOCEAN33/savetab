@@ -24,7 +24,12 @@ export async function mergeRemote(tx: Tx, remote: RemoteOp[]): Promise<void> {
     await tx.merge(op);
     touched.add(op.itemId);
   }
-  for (const id of touched) {
+  await rehomeMerged(tx, touched);
+}
+
+/** Re-home every live item a merge left under a purged parent. `ids` are the items the merge wrote. */
+export async function rehomeMerged(tx: Tx, ids: Iterable<Id>): Promise<void> {
+  for (const id of ids) {
     const rec = await tx.get(id);
     if (!rec) continue;
     if (rec.purged === true) for (const child of await tx.children(id)) await rehome(tx, child);

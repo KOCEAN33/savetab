@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie';
 import {
   applyOp,
   EXCLUDE_PREFIX,
+  mergeRecords,
   mergeRemote,
   restoreSnapshot,
   SETTINGS_ID,
@@ -83,43 +84,49 @@ class SavetabDb extends Dexie {
 
 export const db = new SavetabDb();
 
-export const source: ItemSource = {
-  get: (id) => db.items.get(id),
-  children: (parentId) =>
-    db.items
-      .where('parentKey')
-      .equals(parentId ?? '')
-      .toArray(),
-  byUrl: (url) => db.items.where('url').equals(url).toArray(),
-  trashed: () =>
-    db.items
-      .where('trashedAt')
-      .above(0)
-      .filter((r) => r.purged !== true)
-      .toArray(),
-};
-
-async function deviceId(): Promise<string> {
-  const row = await db.meta.get('deviceId');
-  if (typeof row?.value === 'string') return row.value;
-  const id = uuidv7();
-  await db.meta.put({ key: 'deviceId', value: id });
-  return id;
+function sourceOf(items: Table<StoredRecord, string>): ItemSource {
+  return {
+    get: (id) => items.get(id),
+    children: (parentId) =>
+      items
+        .where('parentKey')
+        .equals(parentId ?? '')
+        .toArray(),
+    byUrl: (url) => items.where('url').equals(url).toArray(),
+    trashed: () =>
+      items
+        .where('trashedAt')
+        .above(0)
+        .filter((r) => r.purged !== true)
+        .toArray(),
+  };
 }
+
+export const source = sourceOf(db.items);
 
 /**
  * Run one mutation atomically: items, outbox, and the clock commit together or not at all.
  * The clock lives in the database so the background worker and open pages never reuse a value.
+ *
+ * Every read and write here goes through the transaction's own tables. Dexie finds the current
+ * transaction of `db.items` by a zone that it drops after about 100 awaits with no IndexedDB
+ * call, and a mutation that writes one record many times awaits that often.
  */
 export function transact<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
-  return db.transaction('rw', db.items, db.outbox, db.meta, async () => {
-    const device = await deviceId();
-    const clock = ((await db.meta.get('hlc'))?.value as Hlc | undefined) ?? null;
-    const tx = new Tx(source, clock, device);
+  return db.transaction('rw', db.items, db.outbox, db.meta, async (trans) => {
+    const items = trans.table<StoredRecord, string>('items');
+    const meta = trans.table<{ key: string; value: unknown }, string>('meta');
+    let device = (await meta.get('deviceId'))?.value as string | undefined;
+    if (device === undefined) {
+      device = uuidv7();
+      await meta.put({ key: 'deviceId', value: device });
+    }
+    const clock = ((await meta.get('hlc'))?.value as Hlc | undefined) ?? null;
+    const tx = new Tx(sourceOf(items), clock, device);
     const result = await fn(tx);
-    await db.items.bulkPut(tx.changed().map(stored));
-    await db.outbox.bulkAdd(tx.ops.map((op) => ({ op })));
-    await db.meta.put({ key: 'hlc', value: tx.clock });
+    await items.bulkPut(tx.changed().map(stored));
+    await trans.table<{ seq?: number; op: Op }, number>('outbox').bulkAdd(tx.ops.map((op) => ({ op })));
+    await meta.put({ key: 'hlc', value: tx.clock });
     return result;
   });
 }
@@ -154,13 +161,13 @@ export function joinSync(account: SyncAccount): Promise<void> {
       { key: 'sync', value: account },
       { key: 'syncCursor', value: 0 },
     ]);
-    await db.meta.delete('syncStatus');
+    await db.meta.bulkDelete(['syncStatus', 'snapshotSeq']);
   });
 }
 
 /** Leave the account. The list stays, and the outbox goes on recording for a later join. */
 export async function leaveSync(): Promise<void> {
-  await db.meta.bulkDelete(['sync', 'syncCursor', 'syncStatus']);
+  await db.meta.bulkDelete(['sync', 'syncCursor', 'syncStatus', 'snapshotSeq']);
 }
 
 /** How the last sync cycle ended. `signedOut` means the server refused this device's tokens. */
@@ -200,6 +207,34 @@ export function mergePulled(remote: RemoteOp[], cursor: number): Promise<void> {
   return db.transaction('rw', db.items, db.outbox, db.meta, async () => {
     await transact((tx) => mergeRemote(tx, remote));
     await db.meta.put({ key: 'syncCursor', value: cursor });
+  });
+}
+
+/** The `seq` of the last snapshot this device uploaded or read. */
+export async function snapshotSeq(): Promise<number> {
+  return ((await db.meta.get('snapshotSeq'))?.value as number | undefined) ?? 0;
+}
+
+export async function saveSnapshotSeq(seq: number): Promise<void> {
+  await db.meta.put({ key: 'snapshotSeq', value: seq });
+}
+
+/** Every record with the cursor it was read at: the content of a snapshot of the log up to `seq`. */
+export function snapshotSource(): Promise<{ seq: number; records: ItemRecord[] }> {
+  return db.transaction('r', db.items, db.meta, async () => ({
+    seq: await syncCursor(),
+    records: (await db.items.toArray()).map(({ parentKey: _key, ...record }) => record),
+  }));
+}
+
+/** Merge a snapshot read from the server and move the cursor to its `seq` in one transaction. */
+export function mergeSnapshot(records: ItemRecord[], seq: number): Promise<void> {
+  return db.transaction('rw', db.items, db.outbox, db.meta, async () => {
+    await transact((tx) => mergeRecords(tx, records));
+    await db.meta.bulkPut([
+      { key: 'syncCursor', value: seq },
+      { key: 'snapshotSeq', value: seq },
+    ]);
   });
 }
 

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { openPages, sendWindow } from './fixtures';
 import { test as base, expect, expectTabs, type Profile } from './sync-fixtures';
-import { logIn } from './sync-server';
+import { logIn, pushOps, snapshotSeq } from './sync-server';
 
 const test = base.extend<{ dataKey: number[] }>({
   // oxlint-disable-next-line no-empty-pattern
@@ -36,4 +36,16 @@ test('a device that joins uploads the tabs it already holds', async ({ first, se
   await join(second, server, dataKey, 'second');
 
   await expectTabs(first, ['Page mine']);
+});
+
+test('a device that joins after a snapshot reads the list from it', async ({ first, second, server, dataKey }) => {
+  await join(first, server, dataKey, 'first');
+  const third = await logIn(server, 'third');
+  await pushOps(third, dataKey, 'Page old', 5000);
+
+  await expectTabs(first, ['Page old']);
+  await expect.poll(() => snapshotSeq(third)).toBeGreaterThanOrEqual(5000);
+
+  await join(second, server, dataKey, 'second');
+  await expectTabs(second, ['Page old']);
 });

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { logIn } from '../e2e/sync-server';
+import { logIn, pushOps, snapshotSeq } from '../e2e/sync-server';
 import { EXT, evaluate, expect, onetabPage, openPages, sendWindow, texts, type Firefox } from './fixtures';
 import { expectTabs, test as base } from './sync-fixtures';
 
@@ -45,4 +45,18 @@ test('a device that joins uploads the tabs it already holds', async ({ ff: first
   await join(second, server, dataKey, 'second');
 
   await expectTabs(first, ['Page mine']);
+});
+
+test('a device that joins after a snapshot reads the list from it', async ({ ff: first, second, server, dataKey }) => {
+  await join(first, server, dataKey, 'first');
+  await first.driver.get(`${EXT}/onetab.html`);
+  const third = await logIn(server, 'third');
+  await pushOps(third, dataKey, 'Page old', 5000);
+
+  await expectTabs(first, ['Page old']);
+  await expect.poll(() => snapshotSeq(third)).toBeGreaterThanOrEqual(5000);
+
+  await join(second, server, dataKey, 'second');
+  await second.driver.get(`${EXT}/onetab.html`);
+  await expectTabs(second, ['Page old']);
 });

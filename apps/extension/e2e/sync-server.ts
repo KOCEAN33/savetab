@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
+import { defaultSettings, importDataKey, MemoryStore, sealOp, storeTabs, updateItem } from '@savetab/core';
 
 const SERVER_SCRIPT = path.resolve(import.meta.dirname, '../../server/scripts/e2e-server.sh');
 /** Where a login ends. No browser opens it here: the test reads the code from the redirect. */
@@ -58,4 +59,38 @@ export async function logIn(server: string, deviceName: string): Promise<Login> 
   if (!res.ok) throw new Error(`token: status ${res.status}`);
   const { accessToken, refreshToken, userId, deviceId } = (await res.json()) as Omit<Login, 'serverUrl'>;
   return { serverUrl: server, userId, deviceId, accessToken, refreshToken };
+}
+
+/**
+ * Push `count` ops as the device of `login`: one group with one tab titled `title`, then renames
+ * of that group.
+ */
+export async function pushOps(login: Login, dataKey: number[], title: string, count: number): Promise<void> {
+  const store = new MemoryStore('e2e');
+  const tab = { url: 'https://pushed.example/', title, favIconUrl: '' };
+  const group = (await store.transact((tx) => storeTabs(tx, [tab], { ...defaultSettings, id: 'settings' })))!;
+  while (store.log.length < count) await store.transact((tx) => updateItem(tx, group, { title: `n${store.log.length}` }));
+  const key = await importDataKey(new Uint8Array(dataKey));
+  for (let at = 0; at < count; at += 500) {
+    const ops = await Promise.all(
+      store.log.slice(at, at + 500).map(async (op) => ({
+        id: op.opId,
+        data: Buffer.from(await sealOp(key, login.userId, op)).toString('base64'),
+      })),
+    );
+    const res = await fetch(`${login.serverUrl}/v1/ops`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${login.accessToken}` },
+      body: JSON.stringify({ ops }),
+    });
+    if (!res.ok) throw new Error(`push: status ${res.status}`);
+  }
+}
+
+/** The `seq` of the user's snapshot on the server, or 0 when it holds none. */
+export async function snapshotSeq(login: Login): Promise<number> {
+  const res = await fetch(`${login.serverUrl}/v1/snapshot`, { headers: { authorization: `Bearer ${login.accessToken}` } });
+  if (res.status === 404) return 0;
+  if (!res.ok) throw new Error(`snapshot: status ${res.status}`);
+  return ((await res.json()) as { seq: number }).seq;
 }

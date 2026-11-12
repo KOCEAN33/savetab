@@ -7,14 +7,17 @@ import {
   makePairingKeys,
   openOp,
   openPairedKey,
+  openSnapshot,
   pairingCode,
   pairingCommitment,
   pairingSecret,
   randomKey,
   sealOp,
   sealPairedKey,
+  sealSnapshot,
   unwrapDataKey,
   wrapDataKey,
+  type ItemRecord,
   type Op,
 } from '../src';
 
@@ -117,6 +120,34 @@ describe('op blob', () => {
     await expect(openOp(key, OTHER_USER, OP.opId, OP_BLOB)).rejects.toThrow(CryptoError);
     await expect(openOp(key, USER, OP.itemId, OP_BLOB)).rejects.toThrow(CryptoError);
     await expect(openOp(await importDataKey(seq(0x01, 32)), USER, OP.opId, OP_BLOB)).rejects.toThrow(CryptoError);
+  });
+});
+
+describe('snapshot blob', () => {
+  const RECORDS: ItemRecord[] = [
+    { id: OP.itemId, kind: 'tab', title: 'Exämple', clocks: { title: OP.hlc } },
+    { id: 'settings', kind: 'settings', urlDisplay: 'full', clocks: { urlDisplay: '1750000000001-0-dev' } },
+  ];
+
+  it('seals the records as JSON under the AAD of the user and the seq', async () => {
+    const key = await importDataKey(DATA_KEY);
+    const blob = await sealSnapshot(key, USER, 5000, RECORDS);
+    expect(blob[0]).toBe(1);
+    const plaintext = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: blob.slice(1, 13), additionalData: new TextEncoder().encode(`savetab-snapshot-v1|${USER}|5000`) },
+      await crypto.subtle.importKey('raw', DATA_KEY, 'AES-GCM', false, ['decrypt']),
+      blob.slice(13),
+    );
+    expect(JSON.parse(new TextDecoder().decode(plaintext))).toEqual(RECORDS);
+    expect(await openSnapshot(key, USER, 5000, blob)).toEqual(RECORDS);
+  });
+
+  it('rejects a blob moved to another seq, another user, or another key', async () => {
+    const key = await importDataKey(DATA_KEY);
+    const blob = await sealSnapshot(key, USER, 5000, RECORDS);
+    await expect(openSnapshot(key, USER, 5001, blob)).rejects.toThrow(CryptoError);
+    await expect(openSnapshot(key, OTHER_USER, 5000, blob)).rejects.toThrow(CryptoError);
+    await expect(openSnapshot(await importDataKey(seq(0x01, 32)), USER, 5000, blob)).rejects.toThrow(CryptoError);
   });
 });
 

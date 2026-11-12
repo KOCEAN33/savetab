@@ -7,9 +7,12 @@ import {
   liveChildren,
   MAX_SKEW_MS,
   MemoryStore,
+  mergeRecords,
   openOp,
+  openSnapshot,
   randomKey,
   sealOp,
+  sealSnapshot,
   storeTabs,
   updateItem,
   type ItemSource,
@@ -39,12 +42,16 @@ class FakeServer {
   refreshToken = 'refresh-1';
   pageSize = 500;
   pushStatus = 200;
+  lastSeq = 0;
+  snapshot?: { seq: number; data: string };
+  /** Answers every snapshot upload as if another device's newer snapshot landed first. */
+  snapshotRace = false;
   now = () => Date.now();
 
   receive(deviceId: string, id: string, data: Uint8Array): void {
     if (this.log.some((row) => row.id === id)) return;
     this.log.push({
-      seq: this.log.length + 1,
+      seq: ++this.lastSeq,
       id,
       deviceId,
       data: Buffer.from(data).toString('base64'),
@@ -77,6 +84,7 @@ class FakeServer {
     }
     if (route === 'GET /v1/ops') {
       const after = Number(url.searchParams.get('after') ?? 0);
+      if (this.snapshot && after < this.snapshot.seq) return Response.json({ error: 'snapshot_required' }, { status: 409 });
       const rest = this.log.filter((row) => row.seq > after);
       return Response.json({
         ops: rest.slice(0, this.pageSize),
@@ -89,8 +97,29 @@ class FakeServer {
       for (const op of JSON.parse(text).ops) this.receive('dev-self', op.id, Buffer.from(op.data, 'base64'));
       return Response.json({ serverTime: this.now() });
     }
+    if (route === 'GET /v1/snapshot') {
+      return this.snapshot ? Response.json(this.snapshot) : Response.json({ error: 'no_snapshot' }, { status: 404 });
+    }
+    if (route === 'PUT /v1/snapshot') {
+      const put = JSON.parse(text) as { seq: number; data: string };
+      if (put.seq > this.lastSeq) return Response.json({ error: 'snapshot_ahead' }, { status: 409 });
+      if (this.snapshotRace || (this.snapshot && this.snapshot.seq > put.seq)) {
+        return Response.json({ error: 'stale_snapshot' }, { status: 409 });
+      }
+      this.takeSnapshot(put);
+      return new Response(null, { status: 204 });
+    }
     return Response.json({ error: 'not_found' }, { status: 404 });
   };
+
+  takeSnapshot(snapshot: { seq: number; data: string }): void {
+    this.snapshot = snapshot;
+    this.log = this.log.filter((row) => row.seq > snapshot.seq);
+  }
+
+  snapshotPuts() {
+    return this.calls.filter((c) => c.call === 'PUT /v1/snapshot');
+  }
 
   pushes() {
     return this.calls.filter((c) => c.call === 'POST /v1/ops');
@@ -242,6 +271,98 @@ describe('sync cycle', () => {
     for (const push of server.pushes()) expect(push.bytes).toBeLessThanOrEqual(8 << 20);
     const notes = (await liveChildren(await replica(), null)).map((g) => (g.notes as string).length);
     expect(notes).toEqual([3 << 20, 3 << 20, 3 << 20]);
+  });
+});
+
+/** Another device of the same user stores one tab, then renames its group until it has pushed `count` ops. */
+async function otherDevicePushes(count: number): Promise<void> {
+  const other = new MemoryStore('other');
+  const g = (await other.transact((tx) => storeTabs(tx, [tab('a')], settings)))!;
+  while (other.log.length < count) await other.transact((tx) => updateItem(tx, g, { title: `n${other.log.length}` }));
+  const sealing = await importDataKey(dataKey);
+  for (const op of other.log) server.receive('dev-other', op.opId, await sealOp(sealing, USER, op));
+}
+
+/** Another device stores tabs, pushes them, and uploads a snapshot that covers its whole log. */
+async function otherDeviceSnapshots(names: string[]): Promise<void> {
+  const other = new MemoryStore('other-snapshot');
+  await other.transact((tx) => storeTabs(tx, names.map(tab), settings));
+  const sealing = await importDataKey(dataKey);
+  for (const op of other.log) server.receive('dev-other', op.opId, await sealOp(sealing, USER, op));
+  const data = await sealSnapshot(sealing, USER, server.lastSeq, other.all());
+  server.takeSnapshot({ seq: server.lastSeq, data: Buffer.from(data).toString('base64') });
+}
+
+describe('snapshots', () => {
+  it('uploads none while the log is 4,999 ops past the last snapshot', async () => {
+    await joinSync(account);
+    await otherDevicePushes(4999);
+    await syncOnce();
+    expect(await db.meta.get('syncCursor')).toMatchObject({ value: 4999 });
+    expect(server.snapshotPuts()).toEqual([]);
+  });
+
+  it('uploads what it holds at 5,000 ops, once, and again 5,000 ops later', async () => {
+    await joinSync(account);
+    await otherDevicePushes(5000);
+    await syncOnce();
+    await syncOnce();
+    expect(server.snapshotPuts().length).toBe(1);
+    expect(server.snapshot?.seq).toBe(5000);
+
+    const key = await importDataKey(dataKey);
+    const reader = new MemoryStore('reader');
+    const records = await openSnapshot(key, USER, 5000, Buffer.from(server.snapshot!.data, 'base64'));
+    await reader.transact((tx) => mergeRecords(tx, records));
+    expect(await tabTitles(reader)).toEqual([['a']]);
+    expect((await liveChildren(reader, null)).map((g) => g.title)).toEqual(['n4999']);
+
+    await otherDevicePushes(4999);
+    await syncOnce();
+    expect(server.snapshotPuts().length).toBe(1);
+    await otherDeviceStores(['b']);
+    await syncOnce();
+    expect(server.snapshotPuts().length).toBe(2);
+    expect(server.snapshot?.seq).toBe(server.lastSeq);
+  });
+
+  it('reads the snapshot when its cursor is behind it, then pulls the ops after it', async () => {
+    await otherDeviceSnapshots(['a', 'b']);
+    await otherDeviceStores(['c']);
+    await joinSync(account);
+    await syncOnce();
+    expect(await tabTitles(source)).toEqual([['a', 'b'], ['c']]);
+
+    await otherDeviceStores(['d']);
+    await syncOnce();
+    expect(await tabTitles(source)).toEqual([['a', 'b'], ['c'], ['d']]);
+  });
+
+  it('pushes nothing it read from a snapshot', async () => {
+    await otherDeviceSnapshots(['a']);
+    await joinSync(account);
+    await syncOnce();
+    expect(await tabTitles(source)).toEqual([['a']]);
+    expect(server.pushes()).toEqual([]);
+  });
+
+  it('keeps the tabs a device holds when it reads a snapshot, and uploads them', async () => {
+    await transact((tx) => storeTabs(tx, [tab('mine')], settings));
+    await otherDeviceSnapshots(['a']);
+    await joinSync(account);
+    await syncOnce();
+    expect(await tabTitles(source)).toEqual([['a'], ['mine']]);
+    expect(await tabTitles(await replica())).toEqual([['mine']]);
+  });
+
+  it('ends the cycle without an error when another device uploaded a newer snapshot first, and does not try again', async () => {
+    await joinSync(account);
+    await otherDevicePushes(5000);
+    server.snapshotRace = true;
+    await sync();
+    await sync();
+    expect((await syncStatus())?.error).toBeUndefined();
+    expect(server.snapshotPuts().length).toBe(1);
   });
 });
 
