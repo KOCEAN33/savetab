@@ -50,6 +50,10 @@ Deferred work, not scheduled.
 - A background worker stopped between a refresh answer and the write of the new tokens leaves the device with a spent refresh token, so it must log in again.
 - Sync has no Firefox e2e. `e2e/sync.spec.ts` runs two Chromium profiles.
 
+- The deployed server's `AUTH_REDIRECT_URIS` holds a Firefox redirect URI computed as the SHA-1 of the add-on id, unchecked. Chrome's extension id is not fixed: it needs a `key` in the manifest or the store item's id.
+- A new server image is deployed by hand: a commit in homelab-workloads sets the tag. saveweb's image workflow bumps the tag itself through the `kocean33-homelab-ci` GitHub App.
+- No login has run end to end against the deployed server and Zitadel. The check so far is the 302 from `/v1/auth/start` to the issuer.
+
 ## Code review findings
 
 Structure:
@@ -68,5 +72,5 @@ Lint rules not turned on:
 ## Waiting on the user
 
 - Review the Korean strings in `apps/extension/locales/ko.json` and `public/_locales/ko/messages.json`. Wording and terms are the user's call.
-- P4 (sync server): which OIDC issuer the server uses. The account UI (plan P4 step 6) and the deployment (step 9) need a real one, and the server tests run against a fake one.
+- P4 (sync server): whether the server gets a public name. It is tailnet-only, so a device syncs only on the tailnet. `GET /v1/auth/start` has no rate limit, which matters once it is public.
 - P4 (sync server): in the later build where pairing starts by itself after login, what the signed-in device shows for approval. A one-tap approve trusts the server to relay the right key. Comparing the pairing code does not.

@@ -6,12 +6,9 @@ Build the self-hosted sync server (plan phase P4), so the stored tab list syncs 
 
 ## Start
 
-The owner asked for two things ahead of step 6, and neither is started:
+The owner asked for tests right after the step 5 report named the missing Firefox sync e2e, and it is not started. A guess: the owner means that e2e, two Firefox profiles against `apps/server/scripts/e2e-server.sh` in `apps/extension/e2e-firefox/`. Confirm before building.
 
-- Deploy the sync server to the homelab with a Helm chart: `docs/plans/sync-server-deploy.md`. It waits on three answers from the owner, listed at its top.
-- "Add tests", said right after the step 5 report named the missing Firefox sync e2e. A guess: the owner means that e2e, two Firefox profiles against `apps/server/scripts/e2e-server.sh` in `apps/extension/e2e-firefox/`. Confirm before building.
-
-Then continue P4 at step 6 of `docs/plans/onetab-parity.md` `### P4: sync server`: the account UI. It is first because the plan's steps run in order. Steps 1 to 5 are built: two browser profiles sync through a local server in `apps/extension/e2e/sync.spec.ts`.
+Then continue P4 at step 6 of `docs/plans/onetab-parity.md` `### P4: sync server`: the account UI. It is first because the plan's steps run in order. Steps 1 to 5 and step 9 are built: the server runs at `https://savetab.lab.hiriri.com` (`apps/server/README.md` "Deployment"), and two browser profiles sync through a local server in `apps/extension/e2e/sync.spec.ts`.
 
 State that shapes step 6:
 
@@ -28,8 +25,8 @@ Orders from the owner that bind P4:
 
 ## Next steps
 
-- P4 steps 7 to 9 follow step 6 in the plan's order. Each is done when its check in the plan passes plus the five commands in `CLAUDE.md`.
+- P4 steps 7 and 8 follow step 6 in the plan's order. Each is done when its check in the plan passes plus the five commands in `CLAUDE.md`.
 
 ## Pointers
 
-- Deferred server work, the open UI findings, and the items waiting on the owner (the OIDC issuer, pairing approval): `docs/candidates.md`.
+- Deferred server work, the open UI findings, and the items waiting on the owner (a public name for the server, pairing approval): `docs/candidates.md`.

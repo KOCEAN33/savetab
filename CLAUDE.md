@@ -2,7 +2,7 @@
 
 A browser extension for Chrome and Firefox that stores open tabs as a list, with OneTab's features minus the ones `docs/specs/features.md` lists as out of scope, and its own UI. Self-hosted multi-device sync on Postgres comes later.
 
-Feature target: `docs/specs/features.md`, Chrome and Firefox API differences: `docs/specs/browser-apis.md`, plan and data model: `docs/plans/onetab-parity.md`, homelab deployment plan: `docs/plans/sync-server-deploy.md`, UI decisions: `DESIGN.md`, Firefox check: `docs/guides/firefox-check.md`, releases and install: `docs/guides/release.md`, store listing: `docs/guides/store-registration.md`, deferred work and items waiting on the user: `docs/candidates.md`, handoff with the open next steps: `docs/NEXT.md`, sync server: `apps/server/README.md`. Read before changing shape.
+Feature target: `docs/specs/features.md`, Chrome and Firefox API differences: `docs/specs/browser-apis.md`, plan and data model: `docs/plans/onetab-parity.md`, UI decisions: `DESIGN.md`, Firefox check: `docs/guides/firefox-check.md`, releases and install: `docs/guides/release.md`, store listing: `docs/guides/store-registration.md`, deferred work and items waiting on the user: `docs/candidates.md`, handoff with the open next steps: `docs/NEXT.md`, sync server and its deployment: `apps/server/README.md`. Read before changing shape.
 
 - Every list write goes through a `@savetab/core` mutation inside `transact` (`apps/extension/lib/db.ts`), so the outbox records it for sync.
 - A mutation runs after its UI event finishes dispatching, when `e.currentTarget` is null. Read event fields into locals before calling `act` or `transact`.

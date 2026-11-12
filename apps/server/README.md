@@ -29,3 +29,15 @@ Tests run against a real Postgres. Each run creates a database `savetab_test_<ra
 ## Server for the extension's e2e tests
 
 `scripts/e2e-server.sh` builds and runs `cmd/savetab-e2e`: the API on a free local port, on a `savetab_test_<random>` database of its own, with an OIDC issuer it runs itself (`internal/fakeoidc`) that logs every visitor in as one user. It prints its URL as the first line of stdout and drops the database on SIGTERM. `AUTH_REDIRECT_URIS` sets the redirect URIs a login may end at. It finds the database the way `scripts/test.sh` does, through `scripts/test-db.sh`.
+
+## Deployment
+
+The server runs on the homelab cluster at `https://savetab.lab.hiriri.com`, reachable on the tailnet only by the owner's decision. The cluster's rules are in the vault: `vault-memory get projects/homelab/gitops.md`.
+
+- Image: `.github/workflows/image.yml` pushes `ghcr.io/kocean33/savetab:<full commit sha>` on a push to `main` that touches the server's sources. The package is public.
+- Chart and values: `KOCEAN33/homelab-workloads`, `charts/savetab/` and `savetab/envs/`. A deploy is a commit there that sets `image.tag` in `savetab/envs/prod.yaml`. Argo CD syncs it as the Application `savetab-prod`.
+- Database: role and database `savetab` on the production Postgres, declared in `KOCEAN33/homelab-platform` `manifest/postgres/`. The password is the 1Password item `savetab-db` in the vault `Homelab`. The server connects to `postgres-rw.postgres.svc`, not the pooler, because pgx's statement cache does not survive transaction pooling.
+- Login: Zitadel at `https://auth.hiriri.com`, project `savetab`, application `savetab`, a public client on PKCE with no client secret. The project admits only users who hold the role `savetab-user`.
+- `AUTH_REDIRECT_URIS` in `savetab/envs/prod.yaml` holds one URI, computed for the Firefox add-on id and not yet checked against `browser.identity.getRedirectURL()`. Each extension build that logs in needs its URI there.
+- Check: `curl https://savetab.lab.hiriri.com/healthz` answers `{"ok":true}`.
+

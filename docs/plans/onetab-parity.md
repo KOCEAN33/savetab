@@ -254,7 +254,7 @@ Steps run in this order. Each step is done when its check passes plus the five c
    - Check: e2e for first-device setup and for a join by recovery key.
 7. **Snapshots from the client.** A device uploads a snapshot when the log passes 5,000 ops since the last one *(savetab choice)*.
 8. **Share as a web page.**
-9. **Deployment.** Container image, the homelab database, and the public URL.
+9. **Deployment.** Built ahead of steps 6 to 8: the container image, the homelab database, and the tailnet URL are in `apps/server/README.md` "Deployment". A public URL waits on the owner.
 
 ### P5: more clients
 
