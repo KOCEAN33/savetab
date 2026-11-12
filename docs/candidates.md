@@ -35,6 +35,7 @@ The user asked for these on 2026-11-12, to be done later.
 ## Open choices and code follow-ups
 
 - features.md lists two `P1` items that are not built: export from a chosen location (the import-export page exports the whole root) and an import destination (import always lands at the root).
+- Under a full `pnpm test:e2e:firefox` run, `e2e-firefox/pages.spec.ts` fails about one run in five: the import test once with `StaleElementReferenceError` on the import textarea, the list-page test once with "No links found". Each passes alone. No cause is confirmed.
 - The Firefox GUI check has not covered P2 multi-select, sort, collapse, paging, or keyboard navigation. Chromium e2e covers them.
 
 - Dragging tabs into a group does not update the recent destination list. Only sends and moves through the location dialog do (plan P2 step 10). Counting drags needs `GroupView` to tell a drop from another group apart from a reorder.
@@ -64,7 +65,6 @@ The user asked for these on 2026-11-12, to be done later.
 - The sync page's first-device setup, recovery key join, pairing, device removal, and sign out have e2e in Chromium (`e2e/account.spec.ts`). Firefox e2e covers first-device setup and the recovery key join. `apps/extension/lib/account.ts` has no unit test.
 - A pairing that expires or fails its commitment check has no test.
 - The sync page shows the recovery key and the pairing code at the 18px headline size, the largest step `DESIGN.md` has. A screenshot review asked for a larger code, a step heading per state, and a progress cue while a new device waits to pair.
-- The sync page does not remember the server address after a sign out.
 - A background worker stopped between a refresh answer and the write of the new tokens leaves the device with a spent refresh token, so it must log in again.
 
 - The deployed server's `AUTH_REDIRECT_URIS` holds a Firefox redirect URI computed as the SHA-1 of the add-on id, unchecked. Chrome's extension id is not fixed: it needs a `key` in the manifest or the store item's id.

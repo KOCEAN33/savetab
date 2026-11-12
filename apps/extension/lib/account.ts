@@ -20,7 +20,6 @@ import { body, client, fromBase64, send, SyncError, toBase64, type Login } from 
 const PAIRING_POLL_MS = 1000;
 
 export type AccountErrorCode =
-  | 'badServerUrl'
   | 'loginFailed'
   | 'wrongRecoveryKey'
   | 'pairingExpired'
@@ -62,15 +61,21 @@ export interface Pairing {
 const base64Url = (bytes: Uint8Array) => toBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const json = (method: string, value: unknown): RequestInit => ({ method, body: JSON.stringify(value) });
 
-function serverBase(text: string): string {
-  const url = URL.parse(text.trim());
-  if (!url || !/^https?:$/.test(url.protocol)) throw new AccountError('badServerUrl');
-  return url.origin + url.pathname.replace(/\/+$/, '');
+/** The owner's sync server. Every device syncs through it. */
+export const SYNC_SERVER = 'https://savetab.lab.hiriri.com';
+
+/** An e2e build syncs through the local test server its fixture stores under this key. */
+export const E2E_SERVER_KEY = 'e2eSyncServer';
+
+async function syncServer(): Promise<string> {
+  if (import.meta.env.MODE !== 'e2e') return SYNC_SERVER;
+  const stored = await browser.storage.local.get(E2E_SERVER_KEY);
+  return (stored[E2E_SERVER_KEY] as string | undefined) ?? SYNC_SERVER;
 }
 
 /** Open the server's login window and trade the code it ends with for this device's tokens. */
-export async function logIn(serverUrl: string, deviceName: string): Promise<Login> {
-  const server = { serverUrl: serverBase(serverUrl) };
+export async function logIn(deviceName: string): Promise<Login> {
+  const server = { serverUrl: await syncServer() };
   const verifier = base64Url(randomKey());
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
   const state = base64Url(randomKey());

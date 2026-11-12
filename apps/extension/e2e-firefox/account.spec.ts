@@ -1,5 +1,5 @@
 import { By } from 'selenium-webdriver';
-import { EXT, expect, find, openPages, sendWindow, texts, type Firefox } from './fixtures';
+import { evaluate, EXT, expect, find, openPages, sendWindow, texts, type Firefox } from './fixtures';
 import { expectTabs, test } from './sync-fixtures';
 
 /** Crockford base32 in 13 groups of 4 (plan P4, "Formats"). */
@@ -9,9 +9,10 @@ const field = (label: string) => By.xpath(`//label[contains(normalize-space(.), 
 const button = (name: string) => By.xpath(`//button[normalize-space()='${name}']`);
 
 /** Open the profile's sync page in its site window and sign in. The e2e server's issuer logs every visitor in as one user. */
-async function signIn({ driver }: Firefox, server: string, deviceName: string): Promise<void> {
+async function signIn(ff: Firefox, server: string, deviceName: string): Promise<void> {
+  const { driver } = ff;
+  await evaluate(ff, (url: string) => browser.storage.local.set({ e2eSyncServer: url }), server);
   await driver.get(`${EXT}/account.html`);
-  await (await find(driver, field('Server address'))).sendKeys(server);
   const name = await find(driver, field('Device name'));
   await name.clear();
   await name.sendKeys(deviceName);

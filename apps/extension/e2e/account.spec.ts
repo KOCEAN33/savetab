@@ -7,9 +7,9 @@ const RECOVERY_KEY = /^([0-9A-HJKMNP-TV-Z]{4}-){12}[0-9A-HJKMNP-TV-Z]{4}$/;
 
 /** Open the profile's sync page and sign in. The e2e server's issuer logs every visitor in as one user. */
 async function signIn(p: Profile, server: string, deviceName: string): Promise<Page> {
+  await p.worker.evaluate((url) => chrome.storage.local.set({ e2eSyncServer: url }), server);
   const page = await p.context.newPage();
   await page.goto(`chrome-extension://${new URL(p.worker.url()).host}/account.html`);
-  await page.getByLabel('Server address').fill(server);
   await page.getByLabel('Device name').fill(deviceName);
   await page.getByRole('button', { name: 'Sign in' }).click();
   return page;
@@ -90,5 +90,5 @@ test('removing a device signs it out, and signing out leaves the account', async
   }).toPass({ timeout: 15_000 });
 
   await page.getByRole('button', { name: 'Sign out' }).click();
-  await expect(page.getByLabel('Server address')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
 });

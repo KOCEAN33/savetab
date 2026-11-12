@@ -25,7 +25,6 @@
   const REFRESH_MS = 3000;
   const OS_NAMES: Record<string, string> = { mac: 'macOS', win: 'Windows', linux: 'Linux', cros: 'ChromeOS', android: 'Android' };
   const ERROR_TEXT = {
-    badServerUrl: 'syncErrBadServerUrl',
     loginFailed: 'syncErrLoginFailed',
     wrongRecoveryKey: 'syncErrWrongRecoveryKey',
     pairingExpired: 'syncErrPairingExpired',
@@ -37,7 +36,6 @@
   const account = liveQuery(async () => (await syncAccount()) ?? null);
   const status = liveQuery(syncStatus);
 
-  let serverUrl = $state('');
   let deviceName = $state('');
   void browser.runtime.getPlatformInfo().then(({ os }) => {
     deviceName = `${import.meta.env.FIREFOX ? 'Firefox' : 'Chrome'}, ${OS_NAMES[os] ?? os}`;
@@ -71,7 +69,7 @@
 
   const signIn = () =>
     run(async () => {
-      const made = await logIn(serverUrl, deviceName);
+      const made = await logIn(deviceName);
       if (await accountHasKey(made)) login = made;
       else madeKey = await createAccountKey(made);
     });
@@ -250,15 +248,11 @@
       }}
     >
       <label class="field">
-        {t('syncServer')}
-        <input type="text" inputmode="url" placeholder="https://sync.example.com" bind:value={serverUrl} />
-      </label>
-      <label class="field">
         {t('syncDeviceName')}
         <input type="text" bind:value={deviceName} />
       </label>
       <p class="actions">
-        <button class="button button-primary" type="submit" disabled={busy || !serverUrl.trim() || !deviceName.trim()}
+        <button class="button button-primary" type="submit" disabled={busy || !deviceName.trim()}
           >{t('syncSignIn')}</button
         >
       </p>
