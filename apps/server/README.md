@@ -38,6 +38,6 @@ The server runs on the homelab cluster at `https://savetab.lab.hiriri.com`, reac
 - Chart and values: `KOCEAN33/homelab-workloads`, `charts/savetab/` and `savetab/envs/`. A deploy is a commit there that sets `image.tag` in `savetab/envs/prod.yaml`. Argo CD syncs it as the Application `savetab-prod`.
 - Database: role and database `savetab` on the production Postgres, declared in `KOCEAN33/homelab-platform` `manifest/postgres/`. The password is the 1Password item `savetab-db` in the vault `Homelab`. The server connects to `postgres-rw.postgres.svc`, not the pooler, because pgx's statement cache does not survive transaction pooling.
 - Login: Zitadel at `https://auth.hiriri.com`, project `savetab`, application `savetab`, a public client on PKCE with no client secret. The project admits only users who hold the role `savetab-user`.
-- `AUTH_REDIRECT_URIS` in `savetab/envs/prod.yaml` holds one URI, computed for the Firefox add-on id and not yet checked against `browser.identity.getRedirectURL()`. Each extension build that logs in needs its URI there.
+- `AUTH_REDIRECT_URIS` in `savetab/envs/prod.yaml` holds the Firefox add-on's URI, the SHA-1 of `savetab@kocean33` under `extensions.allizom.org`, and the Chrome GitHub Releases build's `https://mjkkpkbgjflhjgdkhhnejpjcdkfcpmkb.chromiumapp.org/`, whose id the manifest `key` fixes (`apps/extension/wxt.config.ts`). A Chrome Web Store item has its own id and needs its URI added.
 - Check: `curl https://savetab.lab.hiriri.com/healthz` answers `{"ok":true}`.
 

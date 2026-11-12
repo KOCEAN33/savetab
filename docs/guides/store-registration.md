@@ -13,7 +13,7 @@ Neither store requires open source. Both are unregistered for savetab: the devel
 
 ## Chrome Web Store
 
-Steps: `wiki/browser-extensions/chrome-web-store-publishing.md#developer-registration`, then `#submission-steps`. Upload `savetab-<version>-chrome.zip` from a GitHub Release, or the output of `pnpm --filter @savetab/extension zip`.
+Steps: `wiki/browser-extensions/chrome-web-store-publishing.md#developer-registration`, then `#submission-steps`. Upload the output of `pnpm --filter @savetab/extension zip`. The GitHub Release's chrome zip carries a manifest `key`, which the store rejects.
 
 The Privacy tab asks for one justification per permission (`#privacy-practices-tab`). savetab's reasons:
 

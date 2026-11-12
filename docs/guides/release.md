@@ -14,7 +14,7 @@ To build the same assets locally, run `node scripts/package-release.mjs` from th
 
 | Asset | What it is |
 | --- | --- |
-| `savetab-<version>-chrome.zip` | The Chrome build. |
+| `savetab-<version>-chrome.zip` | The Chrome build. Its manifest `key` fixes the extension id at `mjkkpkbgjflhjgdkhhnejpjcdkfcpmkb` on every unpacked install, so sync sign-in works. |
 | `savetab-<version>-firefox.xpi` | The Firefox build, signed by AMO on the unlisted channel. It carries `update_url`, so it updates itself. |
 | `savetab-<version>-firefox.zip` | The unsigned Firefox build. It replaces the xpi when the AMO secrets are missing. |
 | `savetab-<version>-sources.zip` | `git archive` of the tagged commit, with the lockfile. AMO receives it as the source upload. |

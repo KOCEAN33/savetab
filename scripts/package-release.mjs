@@ -37,7 +37,7 @@ const wxtZip = (suffix) => {
 };
 
 rmSync(outDir, { recursive: true, force: true });
-wxt(['zip']);
+wxt(['zip'], { SAVETAB_SELF_DISTRIBUTED: '1' });
 wxt(['zip', '-b', 'firefox'], { SAVETAB_SELF_DISTRIBUTED: '1' });
 mkdirSync(releaseDir);
 

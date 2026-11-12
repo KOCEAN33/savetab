@@ -67,7 +67,7 @@ The user asked for these on 2026-11-12, to be done later.
 - The sync page shows the recovery key and the pairing code at the 18px headline size, the largest step `DESIGN.md` has. A screenshot review asked for a larger code, a step heading per state, and a progress cue while a new device waits to pair.
 - A background worker stopped between a refresh answer and the write of the new tokens leaves the device with a spent refresh token, so it must log in again.
 
-- The deployed server's `AUTH_REDIRECT_URIS` holds a Firefox redirect URI computed as the SHA-1 of the add-on id, unchecked. Chrome's extension id is not fixed: it needs a `key` in the manifest or the store item's id.
+- The deployed server's Firefox redirect URI is computed as the SHA-1 of the add-on id. No login has checked it against `browser.identity.getRedirectURL()` in a real Firefox.
 - A new server image is deployed by hand: a commit in homelab-workloads sets the tag. saveweb's image workflow bumps the tag itself through the `kocean33-homelab-ci` GitHub App.
 - No login has run end to end against the deployed server and Zitadel. The check so far is the 302 from `/v1/auth/start` to the issuer.
 
