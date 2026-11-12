@@ -11,6 +11,18 @@ Deferred work, not scheduled.
 - Notes have an emoji picker shortcut. features.md does not say what the shortcut does or opens.
 - Group date line format is `M/D/YY h:mm AM/PM - <relative time>`, such as `11/9/26 8:09 PM - just now`. savetab shows the month and day, with the full date and time in a tooltip.
 
+## User requests not yet built
+
+The user asked for these on 2026-11-12, to be done later.
+
+- Links added through import show no favicon.
+- The list page is too narrow. The user did not say which width they want.
+- The row and group checkboxes are hard to hit. Selection should also work with Ctrl+click, Shift+click for a range, and a drag rectangle over several rows.
+- Checkboxes and the options page's radio buttons should be custom designs, not the browser's native controls.
+- A group should drag up and down by the empty space next to its date in the group head. The user does not want space with no function there.
+- An option to leave extension pages (`chrome-extension://`, `moz-extension://`, and similar) out of a send. Today only savetab's own pages and the empty pages in `BLANK_PAGES` (`apps/extension/lib/capture.ts`) are skipped.
+- When the list holds groups besides "All tabs", the current group head should stick to the top while scrolling.
+
 ## UI review findings left open
 
 - The options page is one long form of radio groups. Short choices could be selects on one row, with a section nav.
@@ -42,11 +54,16 @@ Deferred work, not scheduled.
 - A refresh token used twice answers 401 and nothing else. Revoking the device on a reused token would cut off a thief who refreshed first.
 - `GET /v1/auth/start` stores one `logins` row per request without a bearer token or a rate limit. Rows expire after 10 minutes and the next start deletes them.
 - The server logs in through one issuer and gives an account to anyone that issuer logs in. `identities` is keyed by `(issuer, subject)`, so a second issuer or an allow list can join.
-- `packages/core/src/crypto.ts` has no function that compares a pairing commitment. The signed-in device must compare `pairingCommitment(newPublic)` with the commitment the new device sent first, before it shows the code.
 
 - The outbox of a device with no account keeps every op since install and is never trimmed. Joining replaces it, so it could stay empty until the device joins.
-- A pull answered 409 `snapshot_required` fails the cycle on every try. Reading the snapshot is plan P4 step 7.
-- A failed cycle only logs `sync failed` in the background console. A refused refresh token fails every cycle until the device joins again, and no page shows it. The account UI (plan P4 step 6) needs a stored sync status.
+- Each device counts the 5,000 ops from the last snapshot it uploaded or read itself, so two devices that pull the same log both upload one. A pull answer that carried the snapshot's `seq` would let the second skip it.
+- A snapshot holds the uploader's records with no receive time. A field the uploader wrote while its clock ran more than `MAX_SKEW_MS` ahead reaches a device that reads the snapshot, though every device skips that op in a pull.
+- A snapshot is sealed and sent as one JSON body, base64 built in memory (`uploadSnapshot` in `apps/extension/lib/sync.ts`). No test measures it with a large list.
+- A device that logs in on the sync page and leaves before it holds the key stays in the account's device list. The login lives in the page's memory, so a reload starts over and the next login makes another device.
+- The sync page's first-device setup, recovery key join, pairing, device removal, and sign out have e2e in Chromium (`e2e/account.spec.ts`). Firefox e2e covers first-device setup and the recovery key join. `apps/extension/lib/account.ts` has no unit test.
+- A pairing that expires or fails its commitment check has no test.
+- The sync page shows the recovery key and the pairing code at the 18px headline size, the largest step `DESIGN.md` has. A screenshot review asked for a larger code, a step heading per state, and a progress cue while a new device waits to pair.
+- The sync page does not remember the server address after a sign out.
 - A background worker stopped between a refresh answer and the write of the new tokens leaves the device with a spent refresh token, so it must log in again.
 
 - The deployed server's `AUTH_REDIRECT_URIS` holds a Firefox redirect URI computed as the SHA-1 of the add-on id, unchecked. Chrome's extension id is not fixed: it needs a `key` in the manifest or the store item's id.
