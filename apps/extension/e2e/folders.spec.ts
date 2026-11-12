@@ -1,6 +1,6 @@
 import { drag, expect, onetabPage, openPages, sendWindow, test } from './fixtures';
 
-test('makes a folder, drags a group into it, opens it, and returns through the breadcrumb', async ({
+test('makes a folder, drags a group onto its chip, opens it, and returns through the All tabs chip', async ({
   context,
   worker,
   extensionId,
@@ -9,23 +9,30 @@ test('makes a folder, drags a group into it, opens it, and returns through the b
   await sendWindow(worker);
   const list = await onetabPage(context, extensionId);
   const main = list.getByRole('main');
+  const nav = main.getByRole('navigation', { name: 'Folders' });
+  const allTabs = nav.getByRole('button', { name: 'All tabs' });
+  const work = nav.getByRole('button', { name: 'Work', exact: true });
 
-  await main.getByRole('button', { name: 'New folder' }).click();
+  await nav.getByRole('button', { name: 'New folder' }).click();
   await list.getByRole('textbox', { name: 'Folder name' }).fill('Work');
   await list.keyboard.press('Enter');
-  const nav = list.getByRole('navigation', { name: 'Folders' });
-  await expect(nav.getByRole('button', { name: 'Work', exact: true })).toBeVisible();
+  await expect(work).toBeVisible();
+  await expect(allTabs).toHaveAttribute('aria-current', 'page');
 
   const group = main.locator('section[aria-label="2 tabs"]');
-  await drag(list, group.locator('.group-grip'), nav.getByRole('button', { name: 'Work', exact: true }), 4);
+  await drag(list, group.locator('.group-grip'), work, 4);
   await expect(main.locator('section[aria-label="2 tabs"]')).toHaveCount(0);
-  await expect(main.locator('section[aria-label="Folder Work"]')).toContainText('Folder, 2 tabs');
+  await expect(main.locator('.tab-link')).toHaveCount(0);
+  await expect(main.getByRole('treeitem', { name: /Work/ })).toHaveCount(0);
+  await expect(list.getByRole('heading', { name: 'Total: 2 tabs' })).toBeVisible();
 
-  await main.getByRole('button', { name: 'Work', exact: true }).click();
+  await work.click();
+  await expect(work).toHaveAttribute('aria-current', 'page');
   await expect(main.locator('.tab-link')).toHaveText(['Page f1', 'Page f2']);
   await expect(list.getByRole('heading', { name: 'Total: 2 tabs' })).toBeVisible();
 
-  await main.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button', { name: 'All tabs' }).click();
-  await expect(main.locator('section[aria-label="Folder Work"]')).toBeVisible();
+  await allTabs.click();
+  await expect(allTabs).toHaveAttribute('aria-current', 'page');
+  await expect(work).toBeVisible();
   await expect(main.locator('.tab-link')).toHaveCount(0);
 });

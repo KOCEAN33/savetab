@@ -27,9 +27,24 @@ export async function loadLanguage(): Promise<Lang> {
   return lang;
 }
 
-/** Load the language for an extension page, and reload the page when the device language changes. */
+const CACHE_KEY = 'lang';
+
+/** True when this page can show text in the device language before extension storage answers. */
+export function pageLanguageCached(): boolean {
+  return localStorage.getItem(CACHE_KEY) !== null;
+}
+
+/**
+ * Load the language for an extension page, and reload the page when the device language changes.
+ * The last language is kept in localStorage and applied at once, so the page can render before storage answers.
+ */
 export async function loadPageLanguage(): Promise<void> {
-  document.documentElement.lang = await loadLanguage();
+  const cached = localStorage.getItem(CACHE_KEY);
+  if (cached === 'en' || cached === 'ko') document.documentElement.lang = lang = cached;
+  const next = await loadLanguage();
+  document.documentElement.lang = next;
+  localStorage.setItem(CACHE_KEY, next);
+  if (cached !== null && cached !== next) location.reload();
   deviceSettingsItem.watch((next, prev) => {
     if (next?.language !== prev?.language) location.reload();
   });
@@ -45,4 +60,9 @@ export function tn(key: CountKey, n: number, vars: Record<string, string | numbe
   const form = new Intl.PluralRules(lang).select(n);
   const full = `${key}_${form}`;
   return t((full in en ? full : `${key}_other`) as Key, { n, ...vars });
+}
+
+/** Month and day in the page language, such as "Nov 12". */
+export function shortDate(ms: number): string {
+  return new Date(ms).toLocaleDateString(lang, { month: 'short', day: 'numeric' });
 }

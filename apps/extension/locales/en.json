@@ -18,7 +18,6 @@
   "themeAuto": "Automatic",
   "themeLight": "Light",
   "themeDark": "Dark",
-  "breadcrumb": "Breadcrumb",
   "newFolder": "New folder",
   "sortGroups": "Sort groups",
   "sortTitle": "A-Z",
@@ -50,11 +49,9 @@
   "createdAt": "Created {date}",
   "folderTabs_one": "Folder, {n} tab",
   "folderTabs_other": "Folder, {n} tabs",
-  "folderCollapseHint": "Show or hide its folders in the folder column",
   "expand": "Expand",
   "collapse": "Collapse",
   "restoreAll": "Restore all",
-  "deleteAll": "Delete all",
   "delete": "Delete",
   "deleteItem": "Delete {name}",
   "moreActionsFor": "More actions for {name}",
@@ -109,7 +106,6 @@
   "cancel": "Cancel",
 
   "folders": "Folders",
-  "recent": "Recent",
 
   "search": "Search",
   "matchCount_one": "{n} match",

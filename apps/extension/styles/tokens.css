@@ -1,24 +1,25 @@
 /* Raw values from DESIGN.md. Every other stylesheet reads these variables. */
 :root {
   --color-surface: #ffffff;
-  --color-on-surface: #444444;
-  --color-on-surface-weak: #767676;
-  --color-border: #eeeeee;
-  --color-primary: #234da7;
-  --color-primary-tint: #f1f4f9;
-  --color-danger: #d93025;
+  --color-surface-hover: #f6f7f8;
+  --color-on-surface: #1b1d21;
+  --color-on-surface-weak: #6b7078;
+  --color-border: #e4e6e9;
+  --color-primary: #1f6feb;
+  --color-on-primary: #ffffff;
+  --color-primary-tint: #e8f0fe;
+  --color-danger: #c62828;
 
   --font-family: system-ui, sans-serif;
-  --text-body: 13px;
-  --text-title: 17px;
-  --text-headline: 22px;
+  --text-body: 14px;
+  --text-headline: 18px;
   --font-weight-regular: 400;
   --font-weight-bold: 600;
   --line-height-body: 20px;
-  --line-height-title: 24px;
-  --line-height-headline: 28px;
+  --line-height-headline: 24px;
 
-  --radius-sm: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
 
   --space-xs: 4px;
   --space-sm: 8px;
@@ -26,32 +27,38 @@
   --space-lg: 20px;
   --space-xl: 32px;
 
+  --shadow-float: 0 8px 24px rgb(0 0 0 / 12%);
+
   --motion-duration: 150ms;
 }
 
 /* Dark palette from DESIGN.md `## Colors`. It follows the system unless a page sets `data-theme`. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --color-surface: #202124;
-    --color-on-surface: #e3e3e3;
-    --color-on-surface-weak: #9aa0a6;
-    --color-border: #3c4043;
-    --color-primary: #8ab4f8;
-    --color-primary-tint: #2a3243;
-    --color-danger: #f28b82;
+    --color-surface: #17181b;
+    --color-surface-hover: #1f2125;
+    --color-on-surface: #e8e9eb;
+    --color-on-surface-weak: #9a9fa8;
+    --color-border: #2e3136;
+    --color-primary: #6ea8fe;
+    --color-on-primary: #111111;
+    --color-primary-tint: #1c2a44;
+    --color-danger: #ef8a80;
 
     color-scheme: dark;
   }
 }
 
 :root[data-theme='dark'] {
-  --color-surface: #202124;
-  --color-on-surface: #e3e3e3;
-  --color-on-surface-weak: #9aa0a6;
-  --color-border: #3c4043;
-  --color-primary: #8ab4f8;
-  --color-primary-tint: #2a3243;
-  --color-danger: #f28b82;
+  --color-surface: #17181b;
+  --color-surface-hover: #1f2125;
+  --color-on-surface: #e8e9eb;
+  --color-on-surface-weak: #9a9fa8;
+  --color-border: #2e3136;
+  --color-primary: #6ea8fe;
+  --color-on-primary: #111111;
+  --color-primary-tint: #1c2a44;
+  --color-danger: #ef8a80;
 
   color-scheme: dark;
 }

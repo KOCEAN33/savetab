@@ -41,24 +41,40 @@ test('Backspace goes to the parent folder, / and Alt+/ focus search', async ({ c
   await sendWindow(worker);
   const list = await onetabPage(context, extensionId);
   const main = list.getByRole('main');
-  await main.getByRole('button', { name: 'New folder' }).click();
+  const nav = main.getByRole('navigation', { name: 'Folders' });
+  const outer = nav.getByRole('button', { name: 'Outer', exact: true });
+  const inner = nav.getByRole('button', { name: 'Inner', exact: true });
+  await nav.getByRole('button', { name: 'New folder' }).click();
   await list.getByRole('textbox', { name: 'Folder name' }).fill('Outer');
   await list.keyboard.press('Enter');
-  await main.getByRole('button', { name: 'Outer', exact: true }).click();
-  await main.getByRole('button', { name: 'New folder' }).click();
+  await outer.click();
+  await nav.getByRole('button', { name: 'New folder' }).click();
   await list.getByRole('textbox', { name: 'Folder name' }).fill('Inner');
   await list.keyboard.press('Enter');
 
-  await main.getByRole('treeitem', { name: 'Folder Inner' }).focus();
-  await list.keyboard.press('Backspace');
-  await expect(main.getByRole('treeitem', { name: 'Folder Outer' })).toBeVisible();
+  // A folder has no row of its own, so a group inside Inner gives the keys a row to start from.
+  await nav.getByRole('button', { name: 'All tabs' }).click();
+  await main.locator('section[aria-label="1 tab"]').getByRole('button', { name: 'More…' }).click();
+  await list.getByRole('menuitem', { name: 'Move…' }).click();
+  const dialog = list.getByRole('dialog', { name: 'Move to' });
+  await dialog.getByRole('textbox', { name: 'Find a location' }).fill('inner');
+  await dialog.getByRole('button', { name: 'Inner' }).click();
+  await expect(main.locator('.tab-link')).toHaveCount(0);
 
-  await main.getByRole('button', { name: 'Outer', exact: true }).click();
-  await main.getByRole('treeitem', { name: 'Folder Inner' }).focus();
+  await outer.click();
+  await inner.click();
+  await expect(inner).toHaveAttribute('aria-current', 'page');
+  await main.getByRole('treeitem', { name: '1 tab' }).focus();
+  await list.keyboard.press('Backspace');
+  await expect(outer).toHaveAttribute('aria-current', 'page');
+  await expect(inner).not.toHaveAttribute('aria-current', 'page');
+
+  await inner.click();
+  await main.getByRole('treeitem', { name: '1 tab' }).focus();
   await list.keyboard.press('Alt+Slash');
   await expect(list.getByRole('searchbox', { name: 'Search' })).toBeFocused();
   await list.getByRole('button', { name: 'Filters' }).click();
-  await expect(list.getByRole('combobox', { name: 'In folder' })).toHaveValue(/.+/);
+  await expect(list.getByRole('combobox', { name: 'In folder' }).locator('option:checked')).toHaveText(/Inner/);
 
   await list.locator('body').click({ position: { x: 5, y: 5 } });
   await list.keyboard.press('/');

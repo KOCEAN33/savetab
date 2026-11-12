@@ -18,7 +18,6 @@
   "themeAuto": "자동",
   "themeLight": "밝게",
   "themeDark": "어둡게",
-  "breadcrumb": "현재 위치",
   "newFolder": "새 폴더",
   "sortGroups": "그룹 정렬",
   "sortTitle": "가나다순",
@@ -50,11 +49,9 @@
   "createdAt": "{date}에 만듦",
   "folderTabs_one": "폴더, 탭 {n}개",
   "folderTabs_other": "폴더, 탭 {n}개",
-  "folderCollapseHint": "폴더 열에서 하위 폴더를 보이거나 숨깁니다",
   "expand": "펼치기",
   "collapse": "접기",
   "restoreAll": "모두 복원",
-  "deleteAll": "모두 삭제",
   "delete": "삭제",
   "deleteItem": "{name} 삭제",
   "moreActionsFor": "{name} 작업 더 보기",
@@ -109,7 +106,6 @@
   "cancel": "취소",
 
   "folders": "폴더",
-  "recent": "최근",
 
   "search": "검색",
   "matchCount_one": "{n}개 일치",

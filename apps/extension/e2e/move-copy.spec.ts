@@ -17,7 +17,12 @@ test('moves a group into a folder through the Move dialog', async ({ context, wo
   await dialog.getByRole('button', { name: 'Archive' }).click();
 
   await expect(main.locator('section[aria-label="2 tabs"]')).toHaveCount(0);
-  await expect(main.locator('section[aria-label="Folder Archive"]')).toContainText('Folder, 2 tabs');
+  await expect(main.locator('.tab-link')).toHaveCount(0);
+
+  const archive = main.getByRole('navigation', { name: 'Folders' }).getByRole('button', { name: 'Archive', exact: true });
+  await archive.click();
+  await expect(archive).toHaveAttribute('aria-current', 'page');
+  await expect(main.locator('.tab-link')).toHaveText(['Page m1', 'Page m2']);
 });
 
 test('dragging a tab with Alt held copies it', async ({ context, worker, extensionId }) => {

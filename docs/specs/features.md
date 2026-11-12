@@ -1,6 +1,6 @@
 # OneTab feature inventory
 
-savetab targets feature parity with OneTab 2.24 (Chrome Web Store id `chphlpgkkbolifaimnlloiipkdnihall`), then adds self-hosted multi-device sync. Sources: the extension's `manifest.json` and `_locales/en/messages.json`, https://www.one-tab.com/help, and a run of the real extension in a throwaway Chromium profile. A line marked *(inferred)* is a reading of UI strings, not observed behavior. Verify it in the real extension before building it.
+This file lists what OneTab 2.24 (Chrome Web Store id `chphlpgkkbolifaimnlloiipkdnihall`) does. savetab builds these features except the ones under `## Out of scope`, then adds self-hosted multi-device sync. Sources: the extension's `manifest.json` and `_locales/en/messages.json`, https://www.one-tab.com/help, and a run of the real extension in a throwaway Chromium profile. A line marked *(inferred)* is a reading of UI strings, not observed behavior. Verify it in the real extension before building it.
 
 Phase tags (`P1`-`P5`) refer to `docs/plans/onetab-parity.md`.
 
@@ -131,3 +131,5 @@ savetab adds "after storing tabs: show the list / stay" as an option. OneTab has
 ## Out of scope
 
 - OneTab's license-key, billing, and recovery-email flows. savetab's own account and sync design replaces them in `P4`.
+- OneTab features the owner judged clutter. savetab does not build them, whatever phase tag their line above carries: tasks and the Tasks view, the archived flag and the "mark archived" restore option, the quick list, "Create group or folder above / below" (within stays), the two cross-location duplicate removals (within stays), and the folder navigation column with its recent list and filter.
+- OneTab's page layout. savetab's list page follows `DESIGN.md`: folders are chips under the search bar, and the list body holds groups only.

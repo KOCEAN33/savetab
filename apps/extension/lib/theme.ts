@@ -8,8 +8,20 @@ export function applyTheme(theme: Theme): void {
   else document.documentElement.dataset.theme = theme;
 }
 
-/** Apply the device theme to an extension page, and again whenever it changes. */
+const CACHE_KEY = 'theme';
+
+function show(theme: Theme): void {
+  applyTheme(theme);
+  localStorage.setItem(CACHE_KEY, theme);
+}
+
+/**
+ * Apply the device theme to an extension page, and again whenever it changes. The last theme is
+ * kept in localStorage and applied at once, so the page does not flash the other palette.
+ */
 export async function loadPageTheme(): Promise<void> {
-  applyTheme((await getDeviceSettings()).theme);
-  deviceSettingsItem.watch((next) => applyTheme(next?.theme ?? 'auto'));
+  const cached = localStorage.getItem(CACHE_KEY);
+  if (cached === 'light' || cached === 'dark') applyTheme(cached);
+  show((await getDeviceSettings()).theme);
+  deviceSettingsItem.watch((next) => show(next?.theme ?? 'auto'));
 }

@@ -10,7 +10,8 @@ test('the header theme button switches the list page to the dark palette', async
   await list.getByRole('button', { name: 'Theme: Automatic' }).click();
   await list.getByRole('button', { name: 'Theme: Light' }).click();
   await expect(list.getByRole('button', { name: 'Theme: Dark' })).toBeVisible();
-  expect(await surface()).toBe('rgb(32, 33, 36)');
+  // DESIGN.md dark-surface #17181b.
+  expect(await surface()).toBe('rgb(23, 24, 27)');
 
   await list.getByRole('button', { name: 'Theme: Dark' }).click();
   await expect(list.getByRole('button', { name: 'Theme: Automatic' })).toBeVisible();

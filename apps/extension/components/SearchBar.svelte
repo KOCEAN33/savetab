@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Id, ListView, SearchQuery } from '@savetab/core';
   import { t, tn } from '@/lib/i18n';
+  import Icon from './Icon.svelte';
 
   let { query = $bindable(), view, count }: { query: SearchQuery; view: ListView; count: number | null } = $props();
 
@@ -31,11 +32,11 @@
 </script>
 
 <div class="search">
-  <div class="row">
-    <input class="search-input" type="search" aria-label={t('search')} placeholder={t('search')} bind:value={query.text} />
-    {#if count !== null}<span class="meta" role="status">{tn('matchCount', count)}</span>{/if}
-    <button class="link-button" aria-expanded={showFilters} onclick={() => (showFilters = !showFilters)}>{t('filters')}</button>
-  </div>
+  <input class="search-input" type="search" aria-label={t('search')} placeholder={t('search')} bind:value={query.text} />
+  {#if count !== null}<span class="search-count meta" role="status">{tn('matchCount', count)}</span>{/if}
+  <button class="icon-button" title={t('filters')} aria-label={t('filters')} aria-expanded={showFilters} onclick={() => (showFilters = !showFilters)}
+    ><Icon name="filter" /></button
+  >
   {#if showFilters}
     <div class="search-filters">
       <label><input type="checkbox" bind:checked={query.caseSensitive} /> {t('caseSensitive')}</label>

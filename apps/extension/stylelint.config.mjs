@@ -9,13 +9,13 @@ const DESIGN = {
   // DESIGN.md `typography.*.fontWeight`, two or three values.
   weights: ['400', '600'],
   // DESIGN.md `typography.*.fontSize`.
-  fontSizes: ['13px', '17px', '22px'],
+  fontSizes: ['14px', '18px'],
   // DESIGN.md `rounded.*`.
-  radius: ['4px'],
+  radius: ['6px', '10px'],
   // DESIGN.md `spacing.*`.
   space: ['4px', '8px', '12px', '20px', '32px'],
   // DESIGN.md `## Elevation & Depth`, full box-shadow values.
-  shadows: [],
+  shadows: ['0 8px 24px rgb(0 0 0 / 12%)'],
   // DESIGN.md `typography.*.letterSpacing`.
   tracking: ['0px'],
   // Files that define the tokens as raw values. Only these may hold raw colors.

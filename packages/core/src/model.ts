@@ -135,7 +135,7 @@ export const defaultSettings: SettingsFields = {
   restoreGroupTarget: 'newUnlessAlone',
   switchToRestored: false,
   groupTitleClick: 'edit',
-  urlDisplay: 'none',
+  urlDisplay: 'domain',
   copyFormat: 'rich',
   tabGroupRestore: 'current',
   discardOnOpen: false,

@@ -11,9 +11,9 @@
   } from '@savetab/core';
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { clickIntent, restoreGroup, restoreTab } from '@/lib/restore';
-  import { act, editing, keys } from '@/lib/ui.svelte';
-  import { t, tn } from '@/lib/i18n';
-  import ItemMenu from './ItemMenu.svelte';
+  import { act, editing, keys, menu, toggleMenu } from '@/lib/ui.svelte';
+  import { shortDate, t, tn } from '@/lib/i18n';
+  import Icon from './Icon.svelte';
   import NotesField from './NotesField.svelte';
   import TabRow from './TabRow.svelte';
   import Tick from './Tick.svelte';
@@ -39,7 +39,12 @@
 
   const count = $derived(view.tabs(group.id).length);
   const label = $derived(group.title || tn('tabCount', count));
-  const created = $derived(new Date(group.createdAt).toLocaleString());
+  const created = $derived(t('createdAt', { date: new Date(group.createdAt).toLocaleString() }));
+  const meta = $derived(
+    [group.title && tn('tabCount', count), shortDate(group.createdAt), group.pinnedTop && t('pinned'), group.locked && t('locked')]
+      .filter(Boolean)
+      .join(' · '),
+  );
 
   function run(fn: Parameters<typeof act>[0]) {
     return act(fn).finally(() => (items = tabs));
@@ -72,32 +77,36 @@
 
 <section class="group" id="item-{group.id}" aria-label={label}>
   <div class="group-head" tabindex="0" role="treeitem" aria-selected="false" aria-expanded={!group.collapsed} aria-label={label} data-nav="group" data-id={group.id}>
-    <span class="group-grip" use:dragHandle aria-label={t('dragItem', { name: label })}>⠿</span>
     <Tick id={group.id} {label} />
     {#if editing.title === group.id}
       <TitleField item={group} title={group.title} label={t('groupName')} />
     {:else}
       <button class="group-label" onclick={labelClick}>{label}</button>
     {/if}
-    {#if group.star}<span title={t('starred')}>★</span>{/if}
-    <span class="meta"
-      >{[group.pinnedTop && t('pinned'), group.locked && t('locked'), t('createdAt', { date: created })]
-        .filter(Boolean)
-        .join(', ')}</span
-    >
-    <button class="link-button restore-all" onclick={(e) => restoreGroup(tabs, clickIntent(e, settings), settings, group)}
-      >{t('restoreAll')}</button
-    >
-    {#if !group.locked}
-      <button class="link-button" onclick={() => run((tx) => trashItems(tx, [group.id]))}>{t('deleteAll')}</button>
-    {/if}
-    <ItemMenu item={group} {view} />
-    <button
-      class="link-button"
-      aria-expanded={!group.collapsed}
-      onclick={() => act((tx) => updateItem(tx, group.id, { collapsed: !group.collapsed }))}
-      >{group.collapsed ? t('expand') : t('collapse')}</button
-    >
+    {#if group.star}<span class="star" title={t('starred')}><Icon name="star" /></span>{/if}
+    <span class="meta" title={created}>{meta}</span>
+    <span class="group-actions">
+      <span class="group-grip" use:dragHandle aria-label={t('dragItem', { name: label })}><Icon name="grip" /></span>
+      <button class="link-button restore-all" onclick={(e) => restoreGroup(tabs, clickIntent(e, settings), settings, group)}
+        >{t('restoreAll')}</button
+      >
+      <button
+        class="icon-button"
+        title={t('menuMore')}
+        aria-label={t('menuMore')}
+        aria-haspopup="menu"
+        aria-expanded={menu.id === group.id}
+        onclick={(e) => toggleMenu(group.id, e.currentTarget)}><Icon name="more" /></button
+      >
+      <button
+        class="icon-button"
+        class:collapsed={group.collapsed}
+        title={group.collapsed ? t('expand') : t('collapse')}
+        aria-label={group.collapsed ? t('expand') : t('collapse')}
+        aria-expanded={!group.collapsed}
+        onclick={() => act((tx) => updateItem(tx, group.id, { collapsed: !group.collapsed }))}><Icon name="chevron" /></button
+      >
+    </span>
   </div>
   {#if editing.notes === group.id}
     <NotesField item={group} notes={group.notes} />

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { browser } from 'wxt/browser';
   import type { ListView, Tab } from '@savetab/core';
-  import { editing } from '@/lib/ui.svelte';
+  import { editing, menu, toggleMenu } from '@/lib/ui.svelte';
   import { t } from '@/lib/i18n';
-  import ItemMenu from './ItemMenu.svelte';
+  import Icon from './Icon.svelte';
   import NotesField from './NotesField.svelte';
   import Tick from './Tick.svelte';
   import TitleField from './TitleField.svelte';
@@ -54,14 +54,9 @@
 </script>
 
 <li class="tab" data-nav="tab" data-id={tab.id} aria-label={title || tab.url}>
-  {#if locked}
-    <span class="tab-delete-slot"></span>
-  {:else}
-    <button class="tab-delete" title={t('delete')} aria-label={t('deleteItem', { name: title || tab.url })} onclick={ondelete}>×</button>
-  {/if}
   <Tick id={tab.id} label={title || tab.url} />
   {#if icon}
-    <img class="tab-icon" src={icon} alt="" draggable="false" />
+    <img class="tab-icon" src={icon} alt="" draggable="false" loading="lazy" />
   {:else}
     <span class="tab-icon"></span>
   {/if}
@@ -72,10 +67,24 @@
       >{title || tab.url}</a
     >
   {/if}
-  {#if shownUrl}<span class="tab-url meta">{shownUrl}</span>{/if}
-  {#if tab.star}<span title={t('starred')}>★</span>{/if}
+  {#if tab.star}<span class="star" title={t('starred')}><Icon name="star" /></span>{/if}
   {#if notes && editing.notes !== tab.id}<span class="tab-notes meta">{notes}</span>{/if}
-  <ItemMenu item={tab} {view} label={t('more')} buttonClass="link-button tab-more" ariaLabel={t('moreActionsFor', { name: title || tab.url })} />
+  <span class="tab-end">
+    {#if shownUrl}<span class="tab-url meta">{shownUrl}</span>{/if}
+    <button
+      class="icon-button row-action"
+      title={t('more')}
+      aria-label={t('moreActionsFor', { name: title || tab.url })}
+      aria-haspopup="menu"
+      aria-expanded={menu.id === tab.id}
+      onclick={(e) => toggleMenu(tab.id, e.currentTarget)}><Icon name="more" /></button
+    >
+    {#if !locked}
+      <button class="icon-button row-action tab-delete" title={t('delete')} aria-label={t('deleteItem', { name: title || tab.url })} onclick={ondelete}
+        ><Icon name="close" /></button
+      >
+    {/if}
+  </span>
   {#if editing.notes === tab.id}
     <NotesField item={tab} {notes} />
   {/if}
