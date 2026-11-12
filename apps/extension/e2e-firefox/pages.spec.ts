@@ -27,7 +27,9 @@ test('imports "URL | Title" text and exports it back', async ({ ff: { driver } }
 test('on the list page a margin rectangle ticks rows and Delete all trashes a group', async ({ ff: { driver } }) => {
   await driver.get(`${EXT}/import-export.html`);
   const text = 'https://m1.example/ | M1\nhttps://m2.example/ | M2\nhttps://m3.example/ | M3\n\nhttps://z.example/ | Z';
-  await (await find(driver, By.css('textarea[aria-label="Links to import"]'))).sendKeys(text);
+  const input = await find(driver, By.css('textarea[aria-label="Links to import"]'));
+  await input.sendKeys(text);
+  await expect.poll(() => input.getAttribute('value')).toBe(text);
   await (await find(driver, By.xpath(`//button[normalize-space()='Import']`))).click();
   const status = await find(driver, By.css('[role="status"]'));
   await expect.poll(() => status.getText()).toBe('Imported 4 tabs in 2 groups.');

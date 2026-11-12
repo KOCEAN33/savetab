@@ -24,7 +24,7 @@ test('keeps pinned tabs open and out of the list', async ({ context, worker, ext
   expect(openUrls(context)).toEqual([`${SITE}/pinned`]);
 });
 
-test('restoring a tab removes it, Ctrl/Cmd-click keeps it, Restore all empties the group', async ({
+test('restoring a tab removes it, a middle click keeps it, Restore all empties the group', async ({
   context,
   worker,
   extensionId,
@@ -39,7 +39,7 @@ test('restoring a tab removes it, Ctrl/Cmd-click keeps it, Restore all empties t
   await list.bringToFront();
   await expect(list.locator('.tab-link')).toHaveText(['Page 2', 'Page 3']);
 
-  await list.getByRole('link', { name: 'Page 2' }).click({ modifiers: ['ControlOrMeta'] });
+  await list.getByRole('link', { name: 'Page 2' }).click({ button: 'middle' });
   await expect.poll(() => openUrls(context).sort()).toEqual([`${SITE}/1`, `${SITE}/2`]);
   await expect(list.locator('.tab-link')).toHaveText(['Page 2', 'Page 3']);
 

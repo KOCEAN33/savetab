@@ -27,7 +27,7 @@
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { touchRecent } from '@/lib/recent';
   import { navigate } from '@/lib/keynav';
-  import { marquee } from '@/lib/marquee';
+  import { marquee } from '@/lib/row-select';
   import { linksFromData } from '@/lib/links-in';
   import { restoredItem } from '@/lib/backup';
   import { editing, keys, menu } from '@/lib/ui.svelte';

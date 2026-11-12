@@ -1,4 +1,4 @@
-import { expect, onetabPage, openPages, sendWindow, test } from './fixtures';
+import { expect, onetabPage, openPages, openUrls, sendWindow, test } from './fixtures';
 
 test('right-click on a tick selects all, and the bar moves the selection to trash', async ({
   context,
@@ -39,4 +39,23 @@ test('Select this and below picks the clicked row and the rows under it', async 
   await list.getByRole('menuitem', { name: 'Select this and below' }).click();
   await expect(list.getByRole('checkbox', { name: /^Select Page/, checked: true })).toHaveCount(2);
   await expect(list.getByRole('checkbox', { name: 'Select Page t1' })).not.toBeChecked();
+});
+
+test('Ctrl/Cmd-click ticks a row without opening it, and Shift-click ticks the range', async ({ context, worker, extensionId }) => {
+  await openPages(context, ['r1', 'r2', 'r3', 'r4']);
+  await sendWindow(worker);
+  const list = await onetabPage(context, extensionId);
+  const box = (name: string) => list.getByRole('checkbox', { name: `Select Page ${name}` });
+
+  await list.getByRole('link', { name: 'Page r2' }).click({ modifiers: ['ControlOrMeta'] });
+  await expect(box('r2')).toBeChecked();
+  await list.getByRole('link', { name: 'Page r2' }).click({ modifiers: ['ControlOrMeta'] });
+  await expect(box('r2')).not.toBeChecked();
+
+  await list.getByRole('link', { name: 'Page r1' }).click({ modifiers: ['ControlOrMeta'] });
+  await list.getByRole('link', { name: 'Page r3' }).click({ modifiers: ['Shift'] });
+  await expect(list.getByRole('checkbox', { name: /^Select Page/, checked: true })).toHaveCount(3);
+  await expect(box('r4')).not.toBeChecked();
+  await expect(list.locator('.tab-link')).toHaveCount(4);
+  expect(openUrls(context)).toEqual([]);
 });

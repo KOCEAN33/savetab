@@ -14,7 +14,7 @@
   } from '@savetab/core';
   import { browser } from 'wxt/browser';
   import { copyLinks } from '@/lib/clipboard';
-  import { clickIntent, restoreGroup } from '@/lib/restore';
+  import { clickIntent, restoreGroup, restoreTab } from '@/lib/restore';
   import { saveHtml } from '@/lib/save-html';
   import { activeShare, shareItem, shareLink, stopSharing } from '@/lib/share';
   import { act, chooser, editing, menu } from '@/lib/ui.svelte';
@@ -173,6 +173,10 @@
     <hr />
   {/if}
   {#if item.kind === 'tab'}
+    {@const tab = item}
+    <button role="menuitem" onclick={(e) => close(() => restoreTab(tab, { ...clickIntent(e, view.settings), newWindow: true }))}>
+      {t('menuOpenNewWindow')}
+    </button>
     <button role="menuitemcheckbox" aria-checked={item.pinOnOpen} onclick={() => set({ pinOnOpen: !item.pinOnOpen })}>
       {t('menuPinOnOpen')}
     </button>

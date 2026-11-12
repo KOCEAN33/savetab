@@ -1,6 +1,7 @@
 <script lang="ts">
   import { browser } from 'wxt/browser';
   import type { ListView, Tab } from '@savetab/core';
+  import { clickSelect } from '@/lib/row-select';
   import { editing, menu, toggleMenu } from '@/lib/ui.svelte';
   import { t } from '@/lib/i18n';
   import Icon from './Icon.svelte';
@@ -60,6 +61,7 @@
 
   function click(e: MouseEvent) {
     e.preventDefault();
+    if (e.button === 0 && clickSelect(e, tab.id)) return;
     onopen(e);
   }
 

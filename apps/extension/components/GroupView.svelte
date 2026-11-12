@@ -11,6 +11,7 @@
   } from '@savetab/core';
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { clickIntent, restoreGroup, restoreTab } from '@/lib/restore';
+  import { clickSelect } from '@/lib/row-select';
   import { activeShare } from '@/lib/share';
   import { act, editing, keys, menu, toggleMenu } from '@/lib/ui.svelte';
   import { shortDate, t, tn } from '@/lib/i18n';
@@ -59,6 +60,7 @@
   }
 
   function labelClick(e: MouseEvent) {
+    if (clickSelect(e, group.id)) return;
     if (settings.groupTitleClick === 'edit') editing.title = group.id;
     else void restoreGroup(tabs, clickIntent(e, settings), settings, group);
   }

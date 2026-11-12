@@ -135,7 +135,7 @@ Svelte components in `apps/extension/components/`. Shared styles in `apps/extens
 - Do show row actions (delete, more) on hover and on keyboard focus only. A group head's "Delete all" follows the same rule, in the meta color.
 - Do give a group head's free width to dragging the group. A head holds no space without a function.
 - Do draw checkboxes and radios in CSS: a 16px box in `on-surface-weak`, filled `primary` with an `on-primary` check when ticked, and a radio as a 16px circle whose ring thickens in `primary` when chosen. A tick's click target is the whole margin cell beside its row.
-- Do select rows by a rectangle dragged from empty page space. A drag that starts on a row moves the row.
+- Do select rows by a rectangle dragged from empty page space, by Ctrl/Cmd-click, and by Shift-click for a range. A drag that starts on a row moves the row.
 - Do give every icon button an accessible name and a tooltip with the same text.
 - Don't add cards, borders, or colored backgrounds around groups. Space separates them.
 - Don't use an icon for an action that changes the list in bulk. "Restore all" stays a word.

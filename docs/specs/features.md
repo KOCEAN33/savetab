@@ -56,8 +56,8 @@ Action popup `P3`: lists open tabs with checkboxes. Filters: include pinned, inc
 
 ## Restoring tabs
 
-- Click a tab: open it. Option: switch to it, or stay in OneTab. Cmd/Ctrl-click inverts the switch. Shift-click opens in a new window. `P1`
-- After restore, per option: remove from list, keep in list, or mark archived. Ctrl/Cmd keeps, Alt/Option archives. Locked groups always keep. `P1` (archive `P2`)
+- Click a tab: open it. Option: switch to it, or stay in OneTab. A middle click inverts the switch. The tab's menu opens it in a new window. Cmd/Ctrl-click and Shift-click select rows instead, as in a file manager, by the owner's decision. `P1`
+- After restore, per option: remove from list, keep in list, or mark archived. A middle click on a tab, or Ctrl/Cmd on a group's restore, keeps. Alt/Option archives. Locked groups always keep. `P1` (archive `P2`)
 - Restore all: open the group's tabs. Option: current window, new window unless OneTab is the only tab, or always a new window. `P1`
 - More menu: Restore in this window, Restore in a new window, Restore in a new incognito window. `P3`
 - Restore all never asks for confirmation. Restoring more than 50 selected tabs asks "You are about to open {N} tabs", and one open is capped at 500 tabs. `P2`

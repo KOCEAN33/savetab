@@ -15,7 +15,6 @@ Deferred work, not scheduled.
 
 The user asked for these on 2026-11-12, to be done later.
 
-- Ctrl+click and Shift+click selection of rows. Ctrl/Cmd+click and Shift+click on a tab link already restore it, kept in the list or in a new window, as in OneTab, so the user picks which meaning wins.
 - An option to leave extension pages (`chrome-extension://`, `moz-extension://`, and similar) out of a send. Today only savetab's own pages and the empty pages in `BLANK_PAGES` (`apps/extension/lib/capture.ts`) are skipped.
 
 ## UI review findings left open
