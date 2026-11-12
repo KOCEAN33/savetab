@@ -28,32 +28,37 @@ export interface Firefox {
   controlWindow: string;
 }
 
+/** Start a Firefox on a fresh profile with the extension installed, and hand it to `use`. */
+export async function withFirefox(use: (ff: Firefox) => Promise<void>): Promise<void> {
+  const options = new firefox.Options().setPreference(
+    'extensions.webextensions.uuids',
+    JSON.stringify({ [GECKO_ID]: UUID }),
+  );
+  if (!process.env.HEADED) options.addArguments('-headless');
+  // Without system access Marionette refuses every command on a moz-extension:// page.
+  const service = new firefox.ServiceBuilder().addArguments('--allow-system-access').build();
+  // geckodriver starts Firefox on a fresh temporary profile and deletes it on quit.
+  const driver = await firefox.Driver.createSession(options, service);
+  try {
+    await driver.installAddon(EXTENSION, true);
+    const siteWindow = await driver.getWindowHandle();
+    await driver.switchTo().newWindow('window');
+    const controlWindow = await driver.getWindowHandle();
+    await driver.get(`${EXT}/options.html`);
+    // Firefox's own UI language would pick the page language under "Automatic".
+    await driver.executeScript(`return browser.storage.local.set({ deviceSettings: { language: 'en' } })`);
+    await driver.switchTo().window(siteWindow);
+    await use({ driver, siteWindow, controlWindow });
+  } finally {
+    await driver.quit();
+  }
+}
+
 export const test = base.extend<{ ff: Firefox }>({
   // Vitest requires an object pattern for the fixtures argument, even an empty one.
   // oxlint-disable-next-line no-empty-pattern
   ff: async ({}, use) => {
-    const options = new firefox.Options().setPreference(
-      'extensions.webextensions.uuids',
-      JSON.stringify({ [GECKO_ID]: UUID }),
-    );
-    if (!process.env.HEADED) options.addArguments('-headless');
-    // Without system access Marionette refuses every command on a moz-extension:// page.
-    const service = new firefox.ServiceBuilder().addArguments('--allow-system-access').build();
-    // geckodriver starts Firefox on a fresh temporary profile and deletes it on quit.
-    const driver = await firefox.Driver.createSession(options, service);
-    try {
-      await driver.installAddon(EXTENSION, true);
-      const siteWindow = await driver.getWindowHandle();
-      await driver.switchTo().newWindow('window');
-      const controlWindow = await driver.getWindowHandle();
-      await driver.get(`${EXT}/options.html`);
-      // Firefox's own UI language would pick the page language under "Automatic".
-      await driver.executeScript(`return browser.storage.local.set({ deviceSettings: { language: 'en' } })`);
-      await driver.switchTo().window(siteWindow);
-      await use({ driver, siteWindow, controlWindow });
-    } finally {
-      await driver.quit();
-    }
+    await withFirefox(use);
   },
 });
 

@@ -1,14 +1,7 @@
 import type { BrowserContext, Page, Worker } from '@playwright/test';
-import { spawn } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
-import { once } from 'node:events';
-import path from 'node:path';
-import { createInterface } from 'node:readline';
+import { randomBytes } from 'node:crypto';
 import { test as base, expect, launchProfile, openPages, sendWindow, workerOf } from './fixtures';
-
-const SERVER_SCRIPT = path.resolve(import.meta.dirname, '../../server/scripts/e2e-server.sh');
-/** Where a login ends. No browser opens it here: the test reads the code from the redirect. */
-const REDIRECT = 'https://savetab-e2e.chromiumapp.org/';
+import { logIn, startSyncServer } from './sync-server';
 
 interface Profile {
   context: BrowserContext;
@@ -33,22 +26,12 @@ const test = base.extend<{ first: Profile; second: Profile; server: string; data
     await use(await profile(context));
     await context.close();
   },
-  // The sync server of apps/server on a database of its own, with an issuer that logs everyone in as one user.
   server: [
     // oxlint-disable-next-line no-empty-pattern
     async ({}, use) => {
-      const proc = spawn(SERVER_SCRIPT, {
-        env: { ...process.env, AUTH_REDIRECT_URIS: REDIRECT },
-        stdio: ['ignore', 'pipe', 'inherit'],
-      });
-      const exited = once(proc, 'exit');
-      const [url] = await Promise.race([
-        once(createInterface(proc.stdout), 'line') as Promise<string[]>,
-        exited.then(() => Promise.reject(new Error('the sync server stopped before it printed its URL'))),
-      ]);
-      await use(url!);
-      proc.kill('SIGTERM');
-      await exited;
+      const server = await startSyncServer();
+      await use(server.url);
+      await server.stop();
     },
     { timeout: 120_000 },
   ],
@@ -58,30 +41,10 @@ const test = base.extend<{ first: Profile; second: Profile; server: string; data
   },
 });
 
-/** Log in the way the extension's login window does, and return the device's tokens. */
-async function logIn(server: string, deviceName: string) {
-  const verifier = randomBytes(32).toString('base64url');
-  const challenge = createHash('sha256').update(verifier).digest('base64url');
-  let url = `${server}/v1/auth/start?${new URLSearchParams({ redirect_uri: REDIRECT, code_challenge: challenge, state: 'e2e' })}`;
-  while (!url.startsWith(REDIRECT)) {
-    const res = await fetch(url, { redirect: 'manual' });
-    const next = res.headers.get('location');
-    if (!next) throw new Error(`login stopped at ${url} with status ${res.status}`);
-    url = next;
-  }
-  const res = await fetch(`${server}/v1/auth/token`, {
-    method: 'POST',
-    body: JSON.stringify({ code: new URL(url).searchParams.get('code'), codeVerifier: verifier, deviceName }),
-  });
-  if (!res.ok) throw new Error(`token: status ${res.status}`);
-  return (await res.json()) as { accessToken: string; refreshToken: string; userId: string; deviceId: string };
-}
-
 async function join(p: Profile, server: string, dataKey: number[], deviceName: string): Promise<void> {
-  const { accessToken, refreshToken, userId, deviceId } = await logIn(server, deviceName);
   await p.worker.evaluate(
     ({ account, key }) => (globalThis as any).savetabTest.joinSync({ ...account, dataKey: new Uint8Array(key) }),
-    { account: { serverUrl: server, userId, deviceId, accessToken, refreshToken }, key: dataKey },
+    { account: await logIn(server, deviceName), key: dataKey },
   );
 }
 
