@@ -37,6 +37,13 @@ Deferred work, not scheduled.
 - A group's sticky `restoreTarget`, such as incognito, is not shown on the group, so "Restore all" opening a private window can surprise the user. Showing it on the meta line would make it visible.
 - The rich text paste unit test covers anchor filtering only. `DOMParser` parsing is covered by the e2e paste, since vitest runs without a DOM.
 
+## Sync server follow-ups
+
+- A refresh token used twice answers 401 and nothing else. Revoking the device on a reused token would cut off a thief who refreshed first.
+- `GET /v1/auth/start` stores one `logins` row per request without a bearer token or a rate limit. Rows expire after 10 minutes and the next start deletes them.
+- The server logs in through one issuer and gives an account to anyone that issuer logs in. `identities` is keyed by `(issuer, subject)`, so a second issuer or an allow list can join.
+- `packages/core/src/crypto.ts` has no function that compares a pairing commitment. The signed-in device must compare `pairingCommitment(newPublic)` with the commitment the new device sent first, before it shows the code.
+
 ## Code review findings
 
 Structure:
@@ -55,4 +62,5 @@ Lint rules not turned on:
 ## Waiting on the user
 
 - Review the Korean strings in `apps/extension/locales/ko.json` and `public/_locales/ko/messages.json`. Wording and terms are the user's call.
+- P4 (sync server): which OIDC issuer the server uses. The account UI (plan P4 step 6) and the deployment (step 9) need a real one, and the server tests run against a fake one.
 - P4 (sync server): in the later build where pairing starts by itself after login, what the signed-in device shows for approval. A one-tap approve trusts the server to relay the right key. Comparing the pairing code does not.

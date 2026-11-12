@@ -6,7 +6,13 @@ Build the self-hosted sync server (plan phase P4), so the stored tab list syncs 
 
 ## Start
 
-Continue P4 at step 5 of `docs/plans/onetab-parity.md` `### P4: sync server`: the sync client in the extension. Steps 1 to 4 are built. `apps/server` has every endpoint of the plan's "HTTP API" list. `packages/core` holds the op format, the merge rule, and the client crypto in `src/crypto.ts`. No code calls the server or the crypto yet. Server tests need the tailnet, see `apps/server/README.md`.
+Continue P4 at step 5 of `docs/plans/onetab-parity.md` `### P4: sync server`: the sync client in the extension. It is first because the plan's steps run in order and the owner said to continue from here. Steps 1 to 4 are built. `apps/server` has every endpoint of the plan's "HTTP API" list. `packages/core` holds the op format, the merge rule, and the client crypto in `src/crypto.ts`. No code calls the server or the crypto yet.
+
+State that shapes step 5:
+
+- The server refuses to start without the OIDC variables in `apps/server/README.md`, and it reads the issuer's discovery document at start. The step's e2e runs against a local server, so it needs an issuer the test starts, as `apps/server/internal/api/auth_test.go` does, or another way to get device tokens.
+- Server tests need the tailnet, see `apps/server/README.md`. A local server for the e2e needs a Postgres too.
+- `packages/core/src/crypto.ts` is exempt from the lint rule that bans `crypto.subtle` in core. Its functions run outside `transact`.
 
 Orders from the owner that bind P4:
 
@@ -15,10 +21,8 @@ Orders from the owner that bind P4:
 
 ## Next steps
 
-- P4 steps 6 to 9 follow step 5 in the plan's order.
-- Step 6 needs a real OIDC issuer to log in against. None is chosen. The server tests use a fake one.
+- P4 steps 6 to 9 follow step 5 in the plan's order. Each is done when its check in the plan passes plus the five commands in `CLAUDE.md`.
 
 ## Pointers
 
-- Open UI findings and the question about pairing approval: `docs/candidates.md`.
-- First-open time against OneTab: `apps/extension/scripts/first-open.mjs` measures both. savetab is the faster one.
+- Deferred server work, the open UI findings, and the items waiting on the owner (the OIDC issuer, pairing approval): `docs/candidates.md`.

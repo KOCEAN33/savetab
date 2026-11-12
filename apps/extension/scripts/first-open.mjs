@@ -4,6 +4,10 @@
 //   pnpm --filter @savetab/extension build
 //   node apps/extension/scripts/first-open.mjs <unpacked OneTab directory>
 //
+// The numbers in docs/candidates.md came from a copy of the directory Chrome installs OneTab
+// into, `<profile>/Extensions/chphlpgkkbolifaimnlloiipkdnihall/<version>`, with its `_metadata`
+// folder removed.
+//
 // The time runs from navigation start to the second animation frame after the first group
 // element is in the document, which is the first frame that has painted it.
 import { chromium } from '@playwright/test';
