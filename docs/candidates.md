@@ -44,6 +44,12 @@ Deferred work, not scheduled.
 - The server logs in through one issuer and gives an account to anyone that issuer logs in. `identities` is keyed by `(issuer, subject)`, so a second issuer or an allow list can join.
 - `packages/core/src/crypto.ts` has no function that compares a pairing commitment. The signed-in device must compare `pairingCommitment(newPublic)` with the commitment the new device sent first, before it shows the code.
 
+- The outbox of a device with no account keeps every op since install and is never trimmed. Joining replaces it, so it could stay empty until the device joins.
+- A pull answered 409 `snapshot_required` fails the cycle on every try. Reading the snapshot is plan P4 step 7.
+- A failed cycle only logs `sync failed` in the background console. A refused refresh token fails every cycle until the device joins again, and no page shows it. The account UI (plan P4 step 6) needs a stored sync status.
+- A background worker stopped between a refresh answer and the write of the new tokens leaves the device with a spent refresh token, so it must log in again.
+- Sync has no Firefox e2e. `e2e/sync.spec.ts` runs two Chromium profiles.
+
 ## Code review findings
 
 Structure:

@@ -16,20 +16,28 @@ server.unref();
 await new Promise((r) => server.once('listening', r));
 export const SITE = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
+/** A browser with a fresh profile and the extension loaded. */
+export function launchProfile(): Promise<BrowserContext> {
+  return chromium.launchPersistentContext('', {
+    channel: 'chromium',
+    args: [`--disable-extensions-except=${EXTENSION}`, `--load-extension=${EXTENSION}`],
+  });
+}
+
+export async function workerOf(context: BrowserContext): Promise<Worker> {
+  return context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
+}
+
 export const test = base.extend<{ context: BrowserContext; worker: Worker; extensionId: string }>({
   // Playwright requires an object pattern for the fixtures argument, even an empty one.
   // oxlint-disable-next-line no-empty-pattern
   context: async ({}, use) => {
-    const context = await chromium.launchPersistentContext('', {
-      channel: 'chromium',
-      args: [`--disable-extensions-except=${EXTENSION}`, `--load-extension=${EXTENSION}`],
-    });
+    const context = await launchProfile();
     await use(context);
     await context.close();
   },
   worker: async ({ context }, use) => {
-    const worker = context.serviceWorkers()[0] ?? (await context.waitForEvent('serviceworker'));
-    await use(worker);
+    await use(await workerOf(context));
   },
   extensionId: async ({ worker }, use) => {
     await use(new URL(worker.url()).host);

@@ -1,7 +1,7 @@
 import { liveQuery } from 'dexie';
 import { browser, type Browser } from 'wxt/browser';
 import { BACKUP_ALARM, BACKUP_PERIOD_MINUTES, restoreIfLost, takeBackup } from '@/lib/backup';
-import { db } from '@/lib/db';
+import { db, joinSync, syncAccount } from '@/lib/db';
 import { hostnameOf, sendLink, sendTabs, sendTabTo, toggleExcluded } from '@/lib/capture';
 import { builtTargets, MENU_SEND, rebuildMenus, refreshExcludeItem, refreshSendTo, SEND_TO_PREFIX } from '@/lib/menus';
 import { omniboxSuggestions } from '@/lib/omnibox';
@@ -9,6 +9,7 @@ import { onetabUrl, openOneTab } from '@/lib/onetab-page';
 import { recentItem } from '@/lib/recent';
 import type { SendAction } from '@/lib/select';
 import { deviceSettingsItem, getDeviceSettings } from '@/lib/settings';
+import { sync, SYNC_ALARM } from '@/lib/sync';
 import { ListView, SETTINGS_ID } from '@savetab/core';
 
 const COMMAND_SEND: Record<string, SendAction> = {
@@ -49,7 +50,9 @@ async function onMenuClick(info: Browser.contextMenus.OnClickData, tab?: Browser
 export default defineBackground(() => {
   // Playwright and WebDriver cannot click the toolbar icon or a context menu, so e2e builds expose their handlers.
   if (import.meta.env.MODE === 'e2e') {
-    Object.assign(globalThis, { savetabTest: { sendTabs, onMenuClick, sendTargets: () => builtTargets } });
+    Object.assign(globalThis, {
+      savetabTest: { sendTabs, onMenuClick, sendTargets: () => builtTargets, joinSync, sync },
+    });
   }
 
   browser.action.onClicked.addListener(async (tab) => {
@@ -78,6 +81,7 @@ export default defineBackground(() => {
 
   browser.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === BACKUP_ALARM) void takeBackup();
+    if (alarm.name === SYNC_ALARM) void sync();
   });
   void browser.alarms.get(BACKUP_ALARM).then((alarm) => {
     if (!alarm) void browser.alarms.create(BACKUP_ALARM, { periodInMinutes: BACKUP_PERIOD_MINUTES });
@@ -106,4 +110,15 @@ export default defineBackground(() => {
   // query over groups if large lists make the background worker busy.
   liveQuery(() => db.items.toArray()).subscribe(() => void refreshSendTo());
   recentItem.watch(() => void refreshSendTo());
+
+  // Ceiling: the server has no channel to this device, and a write from a page does not wake a
+  // sleeping worker. The alarm pulls, and pushes such a write, within a minute.
+  liveQuery(syncAccount).subscribe((account) => {
+    if (!account) return void browser.alarms.clear(SYNC_ALARM);
+    void browser.alarms.create(SYNC_ALARM, { periodInMinutes: 1 });
+    void sync();
+  });
+  liveQuery(() => db.outbox.count()).subscribe((waiting) => {
+    if (waiting > 0) void sync();
+  });
 });

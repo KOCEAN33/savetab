@@ -2,6 +2,8 @@ import Dexie, { type Table } from 'dexie';
 import {
   applyOp,
   EXCLUDE_PREFIX,
+  mergeRemote,
+  restoreSnapshot,
   SETTINGS_ID,
   Tx,
   uuidv7,
@@ -10,6 +12,7 @@ import {
   type ItemRecord,
   type ItemSource,
   type Op,
+  type RemoteOp,
 } from '@savetab/core';
 
 /**
@@ -119,4 +122,70 @@ export function transact<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
     await db.meta.put({ key: 'hlc', value: tx.clock });
     return result;
   });
+}
+
+/** The sync account this device joined. */
+export interface SyncAccount {
+  /** The server's base URL, without a trailing slash. */
+  serverUrl: string;
+  userId: string;
+  /** The id the server gave this device at login. Clocks carry the local `deviceId`, not this one. */
+  deviceId: string;
+  accessToken: string;
+  refreshToken: string;
+  /** The raw data key. It stays readable because pairing hands it to a new device. */
+  dataKey: Uint8Array;
+}
+
+export async function syncAccount(): Promise<SyncAccount | undefined> {
+  return (await db.meta.get('sync'))?.value as SyncAccount | undefined;
+}
+
+/**
+ * Join an account. The outbox is replaced by one op per record and clock, so the device uploads
+ * what it holds now and not every edit since install.
+ */
+export function joinSync(account: SyncAccount): Promise<void> {
+  return db.transaction('rw', db.items, db.outbox, db.meta, async () => {
+    const records = await db.items.toArray();
+    await db.outbox.clear();
+    await transact((tx) => restoreSnapshot(tx, records));
+    await db.meta.bulkPut([
+      { key: 'sync', value: account },
+      { key: 'syncCursor', value: 0 },
+    ]);
+  });
+}
+
+/** The tokens a refresh returned. The server has already retired the ones they replace. */
+export async function saveTokens(tokens: Pick<SyncAccount, 'accessToken' | 'refreshToken'>): Promise<void> {
+  await db.meta
+    .where('key')
+    .equals('sync')
+    .modify((row) => {
+      Object.assign(row.value as SyncAccount, tokens);
+    });
+}
+
+/** The `seq` of the last op this device pulled and merged. */
+export async function syncCursor(): Promise<number> {
+  return ((await db.meta.get('syncCursor'))?.value as number | undefined) ?? 0;
+}
+
+/** Merge pulled ops and move the cursor past them in one transaction, so a failed merge is pulled again. */
+export function mergePulled(remote: RemoteOp[], cursor: number): Promise<void> {
+  return db.transaction('rw', db.items, db.outbox, db.meta, async () => {
+    await transact((tx) => mergeRemote(tx, remote));
+    await db.meta.put({ key: 'syncCursor', value: cursor });
+  });
+}
+
+/** The oldest ops waiting for upload. */
+export function outboxHead(limit: number): Promise<{ seq?: number; op: Op }[]> {
+  return db.outbox.limit(limit).toArray();
+}
+
+/** Drop the outbox rows up to `seq`, once the server has stored them. */
+export async function dropOutbox(seq: number): Promise<void> {
+  await db.outbox.where('seq').belowOrEqual(seq).delete();
 }

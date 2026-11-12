@@ -6,13 +6,15 @@ Build the self-hosted sync server (plan phase P4), so the stored tab list syncs 
 
 ## Start
 
-Continue P4 at step 5 of `docs/plans/onetab-parity.md` `### P4: sync server`: the sync client in the extension. It is first because the plan's steps run in order and the owner said to continue from here. Steps 1 to 4 are built. `apps/server` has every endpoint of the plan's "HTTP API" list. `packages/core` holds the op format, the merge rule, and the client crypto in `src/crypto.ts`. No code calls the server or the crypto yet.
+Continue P4 at step 6 of `docs/plans/onetab-parity.md` `### P4: sync server`: the account UI. It is first because the plan's steps run in order. Steps 1 to 5 are built: two browser profiles sync through a local server in `apps/extension/e2e/sync.spec.ts`.
 
-State that shapes step 5:
+State that shapes step 6:
 
-- The server refuses to start without the OIDC variables in `apps/server/README.md`, and it reads the issuer's discovery document at start. The step's e2e runs against a local server, so it needs an issuer the test starts, as `apps/server/internal/api/auth_test.go` does, or another way to get device tokens.
-- Server tests need the tailnet, see `apps/server/README.md`. A local server for the e2e needs a Postgres too.
-- `packages/core/src/crypto.ts` is exempt from the lint rule that bans `crypto.subtle` in core. Its functions run outside `transact`.
+- No page joins an account yet. The e2e joins through the test hook `savetabTest.joinSync`, with tokens the test gets from the login endpoints and a data key it makes itself. `joinSync` in `apps/extension/lib/db.ts` is the function the UI calls once it holds the tokens and the data key.
+- The extension has no `identity` permission and no code that calls `browser.identity.launchWebAuthFlow`, wraps a data key, or runs a pairing. `packages/core/src/crypto.ts` has the functions, and `apps/extension/lib/sync.ts` has the HTTP client for one account.
+- The server has no endpoint that lists or revokes devices, and none that signs a device out. `store.RevokeDevice` exists. Step 6 lists and revokes devices, so it adds them to the plan's HTTP API first.
+- The e2e server (`apps/server/README.md`) logs every visitor in without a page to click, and takes its allowed redirect URIs from `AUTH_REDIRECT_URIS`. The extension's is `browser.identity.getRedirectURL()`.
+- A failed sync cycle is only logged in the background console. The UI needs a stored status to show, see `docs/candidates.md` "Sync server follow-ups".
 
 Orders from the owner that bind P4:
 
@@ -21,7 +23,7 @@ Orders from the owner that bind P4:
 
 ## Next steps
 
-- P4 steps 6 to 9 follow step 5 in the plan's order. Each is done when its check in the plan passes plus the five commands in `CLAUDE.md`.
+- P4 steps 7 to 9 follow step 6 in the plan's order. Each is done when its check in the plan passes plus the five commands in `CLAUDE.md`.
 
 ## Pointers
 
