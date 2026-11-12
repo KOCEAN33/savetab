@@ -45,7 +45,6 @@ Before P4 pushes its first op:
 - `excludedDomains` is one last-writer-wins array (`lib/settings.ts:43`, `lib/capture.ts:145`), so two devices that each add a domain offline keep only one addition.
 - A live item under a purged parent is invisible after a merge. Core needs one re-home rule, used by `restoreFromTrash` and by remote apply.
 - `restoreSnapshot` (`mutations.ts:582`) stamps fresh clocks, so a backup restore on a synced device overrides newer edits from other devices.
-- The plan puts the server in Go, while its invariant says server tests reuse `core`. Without end-to-end encryption the server reimplements `applyOp`, `tick`, and `observe`, so core's sync tests should export JSON vectors for it.
 - `normalizeUrl` is `new URL(raw).href`, which differs by engine for non-special schemes: Chromium gives `chrome://crash/`, Node gives `chrome://crash`. `linkId` hashes that form, so two engines can derive different link ids for one URL.
 - `observe` (`packages/core/src/hlc.ts:19`) accepts any remote clock. A device whose clock runs ahead wins every field until a max-skew check exists.
 
@@ -65,4 +64,4 @@ Lint rules not turned on:
 ## Waiting on the user
 
 - Review the Korean strings in `apps/extension/locales/ko.json` and `public/_locales/ko/messages.json`. Wording and terms are the user's call.
-- P4 (sync server) starts with the open decision in `docs/plans/onetab-parity.md` P4: whether ops are end-to-end encrypted.
+- P4 (sync server): whether a second way to add a device is wanted besides typing the recovery key, such as pairing with a device already signed in.

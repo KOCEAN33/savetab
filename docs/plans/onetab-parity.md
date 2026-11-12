@@ -67,7 +67,7 @@ Settings split in two. Synced settings (exclusions, duplicate rule, restore rule
 
 A tab's title and notes live on a `Link` record shared by every copy of its URL (features.md "Data hierarchy"). See P2 step 1.
 
-Merge rule for incoming ops: a field takes the op's value when the op's HLC is greater than the field's clock. Clients run this rule. Whether the server also runs it depends on the E2E decision in `P4`.
+Merge rule for incoming ops: a field takes the op's value when the op's HLC is greater than the field's clock. Only clients run this rule. The server stores encrypted ops and never merges (`P4`).
 
 ## Stack
 
@@ -188,7 +188,6 @@ Open before starting: whether ops are end-to-end encrypted. The E2E design under
 - A new device gets the data key through device pairing (ECDH P-256 with a 6-digit confirmation code) or a one-time random recovery key.
 - The server keeps an append-only log `ops(user_id, seq, device_id, ciphertext, created_at)` and never merges. Clients decrypt and merge. AAD binds `user_id` and `item_id`. Clients upload encrypted snapshots, and the server drops ops before the snapshot's `seq`.
 - A shared web page uses its own random key in the URL fragment.
-Without E2E, the server runs the same merge rule as the client.
 
 ### P5: more clients
 
