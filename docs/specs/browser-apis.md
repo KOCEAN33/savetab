@@ -35,6 +35,13 @@ Chrome and Firefox differences that shape savetab's P3 steps (`docs/plans/onetab
 - Firefox rejects privileged `about:` pages (`about:config`, `about:addons`, `about:debugging`), `chrome:`, `javascript:`, `data:`, and `file:`, with `Illegal URL: <url>`.
 - Sources: [Chromium extension_tab_util.cc](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/browser/extensions/extension_tab_util.cc), [Firefox ext-tabs.js](https://github.com/mozilla-firefox/firefox/blob/main/browser/components/extensions/parent/ext-tabs.js).
 
+## Sign-in window
+
+- Permission `identity`. `identity.launchWebAuthFlow({ url, interactive: true })` opens a window and resolves with the URL it lands on once that URL starts with `identity.getRedirectURL()`. It rejects when the user closes the window.
+- The redirect URL is `https://<extension id>.chromiumapp.org/` in Chrome. An unpacked build's id comes from its path. Firefox derives a host under `extensions.allizom.org` from the add-on id.
+- Both run it headless: the savetab e2e signs in through it in Playwright Chromium and in Firefox under geckodriver (`e2e/account.spec.ts`, `e2e-firefox/account.spec.ts`).
+- Sources: [Chrome identity](https://developer.chrome.com/docs/extensions/reference/api/identity), [MDN identity](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/identity).
+
 ## Language
 
 - `browser.i18n.getMessage` follows the browser UI language and takes no locale argument, so an extension cannot switch its own language at runtime. A missing message returns `""`.

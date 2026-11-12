@@ -26,6 +26,7 @@ The Privacy tab asks for one justification per permission (`#privacy-practices-t
 | `contextMenus` | The "Send to savetab" entries on pages, tabs, and links. |
 | `alarms` | Schedules the weekly backup. |
 | `favicon` | Shows each stored tab's site icon. |
+| `identity` | Opens the sign-in window of the user's own sync server (`lib/account.ts`). |
 | `bookmarks` (optional) | Imports bookmark folders when the user asks. |
 | `readingList` (optional) | Imports the reading list when the user asks. |
 
