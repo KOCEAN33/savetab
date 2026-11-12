@@ -3,7 +3,7 @@ import { MemoryStore } from '../src/memory';
 import {
   copyItems,
   createFolder,
-  createNear,
+  createWithin,
   editTab,
   emptyTrash,
   importGroups,
@@ -165,8 +165,8 @@ describe('tied order keys', () => {
 
     const s2 = new MemoryStore('dev2');
     s2.applyRemote(s1.log);
-    const fromDev1 = await s1.transact((tx) => createNear(tx, 'group', f, 'within'));
-    const fromDev2 = await s2.transact((tx) => createNear(tx, 'group', f, 'within'));
+    const fromDev1 = await s1.transact((tx) => createWithin(tx, 'group', f));
+    const fromDev2 = await s2.transact((tx) => createWithin(tx, 'group', f));
     s1.applyRemote(s2.log);
 
     // Setup check: both devices inserted at the top, so the merged keys tie.

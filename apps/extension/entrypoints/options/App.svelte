@@ -122,7 +122,6 @@
     options={[
       ['remove', t('afterRestoreRemove')],
       ['keep', t('afterRestoreKeep')],
-      ['archive', t('afterRestoreArchive')],
     ]}
     onchange={(v) => setSettings({ afterRestore: v })}
   />

@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../src/memory';
 import {
-  addToQuickList,
   createFolder,
   editTab,
   moveItems,
-  removeFromQuickList,
   storeTabs,
-  trashItems,
   updateItem,
 } from '../src/mutations';
 import { ListView } from '../src/view';
@@ -51,43 +48,6 @@ describe('ListView', () => {
     expect(v.tabCount(outer)).toBe(2);
     expect(v.tabCount(null)).toBe(2);
     expect(v.path(g).map((i) => i.id)).toEqual([outer, inner]);
-  });
-
-  it('lists pending tasks before done ones, each in display order, skipping trashed ones', async () => {
-    const s = new MemoryStore('dev1');
-    const gOld = (await s.transact((tx) => storeTabs(tx, [tab('a'), tab('b')], settings)))!;
-    const gGone = (await s.transact((tx) => storeTabs(tx, [tab('c')], settings)))!;
-    const folder = await s.transact((tx) => createFolder(tx, null, 'F'));
-    const gNew = (await s.transact((tx) => storeTabs(tx, [tab('d')], settings)))!;
-    await s.transact((tx) => moveItems(tx, [gNew], folder, null));
-    const [a, b] = (await viewOf(s)).tabs(gOld);
-    const [c] = (await viewOf(s)).tabs(gGone);
-    await s.transact(async (tx) => {
-      await updateItem(tx, a!.id, { task: 'done' });
-      await updateItem(tx, b!.id, { task: 'pending' });
-      await updateItem(tx, gOld, { task: 'pending' });
-      await updateItem(tx, gNew, { task: 'done' });
-      await updateItem(tx, c!.id, { task: 'pending' });
-    });
-    // Root order is folder, gGone, gOld. Trashing gGone leaves its pending tab live but unreachable.
-    await s.transact((tx) => trashItems(tx, [gGone]));
-
-    expect((await viewOf(s)).tasks().map((i) => i.id)).toEqual([gOld, b!.id, gNew, a!.id]);
-  });
-
-  it('keeps quick list entries in the order added, and removing one leaves the item in the list', async () => {
-    const s = new MemoryStore('dev1');
-    const g = (await s.transact((tx) => storeTabs(tx, [tab('a'), tab('b')], settings)))!;
-    const [a, b] = (await viewOf(s)).tabs(g);
-    await s.transact((tx) => addToQuickList(tx, b!.id, null));
-    await s.transact((tx) => addToQuickList(tx, g, b!.id));
-    await s.transact((tx) => addToQuickList(tx, a!.id, g));
-    expect((await viewOf(s)).quickList().map((i) => i.id)).toEqual([b!.id, g, a!.id]);
-
-    await s.transact((tx) => removeFromQuickList(tx, g));
-    const v = await viewOf(s);
-    expect(v.quickList().map((i) => i.id)).toEqual([b!.id, a!.id]);
-    expect(v.children(null).map((i) => i.id)).toEqual([g]);
   });
 
   it('reads a group stored before restore options existed with the default options', () => {

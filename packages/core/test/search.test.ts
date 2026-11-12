@@ -15,10 +15,8 @@ const q = (patch: Partial<SearchQuery>): SearchQuery => ({
   createdFrom: null,
   createdTo: null,
   starred: false,
-  tasks: false,
   hasNotes: false,
   namedOnly: false,
-  archived: 'any',
   folderId: null,
   ...patch,
 });
@@ -73,18 +71,14 @@ describe('search', () => {
     expect(r.count).toBe(1);
   });
 
-  it('filters by star, task, notes, archive state, and named groups', async () => {
+  it('filters by star, notes, and named groups', async () => {
     const f = await fixture();
     await f.s.transact(async (tx) => {
       await updateItem(tx, f.docs.id, { star: true });
-      await updateItem(tx, f.kr.id, { task: 'pending', archived: true });
       await editTab(tx, f.news.id, { notes: 'n' });
     });
     expect(tabIds(f.s, q({ starred: true }))).toEqual([f.docs.id]);
-    expect(tabIds(f.s, q({ tasks: true }))).toEqual([f.kr.id]);
     expect(tabIds(f.s, q({ hasNotes: true }))).toEqual([f.news.id]);
-    expect(tabIds(f.s, q({ archived: 'only' }))).toEqual([f.kr.id]);
-    expect(tabIds(f.s, q({ archived: 'none', text: 'svelte' }))).toEqual([f.docs.id, f.tips.id].sort());
     expect(tabIds(f.s, q({ namedOnly: true }))).toEqual([f.news.id, f.tips.id].sort());
   });
 

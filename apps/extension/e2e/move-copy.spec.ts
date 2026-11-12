@@ -20,22 +20,6 @@ test('moves a group into a folder through the Move dialog', async ({ context, wo
   await expect(main.locator('section[aria-label="Folder Archive"]')).toContainText('Folder, 2 tabs');
 });
 
-test('dropping a group on another group in the folder column merges them', async ({ context, worker, extensionId }) => {
-  await openPages(context, ['a1', 'a2']);
-  await sendWindow(worker);
-  const list = await onetabPage(context, extensionId);
-  await openPages(context, ['b1']);
-  await sendWindow(worker);
-  await list.bringToFront();
-
-  const groups = list.locator('main .group');
-  await expect(groups).toHaveCount(2);
-  const nav = list.getByRole('navigation', { name: 'Folders' });
-  await drag(list, groups.nth(0).locator('.group-grip'), nav.getByRole('button', { name: '2 tabs', exact: true }), 4);
-  await expect(list.locator('main .group')).toHaveCount(1);
-  await expect(list.locator('.tab-link')).toHaveText(['Page a1', 'Page a2', 'Page b1']);
-});
-
 test('dragging a tab with Alt held copies it', async ({ context, worker, extensionId }) => {
   await openPages(context, ['c1', 'c2']);
   await sendWindow(worker);

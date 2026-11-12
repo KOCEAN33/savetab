@@ -1,10 +1,10 @@
 <script lang="ts">
   import { dndzone, TRIGGERS, type DndEvent } from 'svelte-dnd-action';
-  import { mergeGroups, moveItems, TOP, type Id, type Item, type ListView } from '@savetab/core';
+  import { moveItems, TOP, type Id, type Item, type ListView } from '@savetab/core';
   import { act } from '@/lib/ui.svelte';
   import { t, tn } from '@/lib/i18n';
   import { DROP_TARGET } from '@/lib/motion';
-  import { navFilterItem, recentItem, type NavFilter } from '@/lib/recent';
+  import { recentItem } from '@/lib/recent';
 
   let {
     view,
@@ -16,19 +16,12 @@
     onopen: (item: Item | null) => void;
   } = $props();
 
-  let filter = $state<NavFilter>('all');
   let recent = $state<Id[]>([]);
-  void navFilterItem.getValue().then((v) => (filter = v));
   void recentItem.getValue().then((v) => (recent = v));
   recentItem.watch((v) => (recent = v ?? []));
 
-  const quick = $derived(view.quickList());
-
   /** Drop zones hold only the dragged group's placeholder while it hovers. */
   let drops = $state<Record<string, Item[]>>({});
-
-  const shown = (item: Item) =>
-    item.kind === 'folder' || (filter === 'all' && item.kind === 'group') || (filter === 'named' && item.title !== '');
 
   function label(item: Item): string {
     if (item.kind === 'folder') return item.title || t('untitledFolder');
@@ -37,21 +30,16 @@
     return item.title || tn('tabCount', n);
   }
 
-  /** A group dropped on a folder moves into it. A group dropped on a group merges into it. */
+  /** A group dropped on a folder moves into it. */
   function finalize(targetId: Id | null, e: CustomEvent<DndEvent<Item>>) {
     drops[targetId ?? ''] = [];
     const { id, trigger } = e.detail.info;
     if (trigger !== TRIGGERS.DROPPED_INTO_ZONE || id === targetId) return;
-    const target = targetId === null ? null : view.get(targetId);
-    if (target?.kind === 'group') {
-      if (view.get(id)?.kind === 'group') void act((tx) => mergeGroups(tx, id, target.id));
-      return;
-    }
     void act((tx) => moveItems(tx, [id], targetId, TOP));
   }
 </script>
 
-<!-- A drop zone overlays a folder's or group's label. It ignores the pointer, so the label stays clickable,
+<!-- A drop zone overlays a folder's label. It ignores the pointer, so the label stays clickable,
      while svelte-dnd-action finds zones by their rectangles. -->
 {#snippet dropZone(folderId: Id | null)}
   <div
@@ -66,7 +54,7 @@
 
 {#snippet tree(parentId: Id | null)}
   <ul class="nav-tree">
-    {#each view.children(parentId).filter(shown) as item (item.id)}
+    {#each view.children(parentId).filter((i) => i.kind === 'folder') as item (item.id)}
       <li class="nav-entry">
         <button
           class="link-button nav-item"
@@ -74,8 +62,8 @@
           aria-current={item.id === current ? 'page' : undefined}
           onclick={() => onopen(item)}>{label(item)}</button
         >
-        {#if item.kind !== 'group' || !item.locked}{@render dropZone(item.id)}{/if}
-        {#if item.kind === 'folder' && !item.collapsed}{@render tree(item.id)}{/if}
+        {@render dropZone(item.id)}
+        {#if !item.collapsed}{@render tree(item.id)}{/if}
       </li>
     {/each}
   </ul>
@@ -88,15 +76,6 @@
   </div>
   {@render tree(null)}
 
-  {#if quick.length > 0}
-    <h2 class="nav-heading">{t('quickList')}</h2>
-    <ul class="nav-tree" aria-label={t('quickList')}>
-      {#each quick as item (item.id)}
-        <li><button class="link-button nav-item" onclick={() => onopen(item)}>{label(item)}</button></li>
-      {/each}
-    </ul>
-  {/if}
-
   {#if recent.some((id) => view.get(id))}
     <h2 class="nav-heading">{t('recent')}</h2>
     <ul class="nav-tree">
@@ -105,16 +84,4 @@
       {/each}
     </ul>
   {/if}
-
-  <label class="nav-filter meta">
-    {t('navShow')}
-    <select
-      bind:value={filter}
-      onchange={() => void navFilterItem.setValue(filter)}
-    >
-      <option value="all">{t('navAll')}</option>
-      <option value="folders">{t('navFolders')}</option>
-      <option value="named">{t('navNamed')}</option>
-    </select>
-  </label>
 </nav>

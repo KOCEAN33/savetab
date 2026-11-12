@@ -12,14 +12,14 @@ export interface Intent {
 
 /**
  * OneTab's click modifiers: Cmd/Ctrl (or middle click) keeps the tab listed and inverts
- * "switch to tab", Alt archives it, Shift opens a new window.
+ * "switch to tab", Shift opens a new window.
  */
 export function clickIntent(e: MouseEvent, s: Settings): Intent {
   const mod = e.metaKey || e.ctrlKey || e.button === 1;
   return {
     active: s.switchToRestored !== mod,
     newWindow: e.shiftKey,
-    mode: mod ? 'keep' : e.altKey ? 'archive' : s.afterRestore,
+    mode: mod ? 'keep' : s.afterRestore,
   };
 }
 

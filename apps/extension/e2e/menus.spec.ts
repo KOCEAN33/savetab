@@ -22,7 +22,7 @@ test('a note added to one tab shows on every copy of its URL', async ({ context,
   ]);
 });
 
-test('renaming a tab renames every copy, and a task shows a done checkbox', async ({
+test('renaming a tab renames every copy', async ({
   context,
   worker,
   extensionId,
@@ -41,11 +41,4 @@ test('renaming a tab renames every copy, and a task shows a done checkbox', asyn
   await list.getByRole('textbox', { name: 'Tab title' }).fill('Renamed');
   await list.keyboard.press('Enter');
   await expect(list.locator('.tab-link')).toHaveText(['Renamed', 'Renamed']);
-
-  const group = list.locator('.group').first();
-  await group.getByRole('button', { name: 'More…' }).click();
-  await list.getByRole('menuitem', { name: 'Make this a task' }).click();
-  await group.getByRole('checkbox', { name: 'Task done' }).first().check();
-  await group.getByRole('button', { name: 'More…' }).click();
-  await expect(list.getByRole('menuitem', { name: 'Mark task not done' })).toBeVisible();
 });

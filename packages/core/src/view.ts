@@ -94,27 +94,6 @@ export class ListView {
     return out;
   }
 
-  /** Every item reachable from the root, depth first in display order. An item under a trashed one is not. */
-  private reachable(parentId: Id | null = null): Item[] {
-    return this.children(parentId).flatMap((i) => [
-      i,
-      ...(i.kind === 'folder' ? this.reachable(i.id) : i.kind === 'group' ? this.tabs(i.id) : []),
-    ]);
-  }
-
-  /** Groups and tabs marked as tasks: pending first, then done, each in display order. */
-  tasks(): (Group | Tab)[] {
-    const tasks = this.reachable().filter((i): i is Group | Tab => i.kind !== 'folder' && i.task !== 'none');
-    return [...tasks.filter((i) => i.task === 'pending'), ...tasks.filter((i) => i.task === 'done')];
-  }
-
-  /** Quick list entries in `quickOrder`. Ties from concurrent adds break by id. */
-  quickList(): Item[] {
-    return this.reachable()
-      .filter((i) => i.quickOrder != null)
-      .sort((a, b) => compareSiblings({ id: a.id, order: a.quickOrder! }, { id: b.id, order: b.quickOrder! }));
-  }
-
   /** Live ancestors of `id`, outermost first. Stops at a trashed ancestor. */
   path(id: Id): Item[] {
     const out: Item[] = [];

@@ -9,11 +9,9 @@ export interface SearchQuery {
   createdFrom: number | null;
   createdTo: number | null;
   starred: boolean;
-  tasks: boolean;
   hasNotes: boolean;
   /** Only named groups and folders, and tabs inside a named group. */
   namedOnly: boolean;
-  archived: 'any' | 'only' | 'none';
   /** Search only under this folder. null = the whole list. */
   folderId: Id | null;
 }
@@ -25,10 +23,8 @@ export const emptyQuery: SearchQuery = {
   createdFrom: null,
   createdTo: null,
   starred: false,
-  tasks: false,
   hasNotes: false,
   namedOnly: false,
-  archived: 'any',
   folderId: null,
 };
 
@@ -47,10 +43,8 @@ export function isActive(q: SearchQuery): boolean {
     q.createdFrom !== null ||
     q.createdTo !== null ||
     q.starred ||
-    q.tasks ||
     q.hasNotes ||
-    q.namedOnly ||
-    q.archived !== 'any'
+    q.namedOnly
   );
 }
 
@@ -75,11 +69,8 @@ export function search(view: ListView, q: SearchQuery): SearchResult {
     if (q.createdFrom !== null && item.createdAt < q.createdFrom) return false;
     if (q.createdTo !== null && item.createdAt > q.createdTo) return false;
     if (q.starred && !item.star) return false;
-    if (q.tasks && item.task === 'none') return false;
     if (q.hasNotes && view.notes(item) === '') return false;
     if (q.namedOnly && !named) return false;
-    if (q.archived === 'only' && !item.archived) return false;
-    if (q.archived === 'none' && item.archived) return false;
     const url = item.kind === 'tab' ? item.url : '';
     return matchText(`${view.title(item)}\n${url}\n${view.notes(item)}`);
   };

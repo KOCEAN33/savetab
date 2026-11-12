@@ -6,10 +6,6 @@ const RECENT_MAX = 10;
 /** Folders opened and groups that received tabs on this device, most recent first. */
 export const recentItem = storage.defineItem<Id[]>('local:recent', { fallback: [] });
 
-export type NavFilter = 'all' | 'folders' | 'named';
-
-export const navFilterItem = storage.defineItem<NavFilter>('local:navFilter', { fallback: 'all' });
-
 export async function touchRecent(id: Id): Promise<void> {
   const list = await recentItem.getValue();
   await recentItem.setValue([id, ...list.filter((x) => x !== id)].slice(0, RECENT_MAX));

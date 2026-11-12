@@ -93,8 +93,6 @@
     <button class="link-button" onclick={() => choose('move')}>{t('menuMove')}</button>
     <button class="link-button" onclick={() => choose('copy')}>{t('menuCopy')}</button>
     <button class="link-button" onclick={() => setAll({ star: true })}>{t('star')}</button>
-    <button class="link-button" onclick={() => setAll({ archived: true })}>{t('archive')}</button>
-    <button class="link-button" onclick={() => setAll({ task: 'pending' })}>{t('makeTask')}</button>
     <button class="link-button" onclick={() => copyLinks(view, items)}>{t('copyLinks')}</button>
     <button class="link-button" onclick={trash}>{t('moveToTrash')}</button>
     <button class="link-button" onclick={() => selection.clear()}>{t('clear')}</button>

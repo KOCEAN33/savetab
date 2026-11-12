@@ -41,17 +41,8 @@
       <label><input type="checkbox" bind:checked={query.caseSensitive} /> {t('caseSensitive')}</label>
       <label><input type="checkbox" bind:checked={query.wholeWords} /> {t('wholeWords')}</label>
       <label><input type="checkbox" bind:checked={query.starred} /> {t('starred')}</label>
-      <label><input type="checkbox" bind:checked={query.tasks} /> {t('tasks')}</label>
       <label><input type="checkbox" bind:checked={query.hasNotes} /> {t('hasNotes')}</label>
       <label><input type="checkbox" bind:checked={query.namedOnly} /> {t('namedOnly')}</label>
-      <label>
-        {t('archived')}
-        <select bind:value={query.archived}>
-          <option value="any">{t('archivedAny')}</option>
-          <option value="only">{t('archivedOnly')}</option>
-          <option value="none">{t('archivedNone')}</option>
-        </select>
-      </label>
       <label>
         {t('createdFrom')}
         <input type="date" value={day(query.createdFrom)} onchange={(e) => (query.createdFrom = toMs(e.currentTarget.value, false))} />

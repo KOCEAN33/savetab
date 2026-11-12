@@ -3,7 +3,6 @@ export type Id = string;
 export type Hlc = string;
 
 export type Kind = 'folder' | 'group' | 'tab' | 'link' | 'settings';
-export type TaskState = 'none' | 'pending' | 'done';
 
 export interface CommonFields {
   kind: Kind;
@@ -22,11 +21,7 @@ export interface CommonFields {
   title: string;
   notes: string;
   star: boolean;
-  task: TaskState;
-  archived: boolean;
   collapsed: boolean;
-  /** Fractional index key in the quick list. null = not listed. */
-  quickOrder: string | null;
 }
 
 export interface FolderFields extends CommonFields {
@@ -85,7 +80,7 @@ export interface SettingsFields {
   duplicates: 'allow' | 'reject';
   titleOnDuplicate: 'keep' | 'update';
   pinnedTabs: 'skip' | 'allow';
-  afterRestore: 'remove' | 'keep' | 'archive';
+  afterRestore: 'remove' | 'keep';
   restoreGroupTarget: 'current' | 'newUnlessAlone' | 'new';
   switchToRestored: boolean;
   groupTitleClick: 'edit' | 'restore';
@@ -162,5 +157,7 @@ export function isLive(rec: ItemRecord | undefined): boolean {
 }
 
 export function readSettings(rec: ItemRecord | undefined): Settings {
-  return { ...defaultSettings, ...(rec as Partial<SettingsFields> | undefined), id: SETTINGS_ID };
+  const s: Settings = { ...defaultSettings, ...(rec as Partial<SettingsFields> | undefined), id: SETTINGS_ID };
+  // Older records may hold an afterRestore value no longer offered, such as 'archive'. It kept tabs listed.
+  return s.afterRestore === 'remove' ? s : { ...s, afterRestore: 'keep' };
 }

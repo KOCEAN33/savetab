@@ -1,20 +1,15 @@
 <script lang="ts">
   import {
-    addToQuickList,
-    createNear,
+    createWithin,
     mergeInnerGroups,
     mergeIntoParent,
     removeDuplicates,
-    removeFromQuickList,
     trashItems,
     updateItem,
-    type DuplicateScope,
     type Item,
     type ListView,
-    type Placement,
     type RestoreTarget,
     type TabGroupColor,
-    type TaskState,
   } from '@savetab/core';
   import { browser } from 'wxt/browser';
   import { copyLinks } from '@/lib/clipboard';
@@ -43,16 +38,16 @@
 
   const set = (patch: Record<string, unknown>) => close(() => act((tx) => updateItem(tx, item.id, patch)));
 
-  function create(kind: 'folder' | 'group', where: Placement) {
+  function create(kind: 'folder' | 'group') {
     close(async () => {
-      const id = await act((tx) => createNear(tx, kind, item.id, where));
+      const id = await act((tx) => createWithin(tx, kind, item.id));
       if (id) editing.title = id;
     });
   }
 
-  function dedupe(scope: DuplicateScope) {
+  function dedupe() {
     close(async () => {
-      const n = await act((tx) => removeDuplicates(tx, item.id, scope));
+      const n = await act((tx) => removeDuplicates(tx, item.id));
       if (n === 0) alert(t('noDuplicates'));
     });
   }
@@ -82,12 +77,6 @@
     ['cyan', 'colorCyan'],
     ['orange', 'colorOrange'],
   ] as const satisfies [TabGroupColor, string][];
-
-  const TASK_NEXT: Record<TaskState, [TaskState, string]> = {
-    none: ['pending', t('menuMakeTask')],
-    pending: ['done', t('menuMarkTaskDone')],
-    done: ['pending', t('menuMarkTaskNotDone')],
-  };
 </script>
 
 <svelte:window
@@ -160,37 +149,15 @@
         <button role="menuitem" onclick={() => set({ star: !item.star })}>
           {item.star ? t('menuRemoveStar') : item.kind === 'group' ? t('menuStarGroup') : t('menuStarTab')}
         </button>
-        <button role="menuitem" onclick={() => set({ task: TASK_NEXT[item.task][0] })}>{TASK_NEXT[item.task][1]}</button>
-        {#if item.task !== 'none'}
-          <button role="menuitem" onclick={() => set({ task: 'none' })}>{t('menuRemoveTask')}</button>
-        {/if}
-        <button role="menuitem" onclick={() => set({ archived: !item.archived })}>
-          {item.archived ? t('menuUnarchive') : t('menuMarkArchived')}
-        </button>
-        {#if item.quickOrder == null}
-          <button
-            role="menuitem"
-            onclick={() => close(() => act((tx) => addToQuickList(tx, item.id, view.quickList().at(-1)?.id ?? null)))}
-            >{t('menuAddQuickList')}</button
-          >
-        {:else}
-          <button role="menuitem" onclick={() => close(() => act((tx) => removeFromQuickList(tx, item.id)))}>
-            {t('menuRemoveQuickList')}
-          </button>
-        {/if}
       {/if}
       {#if item.kind !== 'tab'}
         <button role="menuitem" onclick={() => set({ pinnedTop: !item.pinnedTop })}>
           {item.pinnedTop ? t('menuUnpin') : t('menuPinTop')}
         </button>
-        <hr />
-        <button role="menuitem" onclick={() => create('group', 'above')}>{t('menuCreateGroupAbove')}</button>
-        <button role="menuitem" onclick={() => create('group', 'below')}>{t('menuCreateGroupBelow')}</button>
-        <button role="menuitem" onclick={() => create('folder', 'above')}>{t('menuCreateFolderAbove')}</button>
-        <button role="menuitem" onclick={() => create('folder', 'below')}>{t('menuCreateFolderBelow')}</button>
         {#if item.kind === 'folder'}
-          <button role="menuitem" onclick={() => create('group', 'within')}>{t('menuCreateGroupWithin')}</button>
-          <button role="menuitem" onclick={() => create('folder', 'within')}>{t('menuCreateFolderWithin')}</button>
+          <hr />
+          <button role="menuitem" onclick={() => create('group')}>{t('menuCreateGroupWithin')}</button>
+          <button role="menuitem" onclick={() => create('folder')}>{t('menuCreateFolderWithin')}</button>
           <hr />
           <button role="menuitem" onclick={() => close(() => act((tx) => mergeIntoParent(tx, item.id)))}>
             {t('menuMergeIntoParent')}
@@ -200,9 +167,7 @@
           </button>
         {/if}
         <hr />
-        <button role="menuitem" onclick={() => dedupe('within')}>{t('menuDedupeWithin')}</button>
-        <button role="menuitem" onclick={() => dedupe('hereElsewhere')}>{t('menuDedupeHereElsewhere')}</button>
-        <button role="menuitem" onclick={() => dedupe('elsewhereHere')}>{t('menuDedupeElsewhereHere')}</button>
+        <button role="menuitem" onclick={() => dedupe()}>{t('menuDedupeWithin')}</button>
       {/if}
       <hr />
       {#if !locked}

@@ -1,4 +1,4 @@
-import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
+import { generateNKeysBetween } from 'fractional-indexing';
 import { uuidv7 } from './id';
 import { linkId, normalizeUrl } from './link';
 import { isKind, isLive, type GroupFields, type Id, type ItemRecord, type Settings, type TabGroupColor } from './model';
@@ -79,10 +79,7 @@ function baseFields(tx: Tx, parentId: Id | null, order: string) {
     title: '',
     notes: '',
     star: false,
-    task: 'none',
-    archived: false,
     collapsed: false,
-    quickOrder: null,
   };
 }
 
@@ -398,7 +395,6 @@ export async function afterOpen(tx: Tx, tabIds: Id[], mode: Settings['afterResto
     if (!rec || (await isInLockedGroup(tx, rec))) continue;
     const fields: Record<string, unknown> = { accessedAt: tx.now };
     if (mode === 'remove') fields.trashedAt = tx.now;
-    if (mode === 'archive') fields.archived = true;
     await tx.write(id, fields);
     parents.add(rec.parentId);
   }
@@ -414,22 +410,17 @@ export async function editTab(tx: Tx, tabId: Id, patch: { title?: string; notes?
   await tx.write(tabId, { modifiedAt: tx.now });
 }
 
-export type Placement = 'above' | 'within' | 'below';
-
 /**
- * Create an empty folder or group next to `anchorId`, or at the top inside it. An empty unnamed
+ * Create an empty folder or group at the top inside `anchorId`. An empty unnamed
  * group is hidden, so a new group gets a name.
  */
-export async function createNear(tx: Tx, kind: 'folder' | 'group', anchorId: Id, where: Placement): Promise<Id> {
+export async function createWithin(tx: Tx, kind: 'folder' | 'group', anchorId: Id): Promise<Id> {
   const anchor = await tx.get(anchorId);
   if (!anchor) throw new Error('The item no longer exists');
-  const parentId = where === 'within' ? anchorId : ((anchor.parentId as Id | null | undefined) ?? null);
-  const siblings = await keyOrdered(tx, parentId);
-  const below = siblings[siblings.findIndex((r) => r.id === anchorId) + 1]?.id ?? null;
-  const [order] = await orderKeys(tx, parentId, where === 'within' ? TOP : where === 'above' ? anchorId : below, 1);
+  const [order] = await orderKeys(tx, anchorId, TOP, 1);
   const id = uuidv7(tx.now);
   await tx.write(id, {
-    ...baseFields(tx, parentId, order!),
+    ...baseFields(tx, anchorId, order!),
     kind,
     title: kind === 'group' ? 'New group' : '',
     pinnedTop: false,
@@ -494,44 +485,28 @@ async function tabsUnder(tx: Tx, parentId: Id | null): Promise<ItemRecord[]> {
   return out;
 }
 
-export type DuplicateScope = 'within' | 'hereElsewhere' | 'elsewhereHere';
-
 /**
- * OneTab's three remove-duplicates tools, comparing normalized URLs. The first copy in display
+ * Remove duplicate tabs under `scopeId`, comparing normalized URLs. The first copy in display
  * order stays. Tabs in locked groups cannot be removed, so they are skipped. Returns the count trashed.
  */
-export async function removeDuplicates(tx: Tx, scopeId: Id, scope: DuplicateScope): Promise<number> {
-  const here = await tabsUnder(tx, scopeId);
-  const hereIds = new Set(here.map((t) => t.id));
-  const elsewhere = scope === 'within' ? [] : (await tabsUnder(tx, null)).filter((t) => !hereIds.has(t.id));
-  const urls = (list: ItemRecord[]) => new Set(list.map((t) => normalizeUrl(t.url ?? '')));
-
-  let doomed: ItemRecord[];
-  if (scope === 'within') {
-    const seen = new Set<string>();
-    doomed = here.filter((t) => {
-      const u = normalizeUrl(t.url ?? '');
-      if (seen.has(u)) return true;
-      seen.add(u);
-      return false;
-    });
-  } else if (scope === 'hereElsewhere') {
-    const other = urls(elsewhere);
-    doomed = here.filter((t) => other.has(normalizeUrl(t.url ?? '')));
-  } else {
-    const mine = urls(here);
-    doomed = elsewhere.filter((t) => mine.has(normalizeUrl(t.url ?? '')));
-  }
+export async function removeDuplicates(tx: Tx, scopeId: Id): Promise<number> {
+  const seen = new Set<string>();
+  const doomed = (await tabsUnder(tx, scopeId)).filter((t) => {
+    const u = normalizeUrl(t.url ?? '');
+    if (seen.has(u)) return true;
+    seen.add(u);
+    return false;
+  });
   const removable: Id[] = [];
   for (const t of doomed) if (!(await isInLockedGroup(tx, t))) removable.push(t.id);
   await trashItems(tx, removable);
   return removable.length;
 }
 
-/** Fields a copy takes from its source. Placement, clocks, and quick list membership stay behind. */
+/** Fields a copy takes from its source. Placement and clocks stay behind. */
 function copyFields(rec: ItemRecord, tx: Tx, parentId: Id | null, order: string): Record<string, unknown> {
   const { id: _id, clocks: _clocks, ...fields } = rec;
-  return { ...fields, parentId, order, createdAt: tx.now, modifiedAt: tx.now, quickOrder: null };
+  return { ...fields, parentId, order, createdAt: tx.now, modifiedAt: tx.now };
 }
 
 async function copyTree(tx: Tx, rec: ItemRecord, parentId: Id | null, order: string): Promise<Id> {
@@ -568,19 +543,6 @@ export async function mergeGroups(tx: Tx, sourceId: Id, targetId: Id): Promise<v
     null,
   );
   if (isLive(await tx.get(sourceId))) await trashItems(tx, [sourceId]);
-}
-
-/**
- * Append an item to the quick list, after its last entry `afterId`. Listing is not an edit,
- * so `modifiedAt` stays.
- */
-export async function addToQuickList(tx: Tx, id: Id, afterId: Id | null): Promise<void> {
-  const after = afterId == null ? undefined : await tx.get(afterId);
-  await tx.write(id, { quickOrder: generateKeyBetween(after?.quickOrder ?? null, null) });
-}
-
-export async function removeFromQuickList(tx: Tx, id: Id): Promise<void> {
-  await tx.write(id, { quickOrder: null });
 }
 
 export type SortKey = 'title' | 'created' | 'modified' | 'accessed';

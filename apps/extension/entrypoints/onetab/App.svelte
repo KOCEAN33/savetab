@@ -38,7 +38,6 @@
   import SelectionBar from '@/components/SelectionBar.svelte';
   import NavColumn from '@/components/NavColumn.svelte';
   import SearchBar from '@/components/SearchBar.svelte';
-  import TasksView from '@/components/TasksView.svelte';
   import TrashView from '@/components/TrashView.svelte';
 
   // Enter stays free for opening links; Space starts a keyboard drag.
@@ -48,7 +47,7 @@
   // tabs; switch to per-folder queries if large lists stutter.
   const records = liveQuery(() => db.items.toArray());
 
-  let mode = $state<'list' | 'trash' | 'tasks'>('list');
+  let mode = $state<'list' | 'trash'>('list');
 
   /** Shown once: the background restored the list from the backup taken at this time. */
   let restoredFrom = $state<number | null>(null);
@@ -74,8 +73,6 @@
   const trashTitle = (r: ItemRecord) => tabTitle(r as Tab, view.link(r as Tab));
 
   const results = $derived(isActive(query) ? search(view, query) : null);
-  const tasks = $derived(view.tasks());
-  const pendingCount = $derived(tasks.filter((t) => t.task === 'pending').length);
 
   /** Items per page in a folder. A long folder pages with "Next {N}" and "Previous {N}". */
   const PAGE_SIZE = 50;
@@ -212,9 +209,6 @@
     <header class="page-header">
       <h1 class="page-total">{tn('pageTotal', total)}</h1>
       <nav class="page-nav">
-        <button class="link-button" onclick={() => (mode = mode === 'tasks' ? 'list' : 'tasks')}>
-          {mode === 'tasks' ? t('backToList') : t('tasksLink', { pending: pendingCount, done: tasks.length - pendingCount })}
-        </button>
         <button class="link-button" onclick={() => (mode = mode === 'trash' ? 'list' : 'trash')}>
           {mode === 'trash' ? t('backToList') : t('trashLink', { n: view.trashed.length })}
         </button>
@@ -236,8 +230,6 @@
 
     {#if mode === 'trash'}
       <TrashView trashed={view.trashed} tabCount={countAll} tabTitle={trashTitle} />
-    {:else if mode === 'tasks'}
-      <TasksView {tasks} {view} onopen={open} />
     {:else if results}
       <SelectionBar {view} order={results.groups.flatMap((r) => [r.group.id, ...r.tabs.map((t) => t.id)])} />
       {#each results.folders as f (f.id)}

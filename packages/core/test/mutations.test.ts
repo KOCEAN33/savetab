@@ -249,17 +249,8 @@ describe('afterOpen', () => {
     await s.transact((tx) => updateItem(tx, g, { locked: true }));
     const [a] = await liveChildren(s, g);
     await s.transact((tx) => afterOpen(tx, [a!.id], 'remove'));
-    await s.transact((tx) => afterOpen(tx, [a!.id], 'archive'));
     const [after] = await liveChildren(s, g);
-    expect(after).toMatchObject({ id: a!.id, archived: false, trashedAt: null });
-  });
-
-  it('marks tabs archived in archive mode and leaves them listed', async () => {
-    const s = new MemoryStore('dev1');
-    const g = (await s.transact((tx) => storeTabs(tx, [t('a')], settings())))!;
-    const [a] = await liveChildren(s, g);
-    await s.transact((tx) => afterOpen(tx, [a!.id], 'archive'));
-    expect(await liveChildren(s, g)).toMatchObject([{ id: a!.id, archived: true }]);
+    expect(after).toMatchObject({ id: a!.id, trashedAt: null });
   });
 });
 

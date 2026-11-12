@@ -70,21 +70,10 @@
   }
 </script>
 
-<section class="group" class:archived={group.archived} id="item-{group.id}" aria-label={label}>
+<section class="group" id="item-{group.id}" aria-label={label}>
   <div class="group-head" tabindex="0" role="treeitem" aria-selected="false" aria-expanded={!group.collapsed} aria-label={label} data-nav="group" data-id={group.id}>
     <span class="group-grip" use:dragHandle aria-label={t('dragItem', { name: label })}>⠿</span>
     <Tick id={group.id} {label} />
-    {#if group.task !== 'none'}
-      <input
-        type="checkbox"
-        aria-label={t('taskDone')}
-        checked={group.task === 'done'}
-        onchange={(e) => {
-        const task = e.currentTarget.checked ? 'done' : 'pending';
-        void act((tx) => updateItem(tx, group.id, { task }));
-      }}
-      />
-    {/if}
     {#if editing.title === group.id}
       <TitleField item={group} title={group.title} label={t('groupName')} />
     {:else}
@@ -92,7 +81,7 @@
     {/if}
     {#if group.star}<span title={t('starred')}>★</span>{/if}
     <span class="meta"
-      >{[group.pinnedTop && t('pinned'), group.locked && t('locked'), group.archived && t('archived'), t('createdAt', { date: created })]
+      >{[group.pinnedTop && t('pinned'), group.locked && t('locked'), t('createdAt', { date: created })]
         .filter(Boolean)
         .join(', ')}</span
     >

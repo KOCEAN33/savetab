@@ -38,7 +38,7 @@ test('"Restore in a new window" sticks to the group until "Use default restore"'
   const list = await onetabPage(context, extensionId);
   await chooseOptions(context, extensionId, [
     'Open the tabs in the current window',
-    'Keep them in your list (hold Alt/Option to mark them archived)',
+    'Keep them in your list',
   ], { restoreGroupTarget: 'current', afterRestore: 'keep' });
   await list.bringToFront();
   expect(await windowCount(worker)).toBe(1);

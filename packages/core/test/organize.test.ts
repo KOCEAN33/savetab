@@ -3,7 +3,7 @@ import { MemoryStore } from '../src/memory';
 import {
   copyItems,
   createFolder,
-  createNear,
+  createWithin,
   editTab,
   mergeGroups,
   LockedError,
@@ -29,17 +29,11 @@ const ids = (s: MemoryStore, parent: string | null) => new ListView(s.all()).chi
 const names = (s: MemoryStore, group: string) =>
   new ListView(s.all()).tabs(group).map((t: Tab) => new URL(t.url).hostname.split('.')[0]);
 
-describe('createNear', () => {
-  it('places a new group above or below an item, and a group within a folder at its top', async () => {
+describe('createWithin', () => {
+  it('places a new group within a folder at its top', async () => {
     const s = new MemoryStore('dev1');
-    const g1 = await store(s, ['a']);
-    const g2 = await store(s, ['b']);
-    const above = await s.transact((tx) => createNear(tx, 'group', g1, 'above'));
-    const below = await s.transact((tx) => createNear(tx, 'group', g2, 'below'));
-    expect(ids(s, null)).toEqual([g2, below, above, g1]);
-
     const f = await s.transact((tx) => createFolder(tx, null, 'F'));
-    const inner = await s.transact((tx) => createNear(tx, 'group', f, 'within'));
+    const inner = await s.transact((tx) => createWithin(tx, 'group', f));
     expect(ids(s, f)).toEqual([inner]);
     expect(new ListView(s.all()).get(inner)?.title).toBe('New group');
   });
@@ -78,32 +72,19 @@ describe('merge', () => {
 });
 
 describe('removeDuplicates', () => {
-  it('within here: keeps the first copy of each URL', async () => {
+  it('keeps the first copy of each URL', async () => {
     const s = new MemoryStore('dev1');
     const g = await store(s, ['a', 'b', 'a', 'c', 'b']);
-    expect(await s.transact((tx) => removeDuplicates(tx, g, 'within'))).toBe(2);
+    expect(await s.transact((tx) => removeDuplicates(tx, g))).toBe(2);
     expect(names(s, g)).toEqual(['a', 'b', 'c']);
   });
 
-  it('here that exist elsewhere: removes copies in here only', async () => {
+  it('skips tabs in a locked group', async () => {
     const s = new MemoryStore('dev1');
-    const other = await store(s, ['a', 'z']);
-    const here = await store(s, ['a', 'b']);
-    await s.transact((tx) => removeDuplicates(tx, here, 'hereElsewhere'));
-    expect(names(s, here)).toEqual(['b']);
-    expect(names(s, other)).toEqual(['a', 'z']);
-  });
-
-  it('elsewhere that exist here: removes copies outside here only, and skips locked groups', async () => {
-    const s = new MemoryStore('dev1');
-    const locked = await store(s, ['a']);
+    const locked = await store(s, ['a', 'a']);
     await s.transact((tx) => updateItem(tx, locked, { locked: true }));
-    const other = await store(s, ['a', 'z']);
-    const here = await store(s, ['a', 'b']);
-    await s.transact((tx) => removeDuplicates(tx, here, 'elsewhereHere'));
-    expect(names(s, here)).toEqual(['a', 'b']);
-    expect(names(s, other)).toEqual(['z']);
-    expect(names(s, locked)).toEqual(['a']);
+    expect(await s.transact((tx) => removeDuplicates(tx, locked))).toBe(0);
+    expect(names(s, locked)).toEqual(['a', 'a']);
   });
 });
 
