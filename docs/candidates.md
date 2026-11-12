@@ -22,6 +22,7 @@ The user asked for these on 2026-11-12, to be done later.
 - A group should drag up and down by the empty space next to its date in the group head. The user does not want space with no function there.
 - An option to leave extension pages (`chrome-extension://`, `moz-extension://`, and similar) out of a send. Today only savetab's own pages and the empty pages in `BLANK_PAGES` (`apps/extension/lib/capture.ts`) are skipped.
 - When the list holds groups besides "All tabs", the current group head should stick to the top while scrolling.
+- An easier way to delete a group. Today a group goes to the trash through its More menu, the selection bar, or Backspace on a focused row. A delete button in the group head beside "Restore all" is one way, and the user named none.
 
 ## UI review findings left open
 
@@ -56,6 +57,11 @@ The user asked for these on 2026-11-12, to be done later.
 - The server logs in through one issuer and gives an account to anyone that issuer logs in. `identities` is keyed by `(issuer, subject)`, so a second issuer or an allow list can join.
 
 - The outbox of a device with no account keeps every op since install and is never trimmed. Joining replaces it, so it could stay empty until the device joins.
+- A share lives 30 days, fixed. A choice of the expiry at share time has no UI.
+- A shared page is a copy. Showing later edits means "Stop sharing" and a new share, which changes the URL.
+- A share uploaded just before its `setShare` write fails stays on the server until it expires, with no record that names it.
+- The viewer page's text is English only.
+- The Firefox e2e of sharing builds the URL from the record. Only the Chromium e2e reads the clipboard.
 - Each device counts the 5,000 ops from the last snapshot it uploaded or read itself, so two devices that pull the same log both upload one. A pull answer that carried the snapshot's `seq` would let the second skip it.
 - A snapshot holds the uploader's records with no receive time. A field the uploader wrote while its clock ran more than `MAX_SKEW_MS` ahead reaches a device that reads the snapshot, though every device skips that op in a pull.
 - A snapshot is sealed and sent as one JSON body, base64 built in memory (`uploadSnapshot` in `apps/extension/lib/sync.ts`). No test measures it with a large list.
@@ -88,5 +94,5 @@ Lint rules not turned on:
 ## Waiting on the user
 
 - Review the Korean strings in `apps/extension/locales/ko.json` and `public/_locales/ko/messages.json`. Wording and terms are the user's call.
-- P4 (sync server): whether the server gets a public name. It is tailnet-only, so a device syncs only on the tailnet. `GET /v1/auth/start` has no rate limit, which matters once it is public.
+- P4 (sync server): whether the server gets a public name. It is tailnet-only, so a device syncs only on the tailnet, and a shared page opens only there. `GET /v1/auth/start` has no rate limit, which matters once it is public.
 - P4 (sync server): in the later build where pairing starts by itself after login, what the signed-in device shows for approval. A one-tap approve trusts the server to relay the right key. Comparing the pairing code does not.
