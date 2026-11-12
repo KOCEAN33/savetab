@@ -1,0 +1,9 @@
+{
+  "name": "@savetab/server",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "./scripts/test.sh",
+    "check": "go vet ./..."
+  }
+}

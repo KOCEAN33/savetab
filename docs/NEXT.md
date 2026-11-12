@@ -6,7 +6,7 @@ Build the self-hosted sync server (plan phase P4), so the stored tab list syncs 
 
 ## Start
 
-Start P4, the sync server in `apps/server` (Go and Postgres). The owner queued it as the work after the UI redesign, and the redesign is committed. The design is `docs/plans/onetab-parity.md` `### P4: sync server`. `core` already holds the op format and the merge rule the server work builds on: `Op` with `v` and `kind`, `mergeRemote`, and `restoreSnapshot` replaying original clocks. The next piece is the server in `apps/server` and the P4 step order in the plan.
+Continue P4 at step 2 of `docs/plans/onetab-parity.md` `### P4: sync server`: the key, snapshot, and pairing relay endpoints in `apps/server`. Step 1 is built: the Go server with the op log, `POST` and `GET /v1/ops`. `core` holds the op format and the merge rule the client steps build on. Server tests need the tailnet, see `apps/server/README.md`.
 
 Orders from the owner that bind P4:
 

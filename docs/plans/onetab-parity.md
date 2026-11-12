@@ -185,13 +185,62 @@ Multi-user accounts, device registration, op push and pull with HLC merge, Postg
 
 Login is OIDC. The server is the relying party for any configured issuer, and maps `(issuer, sub)` to a user in its own table so other login methods can join later. The extension runs authorization code with PKCE through `browser.identity.launchWebAuthFlow`. The server then issues its own per-device access and refresh tokens. IdP tokens never reach the extension.
 
-Ops are end-to-end encrypted:
+Ops are end-to-end encrypted. The server stores ciphertext and never sees an item id, a URL, or a key:
 - A random AES-256-GCM data key, made on the first device, encrypts every op. The server stores only a copy wrapped by the recovery key.
 - The first device makes a random recovery key and shows it to the user once, with a warning that the data cannot be recovered without it. The server never sees it.
-- A new device gets the data key in one of two ways. The user enters the recovery key, or the new device pairs with a device already signed in: the two run ECDH P-256 through the server, and the user confirms a 6-digit pairing code shown on both before the signed-in device sends the wrapped data key.
+- A new device gets the data key in one of two ways. The user enters the recovery key, or the new device pairs with a device already signed in.
 - The first build of pairing has the user start it by hand and check the code. A later build starts the exchange by itself once the new device logs in. The signed-in device still asks its user to approve, since the server relays the exchange and could otherwise add a device of its own.
-- The server keeps an append-only log `ops(user_id, seq, device_id, ciphertext, created_at)` and never merges. Clients decrypt and merge. A pull returns each op's `created_at`, which is the receive time the skew rule compares against. A device whose own clock runs more than `MAX_SKEW_MS` ahead of the server's does not push, since every other device would skip its ops. AAD binds `user_id` and `item_id`. Clients upload encrypted snapshots, and the server drops ops before the snapshot's `seq`.
+- The server keeps an append-only log and never merges. Clients decrypt and merge. A pull returns each op's receive time, which the skew rule compares against. A device whose own clock runs more than `MAX_SKEW_MS` ahead of the server's does not push, since every other device would skip its ops.
 - A shared web page uses its own random key in the URL fragment.
+
+Formats:
+
+- Op blob: `0x01 | nonce (12 bytes) | AES-256-GCM ciphertext and tag`. The plaintext is the op as UTF-8 JSON. AAD is `savetab-op-v1|<user_id>|<op_id>`. The item id stays inside the ciphertext: a link id is a non-cryptographic hash of its URL, so a plaintext item id would let the server test URLs against it.
+- Recovery key: 32 random bytes, shown as Crockford base32 in groups of 4. The wrapping key is HKDF-SHA256 of it with info `savetab-wrap-v1`. Wrapped data key: `0x01 | nonce | AES-256-GCM(data key)`, AAD `savetab-wrap-v1|<user_id>`.
+- Pairing: both devices make an ephemeral ECDH P-256 key pair. The new device first sends `SHA-256(its public key)`, the signed-in device then sends its public key, and the new device then reveals its public key, which the signed-in device checks against the hash. The 6-digit code is HKDF-SHA256 of the shared secret with info `savetab-pair-code-v1` over both public keys, mod 1,000,000. Without the hash sent first, the server could try key pairs until the codes match. After the user confirms the code on both, the signed-in device sends the data key under AES-256-GCM with the key HKDF(shared secret, info `savetab-pair-key-v1`). A pairing expires after 5 minutes.
+
+Postgres schema. Each step adds the tables it uses in its own migration:
+
+```sql
+users(id uuid PK, next_seq bigint, created_at)
+identities(issuer text, subject text, user_id, PK (issuer, subject))
+devices(id uuid PK, user_id, name text, created_at, revoked_at)
+sessions(token_hash bytea PK, device_id, kind 'access' | 'refresh', expires_at)   -- SHA-256 of an opaque random token
+ops(user_id, seq bigint, op_id uuid, device_id, ciphertext bytea, received_at timestamptz, PK (user_id, seq), UNIQUE (user_id, op_id))
+key_wraps(user_id PK, wrapped_key bytea, created_at)
+snapshots(user_id PK, seq bigint, ciphertext bytea, created_at)
+pairings(id uuid PK, user_id, new_device_id, commitment bytea, new_public bytea, old_public bytea, wrapped_key bytea, expires_at)
+shares(id uuid PK, user_id, ciphertext bytea, created_at)
+```
+
+A push takes `users.next_seq` under a row lock, so one user's ops commit in `seq` order and a pull by `seq` never skips one.
+
+HTTP API, JSON, under `/v1`, with `Authorization: Bearer <access token>`:
+
+- `POST /v1/ops` `{ ops: [{ id, data }] }` (`data` = base64 op blob) returns `{ serverTime }`. An op id the user already pushed is skipped, so a retry is safe. Limits: 500 ops and 8 MiB per request.
+- `GET /v1/ops?after=<seq>&limit=<n>` returns `{ ops: [{ seq, id, deviceId, data, receivedAt }], more, serverTime }`, ordered by `seq`. It answers 409 `snapshot_required` when `after` is below the snapshot's `seq`.
+- `GET` and `PUT /v1/key` read and set the wrapped data key. `PUT` answers 409 once a key exists.
+- `GET` and `PUT /v1/snapshot` `{ seq, data }`. A `PUT` deletes the user's ops with `seq` at or below the snapshot's.
+- `POST /v1/pairings`, `GET` and `PUT /v1/pairings/{id}` relay the pairing messages.
+- `GET /v1/auth/start`, `GET /v1/auth/callback`, `POST /v1/auth/token`, `POST /v1/auth/refresh` run the OIDC login and issue device tokens. An access token lives 1 hour, a refresh token 90 days and is replaced on each use.
+
+Steps run in this order. Each step is done when its check passes plus the five commands in `CLAUDE.md`. `pnpm test` and `pnpm check` include the server through `apps/server/package.json`. Server tests run against a real Postgres named by `TEST_DATABASE_URL`, in a database each run creates and drops (`apps/server/README.md`).
+
+1. **Server skeleton and op log.** `apps/server`: Go module, embedded SQL migrations, the `users`, `devices`, `sessions`, and `ops` tables, bearer-token auth against `sessions`, `POST` and `GET /v1/ops`, `GET /healthz`.
+   - Check: Go tests show a push read back in `seq` order by a second device, a repeated push stored once, one user unable to read another's ops, a request without a valid token answered 401, and concurrent pushes giving gapless `seq`.
+2. **Key, snapshot, and pairing relay endpoints.**
+   - Check: Go tests for the 409 on a second key, a snapshot dropping older ops and a stale `after` answered 409, and a pairing that expires.
+3. **OIDC login and device tokens.** Authorization code with PKCE. The extension's redirect URI comes from `browser.identity.getRedirectURL()`.
+   - Check: Go tests against a fake issuer run in the test: a login makes a user and a device, a second login with the same `(issuer, sub)` makes a second device of the same user, and a used refresh token is rejected.
+4. **Client crypto in `core`.** `sealOp`, `openOp`, recovery key encode and decode, key wrap, pairing math, all on WebCrypto, which Node, browsers, and extension workers share.
+   - Check: core tests with fixed keys and nonces against vectors computed by hand with another tool, a tampered blob or wrong AAD rejected, and two pairing sides deriving the same code.
+5. **Sync client in the extension.** A background loop pushes the outbox and pulls into `mergeRemote` inside `transact`. A device that joins an account with ops uploads its own records as ops first. Encryption runs outside `transact`.
+   - Check: e2e with two browser profiles against a local server: a tab stored in one shows in the other.
+6. **Account UI.** Sign in, show the recovery key once, join by recovery key, join by pairing code, list and revoke devices, sign out.
+   - Check: e2e for first-device setup and for a join by recovery key.
+7. **Snapshots from the client.** A device uploads a snapshot when the log passes 5,000 ops since the last one *(savetab choice)*.
+8. **Share as a web page.**
+9. **Deployment.** Container image, the homelab database, and the public URL.
 
 ### P5: more clients
 
