@@ -4,10 +4,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -34,6 +36,16 @@ func run() error {
 	if addr == "" {
 		addr = ":8080"
 	}
+	cfg := api.LoginConfig{
+		Issuer:       os.Getenv("OIDC_ISSUER"),
+		ClientID:     os.Getenv("OIDC_CLIENT_ID"),
+		ClientSecret: os.Getenv("OIDC_CLIENT_SECRET"),
+		PublicURL:    os.Getenv("PUBLIC_URL"),
+		RedirectURIs: strings.Fields(os.Getenv("AUTH_REDIRECT_URIS")),
+	}
+	if cfg.Issuer == "" || cfg.ClientID == "" || cfg.PublicURL == "" || len(cfg.RedirectURIs) == 0 {
+		return errors.New("OIDC_ISSUER, OIDC_CLIENT_ID, PUBLIC_URL, and AUTH_REDIRECT_URIS must be set")
+	}
 
 	db, err := store.Open(ctx, url)
 	if err != nil {
@@ -44,7 +56,12 @@ func run() error {
 		return err
 	}
 
-	srv := &http.Server{Addr: addr, Handler: api.New(db), ReadHeaderTimeout: 10 * time.Second}
+	login, err := api.NewLogin(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("OIDC issuer %s: %w", cfg.Issuer, err)
+	}
+
+	srv := &http.Server{Addr: addr, Handler: api.New(db, login), ReadHeaderTimeout: 10 * time.Second}
 	failed := make(chan error, 1)
 	go func() { failed <- srv.ListenAndServe() }()
 	slog.Info("listening", "addr", addr)

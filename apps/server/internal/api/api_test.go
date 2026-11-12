@@ -46,8 +46,21 @@ func run(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	srv = httptest.NewServer(api.New(db))
+	issuer = newFakeIssuer()
+	defer issuer.srv.Close()
+	// The login needs the server's URL, which exists only once the server listens.
+	var handler http.Handler
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r) }))
 	defer srv.Close()
+	login, err := api.NewLogin(ctx, api.LoginConfig{
+		Issuer: issuer.srv.URL, ClientID: clientID, ClientSecret: clientSecret,
+		PublicURL: srv.URL, RedirectURIs: []string{extensionRedirect},
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	handler = api.New(db, login)
 	return m.Run()
 }
 

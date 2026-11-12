@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -107,17 +108,32 @@ func hashToken(token string) []byte {
 	return h[:]
 }
 
-// IssueSession makes an opaque token for the device. Only its hash is stored.
-func (s *Store) IssueSession(ctx context.Context, deviceID string, kind SessionKind, ttl time.Duration) (string, error) {
+func randomToken() (string, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
 	}
-	token := base64.RawURLEncoding.EncodeToString(raw)
-	_, err := s.pool.Exec(ctx,
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+type execer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+func issueSession(ctx context.Context, db execer, deviceID string, kind SessionKind, ttl time.Duration) (string, error) {
+	token, err := randomToken()
+	if err != nil {
+		return "", err
+	}
+	_, err = db.Exec(ctx,
 		`INSERT INTO sessions (token_hash, device_id, kind, expires_at) VALUES ($1, $2, $3, now() + make_interval(secs => $4))`,
 		hashToken(token), deviceID, string(kind), ttl.Seconds())
 	return token, err
+}
+
+// IssueSession makes an opaque token for the device. Only its hash is stored.
+func (s *Store) IssueSession(ctx context.Context, deviceID string, kind SessionKind, ttl time.Duration) (string, error) {
+	return issueSession(ctx, s.pool, deviceID, kind, ttl)
 }
 
 // Caller is the device and user an access token stands for.

@@ -206,6 +206,7 @@ users(id uuid PK, next_seq bigint, created_at)
 identities(issuer text, subject text, user_id, PK (issuer, subject))
 devices(id uuid PK, user_id, name text, created_at, revoked_at)
 sessions(token_hash bytea PK, device_id, kind 'access' | 'refresh', expires_at)   -- SHA-256 of an opaque random token
+logins(state_hash bytea PK, redirect_uri, client_state, code_challenge, nonce, issuer_verifier, code_hash bytea, user_id, expires_at)   -- one login in flight
 ops(user_id, seq bigint, op_id uuid, device_id, ciphertext bytea, received_at timestamptz, PK (user_id, seq), UNIQUE (user_id, op_id))
 key_wraps(user_id PK, wrapped_key bytea, created_at)
 snapshots(user_id PK, seq bigint, ciphertext bytea, created_at)
@@ -228,7 +229,12 @@ HTTP API, JSON, under `/v1`, with `Authorization: Bearer <access token>`:
   - `PUT /v1/pairings/{id}` takes exactly one of `{ oldPublic }`, `{ newPublic }`, `{ wrappedKey }`. The order is `oldPublic` from a signed-in device, `newPublic` from the new device, `wrappedKey` from a signed-in device, each set once. A message out of order or sent twice answers 409 `pairing_conflict`, and a message from the wrong side answers 403 `forbidden`.
   - An expired pairing and another user's pairing answer 404 `not_found`.
 - A write with no body to return answers 204. An error answers `{ error: <code> }`.
-- `GET /v1/auth/start`, `GET /v1/auth/callback`, `POST /v1/auth/token`, `POST /v1/auth/refresh` run the OIDC login and issue device tokens. An access token lives 1 hour, a refresh token 90 days and is replaced on each use.
+- Login, with no bearer token. The server talks to one issuer, set by `OIDC_ISSUER` *(savetab choice)*. Anyone the issuer logs in gets an account.
+  - `GET /v1/auth/start?redirect_uri=&code_challenge=&state=` is the URL the extension opens in its login window. `code_challenge` is the S256 challenge of a verifier the extension keeps. A `redirect_uri` outside `AUTH_REDIRECT_URIS` answers 400 `invalid_redirect_uri`. The server redirects to the issuer with its own state, nonce, and PKCE pair.
+  - `GET /v1/auth/callback` is the issuer's redirect target. It checks the ID token and redirects to `redirect_uri` with `code` and the extension's `state`, or with `error` (`access_denied` or `login_failed`) and `state`. A state the server did not issue, or one older than 10 minutes, answers 400 `invalid_state`.
+  - `POST /v1/auth/token` `{ code, codeVerifier, deviceName }` makes a device and returns `{ accessToken, refreshToken, expiresIn, userId, deviceId }`. One attempt spends the code. A spent code or a wrong verifier answers 400 `invalid_grant`.
+  - `POST /v1/auth/refresh` `{ refreshToken }` returns the same shape with new tokens. A used token answers 401.
+  - An access token lives 1 hour, a refresh token 90 days and is replaced on each use.
 
 Steps run in this order. Each step is done when its check passes plus the five commands in `CLAUDE.md`. `pnpm test` and `pnpm check` include the server through `apps/server/package.json`. Server tests run against a real Postgres named by `TEST_DATABASE_URL`, in a database each run creates and drops (`apps/server/README.md`).
 

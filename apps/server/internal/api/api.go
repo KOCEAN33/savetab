@@ -29,12 +29,17 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 
 type server struct {
 	store *store.Store
+	login *Login
 }
 
-func New(s *store.Store) http.Handler {
-	srv := &server{store: s}
+func New(s *store.Store, login *Login) http.Handler {
+	srv := &server{store: s, login: login}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", srv.health)
+	mux.HandleFunc("GET /v1/auth/start", srv.authStart)
+	mux.HandleFunc("GET /v1/auth/callback", srv.authCallback)
+	mux.HandleFunc("POST /v1/auth/token", srv.authToken)
+	mux.HandleFunc("POST /v1/auth/refresh", srv.authRefresh)
 	mux.HandleFunc("POST /v1/ops", srv.authed(srv.pushOps))
 	mux.HandleFunc("GET /v1/ops", srv.authed(srv.pullOps))
 	mux.HandleFunc("GET /v1/key", srv.authed(srv.getKey))
