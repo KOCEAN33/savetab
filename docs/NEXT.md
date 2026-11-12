@@ -6,7 +6,12 @@ Build the self-hosted sync server (plan phase P4), so the stored tab list syncs 
 
 ## Start
 
-Continue P4 at step 6 of `docs/plans/onetab-parity.md` `### P4: sync server`: the account UI. It is first because the plan's steps run in order. Steps 1 to 5 are built: two browser profiles sync through a local server in `apps/extension/e2e/sync.spec.ts`.
+The owner asked for two things ahead of step 6, and neither is started:
+
+- Deploy the sync server to the homelab with a Helm chart: `docs/plans/sync-server-deploy.md`. It waits on three answers from the owner, listed at its top.
+- "Add tests", said right after the step 5 report named the missing Firefox sync e2e. A guess: the owner means that e2e, two Firefox profiles against `apps/server/scripts/e2e-server.sh` in `apps/extension/e2e-firefox/`. Confirm before building.
+
+Then continue P4 at step 6 of `docs/plans/onetab-parity.md` `### P4: sync server`: the account UI. It is first because the plan's steps run in order. Steps 1 to 5 are built: two browser profiles sync through a local server in `apps/extension/e2e/sync.spec.ts`.
 
 State that shapes step 6:
 
