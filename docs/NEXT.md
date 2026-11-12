@@ -16,13 +16,9 @@ Orders from the owner that bind P4:
 
 Question asked and not answered:
 
-- `CLAUDE.md` has an uncommitted line from another session: joining and leaving an account keep every stored record. Did the owner see records disappear on a join? This session saw it once in a test, see the last state line below.
+- `CLAUDE.md` has a line from another session: joining and leaving an account keep every stored record. Did the owner see records disappear on a join? This session saw it once in a test, see the last state line below.
 
-## Next steps
-
-- Commit the edits to `docs/candidates.md` "Sync server follow-ups". It is uncommitted because the same file holds another session's uncommitted section "User requests not yet built", and `CLAUDE.md` holds that session's line. Done when `git status --short` shows neither file.
-
-State that shapes the next steps:
+## State
 
 - The sync page is `apps/extension/entrypoints/account/`, linked from the options page. Its steps are in `apps/extension/lib/account.ts`.
 - `client` in `apps/extension/lib/sync.ts` is the one way to call the server as a device. The background and an open page share a token refresh through the Web Lock `savetab-refresh`.
