@@ -50,7 +50,24 @@ func New(s *store.Store, login *Login) http.Handler {
 	mux.HandleFunc("GET /v1/pairings", srv.authed(srv.listPairings))
 	mux.HandleFunc("GET /v1/pairings/{id}", srv.authed(srv.getPairing))
 	mux.HandleFunc("PUT /v1/pairings/{id}", srv.authed(srv.putPairing))
-	return mux
+	return cors(mux)
+}
+
+// cors lets a browser extension call the API from its own origin. A request carries a bearer
+// token and never a cookie, so an origin that holds no token gains nothing by asking.
+func cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Access-Control-Allow-Origin", "*")
+		if r.Method == http.MethodOptions {
+			h.Set("Access-Control-Allow-Methods", "GET, POST, PUT")
+			h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			h.Set("Access-Control-Max-Age", "86400")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

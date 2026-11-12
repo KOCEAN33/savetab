@@ -2,21 +2,17 @@ package api_test
 
 import (
 	"context"
-	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
-	"math/big"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/fakeoidc"
 	"github.com/KOCEAN33/savetab/apps/server/internal/store"
 )
 
@@ -26,7 +22,7 @@ const (
 	extensionRedirect = "https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/"
 )
 
-var issuer *fakeIssuer
+var issuer *fakeoidc.Issuer
 
 func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 
@@ -42,131 +38,6 @@ func randomString(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return b64(b)
-}
-
-type grant struct {
-	subject, nonce, challenge, redirectURI string
-}
-
-// fakeIssuer is an OIDC issuer that logs every visitor in as subject without asking.
-type fakeIssuer struct {
-	srv  *httptest.Server
-	key  *rsa.PrivateKey
-	mu   sync.Mutex
-	next int
-	// codes holds the grants the token endpoint has not yet redeemed.
-	codes map[string]grant
-
-	subject string
-	deny    bool
-	// signWith and claims let a test make the issuer send a token the server must refuse.
-	signWith *rsa.PrivateKey
-	claims   func(map[string]any)
-}
-
-func newFakeIssuer() *fakeIssuer {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		panic(err)
-	}
-	f := &fakeIssuer{key: key, codes: map[string]grant{}}
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{
-			"issuer":                                f.srv.URL,
-			"authorization_endpoint":                f.srv.URL + "/authorize",
-			"token_endpoint":                        f.srv.URL + "/token",
-			"jwks_uri":                              f.srv.URL + "/jwks",
-			"id_token_signing_alg_values_supported": []string{"RS256"},
-		})
-	})
-	mux.HandleFunc("GET /jwks", func(w http.ResponseWriter, r *http.Request) {
-		pub := key.PublicKey
-		json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{{
-			"kty": "RSA", "alg": "RS256", "use": "sig", "kid": "k1",
-			"n": b64(pub.N.Bytes()), "e": b64(big.NewInt(int64(pub.E)).Bytes()),
-		}}})
-	})
-	mux.HandleFunc("GET /authorize", f.authorize)
-	mux.HandleFunc("POST /token", f.token)
-	f.srv = httptest.NewServer(mux)
-	return f
-}
-
-func (f *fakeIssuer) authorize(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	back, err := url.Parse(q.Get("redirect_uri"))
-	if err != nil || q.Get("client_id") != clientID || q.Get("response_type") != "code" ||
-		!strings.Contains(q.Get("scope"), "openid") || q.Get("code_challenge_method") != "S256" {
-		http.Error(w, "bad authorization request", http.StatusBadRequest)
-		return
-	}
-	params := url.Values{"state": {q.Get("state")}}
-	f.mu.Lock()
-	if f.deny {
-		params.Set("error", "access_denied")
-	} else {
-		f.next++
-		code := "issuer-code-" + b64(big.NewInt(int64(f.next)).Bytes())
-		f.codes[code] = grant{f.subject, q.Get("nonce"), q.Get("code_challenge"), q.Get("redirect_uri")}
-		params.Set("code", code)
-	}
-	f.mu.Unlock()
-	back.RawQuery = params.Encode()
-	http.Redirect(w, r, back.String(), http.StatusFound)
-}
-
-func (f *fakeIssuer) token(w http.ResponseWriter, r *http.Request) {
-	id, secret, basic := r.BasicAuth()
-	if !basic {
-		id, secret = r.PostFormValue("client_id"), r.PostFormValue("client_secret")
-	}
-	if unescaped, err := url.QueryUnescape(secret); err == nil {
-		secret = unescaped
-	}
-	f.mu.Lock()
-	g, ok := f.codes[r.PostFormValue("code")]
-	delete(f.codes, r.PostFormValue("code"))
-	key, edit := f.key, f.claims
-	if f.signWith != nil {
-		key = f.signWith
-	}
-	f.mu.Unlock()
-	w.Header().Set("Content-Type", "application/json")
-	if !ok || id != clientID || secret != clientSecret || r.PostFormValue("grant_type") != "authorization_code" ||
-		r.PostFormValue("redirect_uri") != g.redirectURI || s256(r.PostFormValue("code_verifier")) != g.challenge {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_grant"})
-		return
-	}
-	now := time.Now()
-	claims := map[string]any{
-		"iss": f.srv.URL, "sub": g.subject, "aud": clientID, "nonce": g.nonce,
-		"iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(),
-	}
-	if edit != nil {
-		edit(claims)
-	}
-	header, _ := json.Marshal(map[string]string{"alg": "RS256", "typ": "JWT", "kid": "k1"})
-	payload, _ := json.Marshal(claims)
-	signed := b64(header) + "." + b64(payload)
-	digest := sha256.Sum256([]byte(signed))
-	sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
-	if err != nil {
-		panic(err)
-	}
-	json.NewEncoder(w).Encode(map[string]any{
-		"access_token": "issuer-access-token", "token_type": "Bearer", "expires_in": 300,
-		"id_token": signed + "." + b64(sig),
-	})
-}
-
-// as makes the issuer log the next visitors in as subject, with every fault switched off.
-func (f *fakeIssuer) as(t *testing.T, subject string) {
-	t.Helper()
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.subject, f.deny, f.signWith, f.claims = subject, false, nil, nil
 }
 
 type tokens struct {
@@ -217,7 +88,7 @@ func landing(t *testing.T, res *http.Response) url.Values {
 // with the verifier that redeems it.
 func authorizeAs(t *testing.T, subject string) (code, verifier string) {
 	t.Helper()
-	issuer.as(t, subject)
+	issuer.Set(fakeoidc.Behavior{Subject: subject})
 	verifier = randomString(t)
 	state := randomString(t)
 	got := landing(t, browse(t, startURL(extensionRedirect, s256(verifier), state)))
@@ -333,7 +204,7 @@ func TestLoginCodeIsSpentByOneAttemptAndNeedsItsVerifier(t *testing.T) {
 }
 
 func TestStartRefusesARedirectURIOutsideTheList(t *testing.T) {
-	issuer.as(t, "mallory")
+	issuer.Set(fakeoidc.Behavior{Subject: "mallory"})
 	challenge := s256(randomString(t))
 	for name, target := range map[string]string{
 		"unlisted redirect uri":    startURL("https://evil.example/", challenge, "s"),
@@ -356,29 +227,28 @@ func TestLoginFailsWhenTheIssuersAnswerDoesNotHold(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	claims := func(edit func(map[string]any)) fakeoidc.Behavior {
+		return fakeoidc.Behavior{Subject: "grace", Claims: edit}
+	}
 	faults := map[string]struct {
-		set  func()
-		code string
+		behavior fakeoidc.Behavior
+		code     string
 	}{
-		"the user refuses":         {func() { issuer.deny = true }, "access_denied"},
-		"signed by another key":    {func() { issuer.signWith = other }, "login_failed"},
-		"issued to another client": {func() { issuer.claims = func(c map[string]any) { c["aud"] = "another-client" } }, "login_failed"},
-		"issued by another issuer": {func() { issuer.claims = func(c map[string]any) { c["iss"] = "https://evil.example" } }, "login_failed"},
-		"nonce of another login":   {func() { issuer.claims = func(c map[string]any) { c["nonce"] = "replayed" } }, "login_failed"},
-		"expired id token":         {func() { issuer.claims = func(c map[string]any) { c["exp"] = time.Now().Add(-time.Hour).Unix() } }, "login_failed"},
+		"the user refuses":         {fakeoidc.Behavior{Subject: "grace", Deny: true}, "access_denied"},
+		"signed by another key":    {fakeoidc.Behavior{Subject: "grace", SignWith: other}, "login_failed"},
+		"issued to another client": {claims(func(c map[string]any) { c["aud"] = "another-client" }), "login_failed"},
+		"issued by another issuer": {claims(func(c map[string]any) { c["iss"] = "https://evil.example" }), "login_failed"},
+		"nonce of another login":   {claims(func(c map[string]any) { c["nonce"] = "replayed" }), "login_failed"},
+		"expired id token":         {claims(func(c map[string]any) { c["exp"] = time.Now().Add(-time.Hour).Unix() }), "login_failed"},
 	}
 	for name, fault := range faults {
-		issuer.as(t, "grace")
-		issuer.mu.Lock()
-		fault.set()
-		issuer.mu.Unlock()
+		issuer.Set(fault.behavior)
 		state := randomString(t)
 		got := landing(t, browse(t, startURL(extensionRedirect, s256(randomString(t)), state)))
 		if got.Get("error") != fault.code || got.Get("code") != "" || got.Get("state") != state {
 			t.Errorf("%s: landed with %v, want error %q, state %q, and no code", name, got, fault.code, state)
 		}
 	}
-	issuer.as(t, "grace")
 }
 
 func TestCallbackRefusesAStateItDidNotIssue(t *testing.T) {

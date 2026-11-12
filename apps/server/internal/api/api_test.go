@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
+	"github.com/KOCEAN33/savetab/apps/server/internal/fakeoidc"
 	"github.com/KOCEAN33/savetab/apps/server/internal/store"
 	"github.com/KOCEAN33/savetab/apps/server/internal/testdb"
 )
@@ -46,14 +47,14 @@ func run(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	issuer = newFakeIssuer()
-	defer issuer.srv.Close()
+	issuer = fakeoidc.New(clientID, clientSecret)
+	defer issuer.Close()
 	// The login needs the server's URL, which exists only once the server listens.
 	var handler http.Handler
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r) }))
 	defer srv.Close()
 	login, err := api.NewLogin(ctx, api.LoginConfig{
-		Issuer: issuer.srv.URL, ClientID: clientID, ClientSecret: clientSecret,
+		Issuer: issuer.URL, ClientID: clientID, ClientSecret: clientSecret,
 		PublicURL: srv.URL, RedirectURIs: []string{extensionRedirect},
 	})
 	if err != nil {
@@ -362,5 +363,38 @@ func TestMalformedRequestsGet400(t *testing.T) {
 	}
 	if got := pull(t, d, ""); len(got.Ops) != 0 {
 		t.Errorf("a rejected push stored %d ops", len(got.Ops))
+	}
+}
+
+// A browser extension calls the API from its own origin, so the browser asks first.
+func TestBrowserOriginsMayCallTheAPI(t *testing.T) {
+	req, err := http.NewRequest("OPTIONS", srv.URL+"/v1/ops", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Origin", "chrome-extension://abcdefghijklmnopabcdefghijklmnop")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "authorization, content-type")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		t.Errorf("preflight: status %d, want 204", res.StatusCode)
+	}
+	for header, want := range map[string]string{
+		"Access-Control-Allow-Origin":  "*",
+		"Access-Control-Allow-Methods": "GET, POST, PUT",
+		"Access-Control-Allow-Headers": "Authorization, Content-Type",
+	} {
+		if got := res.Header.Get(header); got != want {
+			t.Errorf("preflight: %s = %q, want %q", header, got, want)
+		}
+	}
+
+	res = request(t, "GET", "/v1/ops", "", nil)
+	if got := res.Header.Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Errorf("a 401 answer: Access-Control-Allow-Origin = %q, want * so the extension can read the status", got)
 	}
 }
