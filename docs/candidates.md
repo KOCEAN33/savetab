@@ -48,7 +48,6 @@ Deferred work, not scheduled.
 - A pull answered 409 `snapshot_required` fails the cycle on every try. Reading the snapshot is plan P4 step 7.
 - A failed cycle only logs `sync failed` in the background console. A refused refresh token fails every cycle until the device joins again, and no page shows it. The account UI (plan P4 step 6) needs a stored sync status.
 - A background worker stopped between a refresh answer and the write of the new tokens leaves the device with a spent refresh token, so it must log in again.
-- Sync has no Firefox e2e. `e2e/sync.spec.ts` runs two Chromium profiles.
 
 - The deployed server's `AUTH_REDIRECT_URIS` holds a Firefox redirect URI computed as the SHA-1 of the add-on id, unchecked. Chrome's extension id is not fixed: it needs a `key` in the manifest or the store item's id.
 - A new server image is deployed by hand: a commit in homelab-workloads sets the tag. saveweb's image workflow bumps the tag itself through the `kocean33-homelab-ci` GitHub App.
