@@ -233,6 +233,9 @@
     <button class="button" onclick={takeBackup}>{t('backupNow')}</button>
   </p>
 
+  <h2 class="section-title">{t('syncTitle')}</h2>
+  <a class="button" href={browser.runtime.getURL('/account.html')}>{t('syncOpen')}</a>
+
   <h2 class="section-title">{t('keyboardShortcuts')}</h2>
   {#if shortcutsUrl}
     <button class="button" onclick={() => browser.tabs.create({ url: shortcutsUrl })}>{t('configureShortcuts')}</button>

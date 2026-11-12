@@ -1,5 +1,14 @@
 import { importDataKey, MAX_SKEW_MS, openOp, sealOp, type RemoteOp } from '@savetab/core';
-import { dropOutbox, mergePulled, outboxHead, saveTokens, syncAccount, syncCursor, type SyncAccount } from './db';
+import {
+  dropOutbox,
+  mergePulled,
+  outboxHead,
+  saveSyncStatus,
+  saveTokens,
+  syncAccount,
+  syncCursor,
+  type SyncAccount,
+} from './db';
 
 /** The server takes 500 ops and 8 MiB per push (plan P4, "HTTP API"). The byte cap leaves room for the JSON around the blobs. */
 const PUSH_OPS = 500;
@@ -26,31 +35,47 @@ interface PulledOp {
 }
 
 type Tokens = Pick<SyncAccount, 'accessToken' | 'refreshToken'>;
+/** What a call needs to reach the server as one device. A device that has logged in but not joined has no data key yet. */
+export type Login = Omit<SyncAccount, 'dataKey'>;
 
-const toBase64 = (bytes: Uint8Array) => btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
-const fromBase64 = (text: string) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
+export const toBase64 = (bytes: Uint8Array) => btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
+export const fromBase64 = (text: string) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
 
-function send(account: SyncAccount, path: string, init: RequestInit, token?: string): Promise<Response> {
+export function send(account: Pick<Login, 'serverUrl'>, path: string, init: RequestInit, token?: string): Promise<Response> {
   const headers = { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) };
   return fetch(account.serverUrl + path, { ...init, headers });
 }
 
-async function body<T>(res: Response): Promise<T> {
+export async function body<T>(res: Response): Promise<T> {
+  if (res.status === 204) return undefined as T;
   if (res.ok) return (await res.json()) as T;
   const answer = (await res.json().catch(() => ({}))) as { error?: string };
   throw new SyncError(res.status, answer.error ?? '');
 }
 
-/** One cycle's calls to the server. An access token the server refuses is replaced once, then the call repeats. */
-function client(account: SyncAccount) {
-  let { accessToken, refreshToken } = account;
+/**
+ * Replace tokens the server refused. The background and an open page both call the server, and a
+ * refresh token works once, so the lock lets one of them refresh and the other read the result.
+ */
+function refresh(login: Login, used: Tokens): Promise<Tokens> {
+  return navigator.locks.request('savetab-refresh', async () => {
+    const stored = await syncAccount();
+    if (stored && stored.refreshToken !== used.refreshToken) return stored;
+    const init = { method: 'POST', body: JSON.stringify({ refreshToken: used.refreshToken }) };
+    const tokens = await body<Tokens>(await send(login, '/v1/auth/refresh', init));
+    await saveTokens(tokens);
+    return tokens;
+  });
+}
+
+/** Calls to the server as one device. An access token the server refuses is replaced once, then the call repeats. */
+export function client(login: Login) {
+  let tokens: Tokens = login;
   return async <T>(path: string, init: RequestInit = {}): Promise<T> => {
-    let res = await send(account, path, init, accessToken);
+    let res = await send(login, path, init, tokens.accessToken);
     if (res.status === 401) {
-      const refresh = { method: 'POST', body: JSON.stringify({ refreshToken }) };
-      ({ accessToken, refreshToken } = await body<Tokens>(await send(account, '/v1/auth/refresh', refresh)));
-      await saveTokens({ accessToken, refreshToken });
-      res = await send(account, path, init, accessToken);
+      tokens = await refresh(login, tokens);
+      res = await send(login, path, init, tokens.accessToken);
     }
     return body<T>(res);
   };
@@ -122,7 +147,14 @@ export function sync(): Promise<void> {
     return queued;
   }
   running = syncOnce()
-    .catch((err: unknown) => console.warn('sync failed', err))
+    .then(
+      () => saveSyncStatus({ at: Date.now() }),
+      (err: unknown) => {
+        console.warn('sync failed', err);
+        const signedOut = err instanceof SyncError && err.status === 401;
+        return saveSyncStatus({ at: Date.now(), error: signedOut ? 'signedOut' : 'failed' });
+      },
+    )
     .finally(() => {
       running = undefined;
     });

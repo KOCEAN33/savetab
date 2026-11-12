@@ -154,6 +154,29 @@ export function joinSync(account: SyncAccount): Promise<void> {
       { key: 'sync', value: account },
       { key: 'syncCursor', value: 0 },
     ]);
+    await db.meta.delete('syncStatus');
+  });
+}
+
+/** Leave the account. The list stays, and the outbox goes on recording for a later join. */
+export async function leaveSync(): Promise<void> {
+  await db.meta.bulkDelete(['sync', 'syncCursor', 'syncStatus']);
+}
+
+/** How the last sync cycle ended. `signedOut` means the server refused this device's tokens. */
+export interface SyncStatus {
+  at: number;
+  error?: 'signedOut' | 'failed';
+}
+
+export async function syncStatus(): Promise<SyncStatus | undefined> {
+  return (await db.meta.get('syncStatus'))?.value as SyncStatus | undefined;
+}
+
+/** Record how a cycle ended, unless the device left the account while the cycle ran. */
+export function saveSyncStatus(status: SyncStatus): Promise<void> {
+  return db.transaction('rw', db.meta, async () => {
+    if (await db.meta.get('sync')) await db.meta.put({ key: 'syncStatus', value: status });
   });
 }
 

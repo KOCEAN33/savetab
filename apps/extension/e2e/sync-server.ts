@@ -17,10 +17,13 @@ export interface Login {
   refreshToken: string;
 }
 
-/** Start the sync server of apps/server on a database of its own, with an issuer that logs everyone in as one user. */
-export async function startSyncServer(): Promise<{ url: string; stop: () => Promise<void> }> {
+/**
+ * Start the sync server of apps/server on a database of its own, with an issuer that logs everyone
+ * in as one user. `redirects` are the extension redirect URIs a login window may end at.
+ */
+export async function startSyncServer(redirects: string[] = []): Promise<{ url: string; stop: () => Promise<void> }> {
   const proc = spawn(SERVER_SCRIPT, {
-    env: { ...process.env, AUTH_REDIRECT_URIS: REDIRECT },
+    env: { ...process.env, AUTH_REDIRECT_URIS: [REDIRECT, ...redirects].join(' ') },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   const exited = once(proc, 'exit');

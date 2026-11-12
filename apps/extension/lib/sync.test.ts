@@ -15,8 +15,8 @@ import {
   type ItemSource,
   type Op,
 } from '@savetab/core';
-import { db, joinSync, source, syncAccount, transact, type SyncAccount } from './db';
-import { SyncError, syncOnce } from './sync';
+import { db, joinSync, leaveSync, saveTokens, source, syncAccount, syncStatus, transact, type SyncAccount } from './db';
+import { client, sync, SyncError, syncOnce } from './sync';
 
 const USER = '0196f1c0-0000-7000-8000-000000000001';
 const SERVER = 'https://sync.example';
@@ -261,5 +261,89 @@ describe('joinSync', () => {
     expect(queued.filter((op) => op.itemId === g && 'title' in op.fields).map((op) => op.fields.title)).toEqual([
       'three',
     ]);
+  });
+
+  it('keeps the tabs a device holds when it joins an account with tabs of its own, and after it leaves', async () => {
+    await transact((tx) => storeTabs(tx, [tab('a'), tab('b')], settings));
+    await otherDeviceStores(['c']);
+    await joinSync(account);
+    await syncOnce();
+    expect(await tabTitles(source)).toEqual([['a', 'b'], ['c']]);
+    expect(await tabTitles(await replica())).toEqual([['a', 'b'], ['c']]);
+
+    await leaveSync();
+    expect(await tabTitles(source)).toEqual([['a', 'b'], ['c']]);
+  });
+});
+
+describe('sync status', () => {
+  it('records the time of a cycle that succeeded, with no error', async () => {
+    await joinSync(account);
+    await transact((tx) => storeTabs(tx, [tab('a')], settings));
+    const before = Date.now();
+    await sync();
+    const after = Date.now();
+    const status = await syncStatus();
+    expect(status).toEqual({ at: expect.any(Number) });
+    expect(status!.at).toBeGreaterThanOrEqual(before);
+    expect(status!.at).toBeLessThanOrEqual(after);
+  });
+
+  it('records signedOut when the server refuses the refresh token', async () => {
+    await joinSync({ ...account, accessToken: 'stale', refreshToken: 'stale' });
+    await sync();
+    expect((await syncStatus())?.error).toBe('signedOut');
+  });
+
+  it('records failed when a push is answered 500', async () => {
+    await joinSync(account);
+    await transact((tx) => storeTabs(tx, [tab('a')], settings));
+    server.pushStatus = 500;
+    await sync();
+    expect((await syncStatus())?.error).toBe('failed');
+  });
+
+  it('records nothing on a device that joined no account', async () => {
+    await transact((tx) => storeTabs(tx, [tab('a')], settings));
+    await sync();
+    expect(await syncStatus()).toBeUndefined();
+  });
+
+  it('clears the status of an earlier account when the device joins again', async () => {
+    await joinSync({ ...account, accessToken: 'stale', refreshToken: 'stale' });
+    await sync();
+    expect(await syncStatus()).toBeDefined();
+    await joinSync(account);
+    expect(await syncStatus()).toBeUndefined();
+  });
+});
+
+describe('client', () => {
+  const refreshes = () => server.calls.filter((c) => c.call === 'POST /v1/auth/refresh');
+
+  it('retries with the tokens another context stored instead of refreshing again', async () => {
+    await joinSync(account);
+    const api = client(account);
+    server.accessToken = 'access-other';
+    server.refreshToken = 'refresh-other';
+    await saveTokens({ accessToken: 'access-other', refreshToken: 'refresh-other' });
+
+    const page = await api<{ ops: unknown[] }>('/v1/ops?after=0');
+
+    expect(page.ops).toEqual([]);
+    expect(refreshes()).toEqual([]);
+    expect(server.calls.map((c) => c.call)).toEqual(['GET /v1/ops?after=0', 'GET /v1/ops?after=0']);
+    expect(await syncAccount()).toMatchObject({ accessToken: 'access-other', refreshToken: 'refresh-other' });
+  });
+
+  it('refreshes once when the stored tokens are the ones the call used, and stores the new tokens', async () => {
+    await joinSync(account);
+    server.accessToken = 'access-expired-on-server';
+
+    const page = await client(account)<{ ops: unknown[] }>('/v1/ops?after=0');
+
+    expect(page.ops).toEqual([]);
+    expect(refreshes()).toHaveLength(1);
+    expect(await syncAccount()).toMatchObject({ accessToken: 'access-2', refreshToken: 'refresh-2' });
   });
 });

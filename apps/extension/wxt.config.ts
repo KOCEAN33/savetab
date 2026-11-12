@@ -14,6 +14,7 @@ export default defineConfig({
       'unlimitedStorage',
       'contextMenus',
       'alarms',
+      'identity',
       ...(browser === 'firefox' ? [] : ['favicon']),
       // Playwright cannot click a permission prompt, so e2e builds hold bookmarks from the start.
       ...(mode === 'e2e' ? ['bookmarks'] : []),

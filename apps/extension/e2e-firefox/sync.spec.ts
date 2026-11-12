@@ -1,29 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import { logIn, startSyncServer } from '../e2e/sync-server';
-import {
-  EXT,
-  evaluate,
-  expect,
-  onetabPage,
-  openPages,
-  sendWindow,
-  test as base,
-  texts,
-  withFirefox,
-  type Firefox,
-} from './fixtures';
+import { logIn } from '../e2e/sync-server';
+import { EXT, evaluate, expect, onetabPage, openPages, sendWindow, texts, type Firefox } from './fixtures';
+import { expectTabs, test as base } from './sync-fixtures';
 
-const test = base.extend<{ second: Firefox; server: string; dataKey: number[] }>({
-  // oxlint-disable-next-line no-empty-pattern
-  second: async ({}, use) => {
-    await withFirefox(use);
-  },
-  // oxlint-disable-next-line no-empty-pattern
-  server: async ({}, use) => {
-    const server = await startSyncServer();
-    await use(server.url);
-    await server.stop();
-  },
+const test = base.extend<{ dataKey: number[] }>({
   // oxlint-disable-next-line no-empty-pattern
   dataKey: async ({}, use) => {
     await use([...randomBytes(32)]);
@@ -41,22 +21,6 @@ async function join(ff: Firefox, server: string, dataKey: number[], deviceName: 
     await logIn(server, deviceName),
     dataKey,
   );
-}
-
-/** Wait until the profile's list, the page its driver is on, shows exactly `titles`. Each try runs a cycle, since the alarm that pulls fires once a minute. */
-async function expectTabs(ff: Firefox, titles: string[]): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        await evaluate(ff, async () => {
-          const bg = (await browser.runtime.getBackgroundPage()) as any;
-          await bg.savetabTest.sync();
-        });
-        return texts(ff.driver, '.tab-link');
-      },
-      { timeout: 15_000 },
-    )
-    .toEqual(titles);
 }
 
 test('a tab stored in one profile shows in the other', async ({ ff: first, second, server, dataKey }) => {
