@@ -26,9 +26,23 @@
   const title = $derived(view.title(tab));
   const notes = $derived(view.notes(tab));
 
+  /**
+   * A link that never was an open tab, such as an import, has no favicon, and Chrome's favicon
+   * cache knows only pages it has shown. Such a link asks its site for `/favicon.ico`.
+   */
   function iconUrl(t: Tab): string {
+    if (!t.favIconUrl) return siteIcon(t.url);
     if (import.meta.env.FIREFOX) return t.favIconUrl;
     return browser.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(t.url)}&size=16` as '/');
+  }
+
+  function siteIcon(url: string): string {
+    try {
+      const u = new URL(url);
+      return u.protocol === 'https:' || u.protocol === 'http:' ? `${u.origin}/favicon.ico` : '';
+    } catch {
+      return '';
+    }
   }
 
   function urlText(url: string): string {
@@ -49,16 +63,17 @@
     onopen(e);
   }
 
-  const icon = $derived(iconUrl(tab));
+  let iconFailed = $state(false);
+  const icon = $derived(iconFailed ? '' : iconUrl(tab));
   const shownUrl = $derived(urlText(tab.url));
 </script>
 
 <li class="tab" data-nav="tab" data-id={tab.id} aria-label={title || tab.url}>
   <Tick id={tab.id} label={title || tab.url} />
   {#if icon}
-    <img class="tab-icon" src={icon} alt="" draggable="false" loading="lazy" />
+    <img class="tab-icon" src={icon} alt="" draggable="false" loading="lazy" onerror={() => (iconFailed = true)} />
   {:else}
-    <span class="tab-icon"></span>
+    <span class="tab-icon tab-icon-none"><Icon name="globe" /></span>
   {/if}
   {#if editing.title === tab.id}
     <TitleField item={tab} {title} label={t('tabTitle')} />

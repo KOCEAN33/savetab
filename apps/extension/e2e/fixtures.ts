@@ -7,7 +7,17 @@ const EXTENSION = path.resolve(import.meta.dirname, '../.output/chrome-mv3-e2e')
 
 // A real server, not context.route: tabs the extension opens in the background start
 // loading before Playwright can attach request interception to them.
+/** A 1x1 PNG, served as every page's `/favicon.ico`. */
+const ICON = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64',
+);
+
 const server = createServer((req, res) => {
+  if (req.url === '/favicon.ico') {
+    res.writeHead(200, { 'content-type': 'image/png' });
+    return res.end(ICON);
+  }
   const n = (req.url ?? '/').slice(1);
   res.writeHead(200, { 'content-type': 'text/html' });
   res.end(`<title>Page ${n}</title><h1>Page ${n}</h1>`);

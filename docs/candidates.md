@@ -15,14 +15,8 @@ Deferred work, not scheduled.
 
 The user asked for these on 2026-11-12, to be done later.
 
-- Links added through import show no favicon.
-- The list page is too narrow. The user did not say which width they want.
-- The row and group checkboxes are hard to hit. Selection should also work with Ctrl+click, Shift+click for a range, and a drag rectangle over several rows.
-- Checkboxes and the options page's radio buttons should be custom designs, not the browser's native controls.
-- A group should drag up and down by the empty space next to its date in the group head. The user does not want space with no function there.
+- Ctrl+click and Shift+click selection of rows. Ctrl/Cmd+click and Shift+click on a tab link already restore it, kept in the list or in a new window, as in OneTab, so the user picks which meaning wins.
 - An option to leave extension pages (`chrome-extension://`, `moz-extension://`, and similar) out of a send. Today only savetab's own pages and the empty pages in `BLANK_PAGES` (`apps/extension/lib/capture.ts`) are skipped.
-- When the list holds groups besides "All tabs", the current group head should stick to the top while scrolling.
-- An easier way to delete a group. Today a group goes to the trash through its More menu, the selection bar, or Backspace on a focused row. A delete button in the group head beside "Restore all" is one way, and the user named none.
 
 ## UI review findings left open
 
@@ -31,6 +25,8 @@ The user asked for these on 2026-11-12, to be done later.
 - The send page opens on a filter label, with no heading and no empty state when 0 tabs qualify.
 - On a 390px screen the item menu covers its own group. The top bar's icon buttons have tooltips only.
 - The list page reads every record before it draws (`db.items.toArray()` in `entrypoints/onetab/App.svelte`). With 3,000 stored tabs in 150 groups its first group paints at a median of 107 ms after navigation, against 564 ms for OneTab 2.24 with the same links (`apps/extension/scripts/first-open.mjs`, Playwright Chromium, 15 opens each, slowest savetab open 116 ms, fastest OneTab open 159 ms). A per-folder query would cut the read further.
+- On a 390px screen the selection bar wraps its 7 actions into 4 lines and covers the last rows. Every action, "Move to trash" included, is the same blue link.
+- At the 960px list width a short title sits far from its domain at the row's right end. A screenshot review asked for the domain right after the title.
 - Group heads use role `treeitem` for keyboard focus, but no element around them has role `tree`.
 - Folders cannot be reordered by drag. A folder chip shows in the order its `order` key gives, and "Sort groups" does not sort folders.
 - A folder has no tick, so a bulk move of several folders goes one folder at a time through the folder's menu.

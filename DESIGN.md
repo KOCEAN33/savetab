@@ -106,8 +106,8 @@ Heavy-tab users open the list after storing a window, or to find one tab among h
 ## Layout
 
 - Spacing scale: 4, 8, 12, 20, 32. Tight inside a group (rows touch), 32 between groups, 12 between the favicon and the title.
-- Grid and max width: one centered column, max 760px. Why: tab titles are long, and a title next to its domain reads as one line only when the two stay close.
-- The top bar sticks to the top of the viewport and holds the search field, so search stays one keystroke away at any scroll position.
+- Grid and max width: one centered column, max 960px on the list page and 760px on the form pages. Why: tab titles are long, and at 960px most titles and their domains fit one line on a laptop screen without the two drifting apart. Forms read better narrow.
+- The top bar sticks to the top of the viewport and holds the search field, so search stays one keystroke away at any scroll position. The head of the group being scrolled sticks under it, so its name and actions stay in reach inside a long group.
 - Folders are chips under the top bar: the path to the open folder, then its child folders. The list body holds groups only.
 - First thing the eye lands on: the search field, then the newest group's first tab titles.
 
@@ -132,7 +132,10 @@ Svelte components in `apps/extension/components/`. Shared styles in `apps/extens
 ## Do's and Don'ts
 
 - Do show a group's count, age, and state as one weak meta line next to its title.
-- Do show row actions (delete, more) on hover and on keyboard focus only.
+- Do show row actions (delete, more) on hover and on keyboard focus only. A group head's "Delete all" follows the same rule, in the meta color.
+- Do give a group head's free width to dragging the group. A head holds no space without a function.
+- Do draw checkboxes and radios in CSS: a 16px box in `on-surface-weak`, filled `primary` with an `on-primary` check when ticked, and a radio as a 16px circle whose ring thickens in `primary` when chosen. A tick's click target is the whole margin cell beside its row.
+- Do select rows by a rectangle dragged from empty page space. A drag that starts on a row moves the row.
 - Do give every icon button an accessible name and a tooltip with the same text.
 - Don't add cards, borders, or colored backgrounds around groups. Space separates them.
 - Don't use an icon for an action that changes the list in bulk. "Restore all" stays a word.

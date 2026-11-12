@@ -93,8 +93,11 @@
     {/if}
     {#if group.star}<span class="star" title={t('starred')}><Icon name="star" /></span>{/if}
     <span class="meta" title={created}>{meta}</span>
+    <span class="group-drag" use:dragHandle aria-label={t('dragItem', { name: label })}></span>
     <span class="group-actions">
-      <span class="group-grip" use:dragHandle aria-label={t('dragItem', { name: label })}><Icon name="grip" /></span>
+      {#if !group.locked}
+        <button class="link-button delete-all" onclick={() => act((tx) => trashItems(tx, [group.id]))}>{t('deleteAll')}</button>
+      {/if}
       <button class="link-button restore-all" onclick={(e) => restoreGroup(tabs, clickIntent(e, settings), settings, group)}
         >{t('restoreAll')}</button
       >

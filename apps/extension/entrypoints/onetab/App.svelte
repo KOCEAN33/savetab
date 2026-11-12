@@ -27,6 +27,7 @@
   import { DROP_TARGET, FLIP_MS } from '@/lib/motion';
   import { touchRecent } from '@/lib/recent';
   import { navigate } from '@/lib/keynav';
+  import { marquee } from '@/lib/marquee';
   import { linksFromData } from '@/lib/links-in';
   import { restoredItem } from '@/lib/backup';
   import { editing, keys, menu } from '@/lib/ui.svelte';
@@ -90,7 +91,7 @@
   const FIRST_PAINT = 8;
   let limit = $state(FIRST_PAINT);
   $effect(() => {
-    if (groups.length > 0 && limit < PAGE_SIZE) requestAnimationFrame(() => (limit += FIRST_PAINT));
+    if (limit < Math.min(groups.length, PAGE_SIZE)) requestAnimationFrame(() => (limit += FIRST_PAINT));
   });
   const shown = () => groups.slice(pageStart, pageStart + Math.min(limit, PAGE_SIZE));
   const pageCount = $derived(Math.max(1, Math.ceil(groups.length / PAGE_SIZE)));
@@ -239,6 +240,7 @@
 <main
   class="list-page"
   bind:this={mainEl}
+  use:marquee
   ondragover={(e) => {
     if (e.dataTransfer && LINK_TYPES.some((type) => e.dataTransfer!.types.includes(type))) e.preventDefault();
   }}

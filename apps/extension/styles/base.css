@@ -102,6 +102,45 @@ textarea {
   color: inherit;
 }
 
+/* Checkboxes and radios are drawn here, not by the browser, so every page and theme matches. */
+input[type='checkbox'],
+input[type='radio'] {
+  flex: none;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--color-on-surface-weak);
+  background: var(--color-surface);
+  cursor: pointer;
+  appearance: none;
+}
+
+input[type='checkbox'] {
+  border-radius: var(--radius-sm);
+}
+
+input[type='checkbox']:checked {
+  border-color: var(--color-primary);
+  background: var(--icon-check) center / 12px no-repeat var(--color-primary);
+}
+
+input[type='radio'] {
+  border-radius: var(--radius-md);
+}
+
+/* A thick ring in the accent marks the chosen radio. */
+input[type='radio']:checked {
+  border: 5px solid var(--color-primary);
+}
+
+label:has(> input[type='checkbox'], > input[type='radio']) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+}
+
 .meta {
   color: var(--color-on-surface-weak);
 }
@@ -153,6 +192,11 @@ textarea {
 }
 
 /* Top bar of the list page */
+/* The bar's height: the 36px search field, its padding, and its 1px border. Group heads stick under it. */
+:root {
+  --top-bar-height: calc(36px + 2 * var(--space-md) + 1px);
+}
+
 .top-bar {
   position: sticky;
   top: 0;
@@ -165,7 +209,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: var(--space-lg);
-  max-width: 760px;
+  max-width: 960px;
   margin: 0 auto;
   padding: var(--space-md) var(--space-xl);
 }
@@ -254,6 +298,7 @@ textarea {
 
 /* Folder chips and list tools */
 .list-page {
+  max-width: 960px;
   padding-top: var(--space-lg);
 }
 
@@ -358,13 +403,16 @@ textarea {
 }
 
 .group-head {
-  position: relative;
+  position: sticky;
+  top: var(--top-bar-height);
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--space-md);
   min-height: 32px;
   padding: 0 var(--space-sm);
   border-radius: var(--radius-sm);
+  background: var(--color-surface);
 }
 
 .group-label {
@@ -391,15 +439,22 @@ textarea {
   font-weight: var(--font-weight-bold);
 }
 
+/* The free width of the head is the group's drag handle. */
+.group-drag {
+  flex: 1;
+  align-self: stretch;
+  cursor: grab;
+}
+
 .group-actions {
   display: flex;
   flex: none;
   align-items: center;
   gap: var(--space-xs);
-  margin-left: auto;
 }
 
-.restore-all {
+.restore-all,
+.delete-all {
   height: 28px;
   padding: 0 var(--space-sm);
   border-radius: var(--radius-sm);
@@ -411,18 +466,19 @@ textarea {
   text-decoration: none;
 }
 
-.group-grip {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
+.delete-all {
   color: var(--color-on-surface-weak);
-  cursor: grab;
   visibility: hidden;
 }
 
-.group-head:hover .group-grip,
-.group-head:focus-within .group-grip {
+.delete-all:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-on-surface);
+  text-decoration: none;
+}
+
+.group-head:hover .delete-all,
+.group-head:focus-within .delete-all {
   visibility: visible;
 }
 
@@ -505,16 +561,21 @@ textarea {
   background: var(--color-surface-hover);
 }
 
-/* Ticks sit in the page margin, so showing them moves no title. */
+/* Ticks sit in the page margin, so showing them moves no title. The whole margin beside a row is the tick's target. */
 .tick {
   position: absolute;
-  top: var(--space-sm);
-  left: calc(0px - var(--space-lg) - var(--space-xs));
-  margin: 0;
+  top: 0;
+  left: calc(0px - var(--space-lg) - var(--space-sm));
+  display: grid;
+  place-items: center;
+  justify-items: end;
+  width: calc(var(--space-lg) + var(--space-sm));
+  height: 32px;
+  cursor: pointer;
   visibility: hidden;
 }
 
-.tick:checked,
+.tick:has(:checked),
 .tick-shown,
 .tab:hover .tick,
 .tab:focus-within .tick,
@@ -528,6 +589,11 @@ textarea {
   width: 16px;
   height: 16px;
   border-radius: var(--radius-sm);
+}
+
+/* A link with no favicon keeps the column of icons even. */
+.tab-icon-none {
+  color: var(--color-on-surface-weak);
 }
 
 .tab-link {
@@ -786,6 +852,10 @@ textarea {
 }
 
 @media (width <= 640px) {
+  :root {
+    --top-bar-height: calc(36px + 2 * var(--space-sm) + 1px);
+  }
+
   .top-bar-in {
     gap: var(--space-sm);
     padding: var(--space-sm) var(--space-md);
@@ -794,7 +864,7 @@ textarea {
   /* A narrow row keeps the title and drops what the menu or a wider window also shows. */
   .brand-name,
   .tab-url,
-  .group-grip,
+  .delete-all,
   .group-head .meta {
     display: none;
   }
@@ -815,4 +885,19 @@ textarea {
   .list-tools {
     margin-left: 0;
   }
+}
+
+/* The rectangle a drag on empty page space draws to select rows. */
+.marquee {
+  position: fixed;
+  z-index: 3;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-tint);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.marquee-active {
+  user-select: none;
 }

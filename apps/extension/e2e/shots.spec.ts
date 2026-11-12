@@ -35,6 +35,12 @@ for (const [name, w, h] of [
     await p.keyboard.press('Enter');
     await p.waitForTimeout(300);
     await p.screenshot({ path: `/tmp/savetab-shots/onetab-${name}.png`, fullPage: true });
+    await p.locator('.tab').filter({ hasText: 'chrome.tabs' }).hover();
+    await p.getByRole('checkbox', { name: 'Select chrome.tabs | API | Chrome for Developers' }).check();
+    await p.getByRole('checkbox', { name: 'Select Entrypoints | WXT' }).check();
+    await p.locator('.group').nth(1).locator('.group-head').hover();
+    await p.screenshot({ path: `/tmp/savetab-shots/onetab-selected-${name}.png` });
+    await p.getByRole('button', { name: 'Clear', exact: true }).click();
     await p.locator('.group').nth(2).getByRole('button', { name: 'More…' }).click();
     await p.screenshot({ path: `/tmp/savetab-shots/onetab-menu-${name}.png`, fullPage: true });
     await p.keyboard.press('Escape');

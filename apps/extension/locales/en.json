@@ -52,6 +52,7 @@
   "expand": "Expand",
   "collapse": "Collapse",
   "restoreAll": "Restore all",
+  "deleteAll": "Delete all",
   "delete": "Delete",
   "deleteItem": "Delete {name}",
   "moreActionsFor": "More actions for {name}",

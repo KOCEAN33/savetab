@@ -52,6 +52,7 @@
   "expand": "펼치기",
   "collapse": "접기",
   "restoreAll": "모두 복원",
+  "deleteAll": "모두 삭제",
   "delete": "삭제",
   "deleteItem": "{name} 삭제",
   "moreActionsFor": "{name} 작업 더 보기",

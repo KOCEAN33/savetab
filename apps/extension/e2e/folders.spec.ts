@@ -20,7 +20,7 @@ test('makes a folder, drags a group onto its chip, opens it, and returns through
   await expect(allTabs).toHaveAttribute('aria-current', 'page');
 
   const group = main.locator('section[aria-label="2 tabs"]');
-  await drag(list, group.locator('.group-grip'), work, 4);
+  await drag(list, group.getByLabel('Drag 2 tabs'), work, 4);
   await expect(main.locator('section[aria-label="2 tabs"]')).toHaveCount(0);
   await expect(main.locator('.tab-link')).toHaveCount(0);
   await expect(main.getByRole('treeitem', { name: /Work/ })).toHaveCount(0);
