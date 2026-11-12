@@ -17,7 +17,7 @@ Deferred work, not scheduled.
 - The options, import, and send pages have their own header, not the list page's top bar.
 - The send page opens on a filter label, with no heading and no empty state when 0 tabs qualify.
 - On a 390px screen the item menu covers its own group. The top bar's icon buttons have tooltips only.
-- With 3,000 stored tabs the first groups paint about 130 ms after navigation. The page reads every record first (`db.items.toArray()` in `entrypoints/onetab/App.svelte`). A per-folder query is the next step. No measurement against OneTab exists.
+- The list page reads every record before it draws (`db.items.toArray()` in `entrypoints/onetab/App.svelte`). With 3,000 stored tabs in 150 groups its first group paints at a median of 107 ms after navigation, against 564 ms for OneTab 2.24 with the same links (`apps/extension/scripts/first-open.mjs`, Playwright Chromium, 15 opens each, slowest savetab open 116 ms, fastest OneTab open 159 ms). A per-folder query would cut the read further.
 - Group heads use role `treeitem` for keyboard focus, but no element around them has role `tree`.
 - Folders cannot be reordered by drag. A folder chip shows in the order its `order` key gives, and "Sort groups" does not sort folders.
 - A folder has no tick, so a bulk move of several folders goes one folder at a time through the folder's menu.
