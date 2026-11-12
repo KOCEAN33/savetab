@@ -293,6 +293,9 @@ async function otherDeviceSnapshots(names: string[]): Promise<void> {
   server.takeSnapshot({ seq: server.lastSeq, data: Buffer.from(data).toString('base64') });
 }
 
+/** A test that pulls about 5,000 ops takes under a second locally and has run past 5s on a CI runner. */
+const HEAVY_MS = 30_000;
+
 describe('snapshots', () => {
   it('uploads none while the log is 4,999 ops past the last snapshot', async () => {
     await joinSync(account);
@@ -300,7 +303,7 @@ describe('snapshots', () => {
     await syncOnce();
     expect(await db.meta.get('syncCursor')).toMatchObject({ value: 4999 });
     expect(server.snapshotPuts()).toEqual([]);
-  });
+  }, HEAVY_MS);
 
   it('uploads what it holds at 5,000 ops, once, and again 5,000 ops later', async () => {
     await joinSync(account);
@@ -324,7 +327,7 @@ describe('snapshots', () => {
     await syncOnce();
     expect(server.snapshotPuts().length).toBe(2);
     expect(server.snapshot?.seq).toBe(server.lastSeq);
-  });
+  }, HEAVY_MS);
 
   it('reads the snapshot when its cursor is behind it, then pulls the ops after it', async () => {
     await otherDeviceSnapshots(['a', 'b']);
@@ -363,7 +366,7 @@ describe('snapshots', () => {
     await sync();
     expect((await syncStatus())?.error).toBeUndefined();
     expect(server.snapshotPuts().length).toBe(1);
-  });
+  }, HEAVY_MS);
 });
 
 describe('joinSync', () => {
