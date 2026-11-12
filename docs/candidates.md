@@ -64,4 +64,4 @@ Lint rules not turned on:
 ## Waiting on the user
 
 - Review the Korean strings in `apps/extension/locales/ko.json` and `public/_locales/ko/messages.json`. Wording and terms are the user's call.
-- P4 (sync server): whether a second way to add a device is wanted besides typing the recovery key, such as pairing with a device already signed in.
+- P4 (sync server): in the later build where pairing starts by itself after login, what the signed-in device shows for approval. A one-tap approve trusts the server to relay the right key. Comparing the pairing code does not.

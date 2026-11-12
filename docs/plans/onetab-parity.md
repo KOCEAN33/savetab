@@ -185,7 +185,9 @@ Login is OIDC. The server is the relying party for any configured issuer, and ma
 
 Ops are end-to-end encrypted:
 - A random AES-256-GCM data key, made on the first device, encrypts every op. The server stores only a copy wrapped by the recovery key.
-- The first device makes a random recovery key and shows it to the user once, with a warning that the data cannot be recovered without it. The server never sees it. A new device gets the data key when the user enters the recovery key.
+- The first device makes a random recovery key and shows it to the user once, with a warning that the data cannot be recovered without it. The server never sees it.
+- A new device gets the data key in one of two ways. The user enters the recovery key, or the new device pairs with a device already signed in: the two run ECDH P-256 through the server, and the user confirms a 6-digit pairing code shown on both before the signed-in device sends the wrapped data key.
+- The first build of pairing has the user start it by hand and check the code. A later build starts the exchange by itself once the new device logs in. The signed-in device still asks its user to approve, since the server relays the exchange and could otherwise add a device of its own.
 - The server keeps an append-only log `ops(user_id, seq, device_id, ciphertext, created_at)` and never merges. Clients decrypt and merge. AAD binds `user_id` and `item_id`. Clients upload encrypted snapshots, and the server drops ops before the snapshot's `seq`.
 - A shared web page uses its own random key in the URL fragment.
 
