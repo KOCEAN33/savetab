@@ -6,7 +6,7 @@ Build the self-hosted sync server (plan phase P4), so the stored tab list syncs 
 
 ## Start
 
-Continue P4 at step 2 of `docs/plans/onetab-parity.md` `### P4: sync server`: the key, snapshot, and pairing relay endpoints in `apps/server`. Step 1 is built: the Go server with the op log, `POST` and `GET /v1/ops`. `core` holds the op format and the merge rule the client steps build on. Server tests need the tailnet, see `apps/server/README.md`.
+Continue P4 at step 3 of `docs/plans/onetab-parity.md` `### P4: sync server`: OIDC login and device tokens in `apps/server`. Steps 1 and 2 are built: the Go server with the op log, the wrapped key, the snapshot, and the pairing relay, every endpoint of the plan's "HTTP API" list except `/v1/auth/*`. `core` holds the op format and the merge rule the client steps build on. Server tests need the tailnet, see `apps/server/README.md`.
 
 Orders from the owner that bind P4:
 

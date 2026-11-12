@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -18,8 +19,9 @@ import (
 )
 
 var (
-	db  *store.Store
-	srv *httptest.Server
+	db    *store.Store
+	srv   *httptest.Server
+	dbURL string
 )
 
 func TestMain(m *testing.M) {
@@ -33,6 +35,7 @@ func run(m *testing.M) int {
 		return 1
 	}
 	defer stop()
+	dbURL = url
 	ctx := context.Background()
 	if db, err = store.Open(ctx, url); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -121,6 +124,30 @@ func request(t *testing.T, method, path, token string, body any) *http.Response 
 	}
 	t.Cleanup(func() { res.Body.Close() })
 	return res
+}
+
+// expect checks the status and, when code is not empty, the error code in the body.
+func expect(t *testing.T, what string, res *http.Response, status int, code string) {
+	t.Helper()
+	if res.StatusCode != status {
+		t.Errorf("%s: status %d, want %d", what, res.StatusCode, status)
+		return
+	}
+	if code == "" {
+		return
+	}
+	if got := decode[map[string]string](t, res)["error"]; got != code {
+		t.Errorf("%s: error %q, want %q", what, got, code)
+	}
+}
+
+func decode[T any](t *testing.T, res *http.Response) T {
+	t.Helper()
+	var out T
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	return out
 }
 
 func push(t *testing.T, d device, ops ...op) {
@@ -281,6 +308,16 @@ func TestRequestsWithoutAValidAccessTokenGet401(t *testing.T) {
 			if res.StatusCode != http.StatusUnauthorized {
 				t.Errorf("%s, %s: status %d, want 401", name, method, res.StatusCode)
 			}
+		}
+	}
+	for _, route := range []string{
+		"GET /v1/key", "PUT /v1/key", "GET /v1/snapshot", "PUT /v1/snapshot",
+		"POST /v1/pairings", "GET /v1/pairings", "GET /v1/pairings/" + opID(1), "PUT /v1/pairings/" + opID(1),
+	} {
+		method, path, _ := strings.Cut(route, " ")
+		res := request(t, method, path, "", map[string]any{"data": []byte("x")})
+		if res.StatusCode != http.StatusUnauthorized {
+			t.Errorf("no token, %s: status %d, want 401", route, res.StatusCode)
 		}
 	}
 	if got := pull(t, d, ""); len(got.Ops) != 0 {

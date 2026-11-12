@@ -218,10 +218,16 @@ A push takes `users.next_seq` under a row lock, so one user's ops commit in `seq
 HTTP API, JSON, under `/v1`, with `Authorization: Bearer <access token>`:
 
 - `POST /v1/ops` `{ ops: [{ id, data }] }` (`data` = base64 op blob) returns `{ serverTime }`. An op id the user already pushed is skipped, so a retry is safe. Limits: 500 ops and 8 MiB per request.
-- `GET /v1/ops?after=<seq>&limit=<n>` returns `{ ops: [{ seq, id, deviceId, data, receivedAt }], more, serverTime }`, ordered by `seq`. It answers 409 `snapshot_required` when `after` is below the snapshot's `seq`.
-- `GET` and `PUT /v1/key` read and set the wrapped data key. `PUT` answers 409 once a key exists.
-- `GET` and `PUT /v1/snapshot` `{ seq, data }`. A `PUT` deletes the user's ops with `seq` at or below the snapshot's.
-- `POST /v1/pairings`, `GET` and `PUT /v1/pairings/{id}` relay the pairing messages.
+- `GET /v1/ops?after=<seq>&limit=<n>` returns `{ ops: [{ seq, id, deviceId, data, receivedAt }], more, serverTime }`, ordered by `seq`. It answers 409 `snapshot_required` when `after` is below the snapshot's `seq`. The device then reads the snapshot and pulls from its `seq`.
+- `GET` and `PUT /v1/key` `{ data }` read and set the wrapped data key. `GET` answers 404 `no_key` before the first `PUT`. `PUT` answers 409 `key_exists` once a key exists.
+- `GET` and `PUT /v1/snapshot` `{ seq, data }`. `GET` answers 404 `no_snapshot` when none exists. A `PUT` deletes the user's ops with `seq` at or below the snapshot's. It answers 409 `snapshot_ahead` when `seq` is above the log's last `seq`, and 409 `stale_snapshot` when the user's snapshot has a higher `seq`. Limit: 64 MiB per request *(savetab choice)*. An op a device pushes again after a snapshot covered it is stored again, and the merge rule makes it a no-op.
+- Pairing relay. A pairing is `{ id, newDeviceId, newDeviceName, commitment, oldPublic, newPublic, wrappedKey, expiresAt }`, with a message left out until it is sent. All binary fields are base64, and each message is at most 1,024 bytes.
+  - `POST /v1/pairings` `{ commitment }` (32 bytes) comes from the new device and returns the pairing with 201. It replaces a pairing that device still has open.
+  - `GET /v1/pairings` returns `{ pairings }`, the user's open pairings. The signed-in device finds the pairing here.
+  - `GET /v1/pairings/{id}` returns the pairing. Both devices poll it for the other side's message.
+  - `PUT /v1/pairings/{id}` takes exactly one of `{ oldPublic }`, `{ newPublic }`, `{ wrappedKey }`. The order is `oldPublic` from a signed-in device, `newPublic` from the new device, `wrappedKey` from a signed-in device, each set once. A message out of order or sent twice answers 409 `pairing_conflict`, and a message from the wrong side answers 403 `forbidden`.
+  - An expired pairing and another user's pairing answer 404 `not_found`.
+- A write with no body to return answers 204. An error answers `{ error: <code> }`.
 - `GET /v1/auth/start`, `GET /v1/auth/callback`, `POST /v1/auth/token`, `POST /v1/auth/refresh` run the OIDC login and issue device tokens. An access token lives 1 hour, a refresh token 90 days and is replaced on each use.
 
 Steps run in this order. Each step is done when its check passes plus the five commands in `CLAUDE.md`. `pnpm test` and `pnpm check` include the server through `apps/server/package.json`. Server tests run against a real Postgres named by `TEST_DATABASE_URL`, in a database each run creates and drops (`apps/server/README.md`).

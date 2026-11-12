@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -57,20 +58,35 @@ func (s *Store) AppendOps(ctx context.Context, c Caller, ops []NewOp) error {
 	})
 }
 
+// ErrSnapshotRequired means the log no longer holds every op above the requested seq.
+var ErrSnapshotRequired = errors.New("ops at or below the snapshot are gone")
+
 // OpsAfter returns up to limit of the user's ops with seq above after, in seq order, and
-// whether more remain.
+// whether more remain. It gives ErrSnapshotRequired when after is below the snapshot's seq.
 func (s *Store) OpsAfter(ctx context.Context, userID string, after int64, limit int) (ops []StoredOp, more bool, err error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT seq, op_id, device_id, ciphertext, received_at
-		FROM ops WHERE user_id = $1 AND seq > $2 ORDER BY seq LIMIT $3`,
-		userID, after, limit+1)
-	if err != nil {
-		return nil, false, err
-	}
-	ops, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (StoredOp, error) {
-		var op StoredOp
-		err := row.Scan(&op.Seq, &op.ID, &op.DeviceID, &op.Ciphertext, &op.ReceivedAt)
-		return op, err
+	// One view for both reads, so a snapshot that lands between them cannot hide ops it deleted.
+	view := pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}
+	err = pgx.BeginTxFunc(ctx, s.pool, view, func(tx pgx.Tx) error {
+		var stale bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM snapshots WHERE user_id = $1 AND seq > $2)`, userID, after).Scan(&stale); err != nil {
+			return err
+		}
+		if stale {
+			return ErrSnapshotRequired
+		}
+		rows, err := tx.Query(ctx, `
+			SELECT seq, op_id, device_id, ciphertext, received_at
+			FROM ops WHERE user_id = $1 AND seq > $2 ORDER BY seq LIMIT $3`,
+			userID, after, limit+1)
+		if err != nil {
+			return err
+		}
+		ops, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (StoredOp, error) {
+			var op StoredOp
+			err := row.Scan(&op.Seq, &op.ID, &op.DeviceID, &op.Ciphertext, &op.ReceivedAt)
+			return op, err
+		})
+		return err
 	})
 	if err != nil {
 		return nil, false, err

@@ -17,6 +17,12 @@ import (
 const (
 	maxOpsPerRequest = 500
 	maxBodyBytes     = 8 << 20
+	// A snapshot holds every record of one user, so it gets more room than a push.
+	maxSnapshotBytes = 64 << 20
+	// A wrapped key or a pairing message is under 100 bytes in the v1 formats.
+	maxMessageBytes = 1024
+	smallBodyBytes  = 8 << 10
+	pairingTTL      = 5 * time.Minute
 )
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -31,6 +37,14 @@ func New(s *store.Store) http.Handler {
 	mux.HandleFunc("GET /healthz", srv.health)
 	mux.HandleFunc("POST /v1/ops", srv.authed(srv.pushOps))
 	mux.HandleFunc("GET /v1/ops", srv.authed(srv.pullOps))
+	mux.HandleFunc("GET /v1/key", srv.authed(srv.getKey))
+	mux.HandleFunc("PUT /v1/key", srv.authed(srv.putKey))
+	mux.HandleFunc("GET /v1/snapshot", srv.authed(srv.getSnapshot))
+	mux.HandleFunc("PUT /v1/snapshot", srv.authed(srv.putSnapshot))
+	mux.HandleFunc("POST /v1/pairings", srv.authed(srv.startPairing))
+	mux.HandleFunc("GET /v1/pairings", srv.authed(srv.listPairings))
+	mux.HandleFunc("GET /v1/pairings/{id}", srv.authed(srv.getPairing))
+	mux.HandleFunc("PUT /v1/pairings/{id}", srv.authed(srv.putPairing))
 	return mux
 }
 
@@ -44,6 +58,16 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 
 func writeError(w http.ResponseWriter, status int, code string) {
 	writeJSON(w, status, map[string]string{"error": code})
+}
+
+// readJSON decodes a body of at most limit bytes into v. It answers 400 and returns false when
+// the body is too long or is not the JSON v takes.
+func readJSON(w http.ResponseWriter, r *http.Request, limit int64, v any) bool {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit)).Decode(v); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request")
+		return false
+	}
+	return true
 }
 
 func internalError(w http.ResponseWriter, r *http.Request, err error) {
@@ -88,8 +112,7 @@ func (s *server) pushOps(w http.ResponseWriter, r *http.Request, c store.Caller)
 	var body struct {
 		Ops []pushedOp `json:"ops"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+	if !readJSON(w, r, maxBodyBytes, &body) {
 		return
 	}
 	if len(body.Ops) > maxOpsPerRequest {
@@ -136,6 +159,10 @@ func (s *server) pullOps(w http.ResponseWriter, r *http.Request, c store.Caller)
 		}
 	}
 	stored, more, err := s.store.OpsAfter(r.Context(), c.UserID, after, limit)
+	if errors.Is(err, store.ErrSnapshotRequired) {
+		writeError(w, http.StatusConflict, "snapshot_required")
+		return
+	}
 	if err != nil {
 		internalError(w, r, err)
 		return
