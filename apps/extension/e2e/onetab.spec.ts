@@ -95,6 +95,31 @@ test('drags a tab into another group', async ({ context, worker, extensionId }) 
   await expect(list.locator('.tab-link')).toHaveText(['Page a1', 'Page b1', 'Page a2']);
 });
 
+test('dragging a ticked tab carries the other ticked tabs with it', async ({ context, worker, extensionId }) => {
+  await openPages(context, ['a1', 'a2']);
+  await sendWindow(worker);
+  const list = await onetabPage(context, extensionId);
+  await openPages(context, ['c1', 'c2', 'c3']);
+  await sendWindow(worker);
+  await list.bringToFront();
+
+  const groups = list.locator('.group');
+  await expect(groups).toHaveCount(2);
+  // A tick shows on hover until something is ticked.
+  await list.locator('.tab').filter({ hasText: 'Page c1' }).hover();
+  await list.getByRole('checkbox', { name: 'Select Page c1' }).check();
+  await list.getByRole('checkbox', { name: 'Select Page c3' }).check();
+  await drag(
+    list,
+    groups.nth(0).getByRole('link', { name: 'Page c1' }),
+    groups.nth(1).getByRole('link', { name: 'Page a2' }),
+  );
+
+  await expect(groups.nth(0).locator('.tab-link')).toHaveText(['Page c2']);
+  await expect(groups.nth(1).locator('.tab-link')).toHaveText(['Page a1', 'Page c1', 'Page c3', 'Page a2']);
+  await expect(list.getByRole('toolbar', { name: 'Selection' })).toHaveCount(0);
+});
+
 test('imports "URL | Title" text and exports it back', async ({ context, extensionId }) => {
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/import-export.html`);
@@ -103,4 +128,18 @@ test('imports "URL | Title" text and exports it back', async ({ context, extensi
   await page.getByRole('button', { name: 'Import', exact: true }).click();
   await expect(page.getByRole('status').first()).toHaveText('Imported 3 tabs in 2 groups.');
   await expect(page.getByRole('textbox', { name: 'Exported links' })).toHaveValue(text);
+});
+
+test('Remove duplicates in the list head keeps one copy of each URL across groups', async ({ context, worker, extensionId }) => {
+  await openPages(context, ['u1', 'u2']);
+  await sendWindow(worker);
+  const list = await onetabPage(context, extensionId);
+  await openPages(context, ['u1']);
+  await sendWindow(worker);
+  await list.bringToFront();
+  await expect(list.getByRole('heading', { name: 'Total: 3 tabs' })).toBeVisible();
+
+  await list.getByRole('button', { name: 'Remove duplicates', exact: true }).click();
+  await expect(list.getByRole('heading', { name: 'Total: 2 tabs' })).toBeVisible();
+  await expect(list.locator('.tab-link')).toHaveText(['Page u1', 'Page u2']);
 });

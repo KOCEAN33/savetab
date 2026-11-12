@@ -69,9 +69,10 @@ Action popup `P3`: lists open tabs with checkboxes. Filters: include pinned, inc
 - Header: total tab count, search, Options, Import & Export, Help, theme switch, sync status. `P1` (search `P2`)
 - Group row: title or "{N} tabs", "Created {date}", Restore all, Delete all, More menu, collapse/expand. `P1`
 - Tab row: favicon, title link, URL display (full, abbreviated, domain only, none), delete button. `P1`
-- Drag and drop: reorder tabs, groups, and folders. Drop tabs in blank space to make a new group. Drop a group on a group to merge. Ctrl or Alt while dragging copies. Drop text with links from another page to import them. `P1` reorder/move, `P2` merge/copy, `P3` text drop.
-- Multi-select by tick icons. Right-click a tick for: Select all, Deselect all, Invert selection, Select all except this, Select this and above, Select this and below. Bulk actions on the selection. `P2`
+- Drag and drop: reorder tabs, groups, and folders. Drop tabs in blank space or on a folder chip to make a new group there. Drop a group on a group to merge. Ctrl or Alt while dragging copies. Drop text with links from another page to import them. `P1` reorder/move, `P2` merge/copy, `P3` text drop.
+- Multi-select by tick icons. Right-click a tick for: Select all, Deselect all, Invert selection, Select all except this, Select this and above, Select this and below. Bulk actions on the selection. An action started on a ticked row, a drag, a More menu entry, or a delete button, applies to every ticked item, and entries that make sense on one item only hide from that menu. `P2`
 - Folder navigation column with recent folders and groups, filter (show everything, folders only, named only). `P2`
+- Remove duplicates in the open folder, or the whole list at the top level, keeping the first copy of each URL. `P2`
 - Sort groups in a folder: A-Z, recently created, recently modified, recently accessed, reverse. Tabs inside are not sorted. `P2`
 - Keyboard navigation: Tab to start, arrows to move, Enter to restore or open, Backspace for parent folder, Esc to end, fold toggle. `/` focuses search, folder-scoped variant. `P2`
 - Paging with "Next {N}" and "Previous {N}" for long lists. `P2`

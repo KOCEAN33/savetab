@@ -30,7 +30,7 @@
   import { marquee } from '@/lib/row-select';
   import { linksFromData } from '@/lib/links-in';
   import { restoredItem } from '@/lib/backup';
-  import { editing, keys, menu } from '@/lib/ui.svelte';
+  import { dedupe, dragCount, editing, keys, menu, nextStill, oneShelf, spend } from '@/lib/ui.svelte';
   import { t, tn } from '@/lib/i18n';
   import { deviceSettingsItem, getDeviceSettings, setDeviceSettings } from '@/lib/settings';
   import type { Theme } from '@/lib/theme';
@@ -173,10 +173,13 @@
     if (trigger !== TRIGGERS.DROPPED_INTO_ZONE) return;
     const at = e.detail.items.findIndex((g) => g.id === id);
     if (at === -1) return;
-    const before = e.detail.items[at + 1]?.id ?? afterShown;
+    const moving = spend(view, id);
+    if (!oneShelf(moving)) return void (items = shown());
+    const ids = moving.map((i) => i.id);
+    const before = nextStill(e.detail.items, at, ids) ?? afterShown;
     void run(async (tx) => {
-      if (copy) await copyItems(tx, [id], folder, before);
-      else await moveItems(tx, [id], folder, before);
+      if (copy) await copyItems(tx, ids, folder, before);
+      else await moveItems(tx, ids, folder, before);
     });
   }
 
@@ -196,7 +199,11 @@
     draggingTab = false;
     const { id, trigger } = e.detail.info;
     newGroupItems = [];
-    if (trigger === TRIGGERS.DROPPED_INTO_ZONE) void run((tx) => moveToNewGroup(tx, [id], folder));
+    if (trigger !== TRIGGERS.DROPPED_INTO_ZONE) return;
+    const moving = spend(view, id);
+    if (!oneShelf(moving)) return;
+    const ids = moving.map((i) => i.id);
+    void run((tx) => moveToNewGroup(tx, ids, folder));
   }
 </script>
 
@@ -266,6 +273,7 @@
       <FolderBar {view} current={folder} onopen={open} onnew={newFolder} />
       <div class="list-tools">
         <h1 class="page-total meta">{tn('pageTotal', total)}</h1>
+        <button class="link-button" onclick={() => dedupe([folder])}>{t('removeDuplicates')}</button>
         <select
           aria-label={t('sortGroups')}
           value=""
@@ -298,7 +306,7 @@
 
     <div
       class="groups"
-      use:dragHandleZone={{ items, type: 'group', flipDurationMs: FLIP_MS, useCursorForDetection: true, zoneTabIndex: -1, zoneItemTabIndex: -1, ...DROP_TARGET }}
+      use:dragHandleZone={{ items, type: 'group', flipDurationMs: FLIP_MS, transformDraggedElement: dragCount(view), useCursorForDetection: true, zoneTabIndex: -1, zoneItemTabIndex: -1, ...DROP_TARGET }}
       onconsider={(e) => (items = e.detail.items)}
       onfinalize={finalizeItems}
     >

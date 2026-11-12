@@ -59,3 +59,35 @@ test('Ctrl/Cmd-click ticks a row without opening it, and Shift-click ticks the r
   await expect(list.locator('.tab-link')).toHaveCount(4);
   expect(openUrls(context)).toEqual([]);
 });
+
+test('a row menu opened on a ticked row acts on every ticked row', async ({ context, worker, extensionId }) => {
+  await openPages(context, ['m1', 'm2', 'm3']);
+  await sendWindow(worker);
+  const list = await onetabPage(context, extensionId);
+
+  await list.locator('.tab').filter({ hasText: 'Page m1' }).hover();
+  await list.getByRole('checkbox', { name: 'Select Page m1' }).check();
+  await list.getByRole('checkbox', { name: 'Select Page m3' }).check();
+  const row = list.locator('.tab').filter({ hasText: 'Page m3' });
+  await row.hover();
+  await row.getByRole('button', { name: 'More actions for Page m3' }).click();
+  await list.getByRole('menuitem', { name: 'Move to trash' }).click();
+
+  await expect(list.locator('.tab-link')).toHaveText(['Page m2']);
+  await expect(list.getByRole('toolbar', { name: 'Selection' })).toHaveCount(0);
+});
+
+test('the delete button on a ticked row deletes every ticked row', async ({ context, worker, extensionId }) => {
+  await openPages(context, ['d1', 'd2', 'd3']);
+  await sendWindow(worker);
+  const list = await onetabPage(context, extensionId);
+
+  await list.locator('.tab').filter({ hasText: 'Page d1' }).hover();
+  await list.getByRole('checkbox', { name: 'Select Page d1' }).check();
+  await list.getByRole('checkbox', { name: 'Select Page d2' }).check();
+  const row = list.locator('.tab').filter({ hasText: 'Page d2' });
+  await row.hover();
+  await row.getByRole('button', { name: 'Delete Page d2' }).click();
+
+  await expect(list.locator('.tab-link')).toHaveText(['Page d3']);
+});

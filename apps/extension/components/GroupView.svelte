@@ -3,7 +3,6 @@
   import {
     copyItems,
     moveItems,
-    trashItems,
     updateItem,
     type Group,
     type ListView,
@@ -13,7 +12,7 @@
   import { clickIntent, restoreGroup, restoreTab } from '@/lib/restore';
   import { clickSelect } from '@/lib/row-select';
   import { activeShare } from '@/lib/share';
-  import { act, editing, keys, menu, toggleMenu } from '@/lib/ui.svelte';
+  import { act, dragCount, editing, keys, menu, nextStill, oneShelf, spend, toggleMenu, trashTargets } from '@/lib/ui.svelte';
   import { shortDate, t, tn } from '@/lib/i18n';
   import Icon from './Icon.svelte';
   import NotesField from './NotesField.svelte';
@@ -80,8 +79,11 @@
     if (trigger !== TRIGGERS.DROPPED_INTO_ZONE) return;
     const at = e.detail.items.findIndex((t) => t.id === id);
     if (at === -1) return;
-    const before = e.detail.items[at + 1]?.id ?? null;
-    void run((tx) => (copy ? copyItems(tx, [id], group.id, before) : moveItems(tx, [id], group.id, before)));
+    const moving = spend(view, id);
+    if (!oneShelf(moving)) return void (items = tabs);
+    const ids = moving.map((i) => i.id);
+    const before = nextStill(e.detail.items, at, ids);
+    void run((tx) => (copy ? copyItems(tx, ids, group.id, before) : moveItems(tx, ids, group.id, before)));
   }
 </script>
 
@@ -98,7 +100,7 @@
     <span class="group-drag" use:dragHandle aria-label={t('dragItem', { name: label })}></span>
     <span class="group-actions">
       {#if !group.locked}
-        <button class="link-button delete-all" onclick={() => act((tx) => trashItems(tx, [group.id]))}>{t('deleteAll')}</button>
+        <button class="link-button delete-all" onclick={() => trashTargets(view, group.id)}>{t('deleteAll')}</button>
       {/if}
       <button class="link-button restore-all" onclick={(e) => restoreGroup(tabs, clickIntent(e, settings), settings, group)}
         >{t('restoreAll')}</button
@@ -134,6 +136,9 @@
         items,
         type: 'tab',
         flipDurationMs: FLIP_MS,
+        transformDraggedElement: dragCount(view),
+        // A tab row spans the page, and its centre never reaches a folder chip.
+        useCursorForDetection: true,
         ...DROP_TARGET,
         dragDisabled: group.locked || shown !== undefined,
         dropFromOthersDisabled: group.locked,
@@ -147,7 +152,7 @@
           {view}
           locked={group.locked}
           onopen={(e) => restoreTab(tab, clickIntent(e, settings))}
-          ondelete={() => run((tx) => trashItems(tx, [tab.id]))}
+          ondelete={() => trashTargets(view, tab.id)}
         />
       {/each}
     </ul>

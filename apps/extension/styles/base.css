@@ -687,6 +687,19 @@ label:has(> input[type='checkbox'], > input[type='radio']) {
   outline: 1px dashed var(--color-primary);
 }
 
+/* The dragged row carries ticked items with it. svelte-dnd-action fixes its position, so the badge anchors to it. */
+[data-drag-count]::after {
+  position: absolute;
+  top: calc(-1 * var(--space-sm));
+  right: calc(-1 * var(--space-sm));
+  padding: 0 var(--space-sm);
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: var(--font-weight-bold);
+  content: attr(data-drag-count);
+}
+
 /* Shown while items are ticked. It floats so the list under it keeps its place. */
 .selection-bar {
   position: fixed;

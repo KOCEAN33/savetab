@@ -1,8 +1,8 @@
 <script lang="ts">
   import { dndzone, TRIGGERS, type DndEvent } from 'svelte-dnd-action';
-  import { moveItems, TOP, type Folder, type Id, type Item, type ListView } from '@savetab/core';
+  import { moveItems, moveToNewGroup, TOP, type Folder, type Id, type Item, type ListView } from '@savetab/core';
   import { activeShare } from '@/lib/share';
-  import { act, editing, menu, toggleMenu } from '@/lib/ui.svelte';
+  import { act, editing, menu, oneShelf, spend, toggleMenu } from '@/lib/ui.svelte';
   import { shortDate, t } from '@/lib/i18n';
   import { DROP_TARGET } from '@/lib/motion';
   import Icon from './Icon.svelte';
@@ -26,15 +26,22 @@
   const trail = $derived(open ? [...view.path(open.id), open] : []);
   const inside = $derived(view.children(current).filter((i) => i.kind === 'folder'));
 
-  /** Drop zones hold only the dragged group's placeholder while it hovers. */
+  /** Drop zones hold only the dragged row's placeholder while it hovers, keyed by drag type and folder. */
   let drops = $state<Record<string, Item[]>>({});
 
-  /** A group dropped on a folder moves into it. */
-  function finalize(targetId: Id | null, e: CustomEvent<DndEvent<Item>>) {
-    drops[targetId ?? ''] = [];
+  /**
+   * A group dropped on a folder moves into it. Tabs dropped on a folder make a new group at its
+   * top, as tabs dropped in blank space do.
+   */
+  function finalize(key: string, targetId: Id | null, e: CustomEvent<DndEvent<Item>>) {
+    drops[key] = [];
     const { id, trigger } = e.detail.info;
     if (trigger !== TRIGGERS.DROPPED_INTO_ZONE || id === targetId) return;
-    void act((tx) => moveItems(tx, [id], targetId, TOP));
+    const moving = spend(view, id);
+    if (!oneShelf(moving)) return;
+    const ids = moving.map((i) => i.id);
+    if (moving[0]?.kind === 'tab') void act((tx) => moveToNewGroup(tx, ids, targetId));
+    else void act((tx) => moveItems(tx, ids, targetId, TOP));
   }
 </script>
 
@@ -50,14 +57,17 @@
         >{folder ? folder.title || t('untitledFolder') : t('allTabs')}</button
       >
     {/if}
-    <span
-      class="chip-drop"
-      use:dndzone={{ items: drops[id ?? ''] ?? [], type: 'group', flipDurationMs: 0, ...DROP_TARGET }}
-      onconsider={(e) => (drops[id ?? ''] = e.detail.items)}
-      onfinalize={(e) => finalize(id, e)}
-    >
-      {#each drops[id ?? ''] ?? [] as d (d.id)}<span></span>{/each}
-    </span>
+    {#each ['group', 'tab'] as type (type)}
+      {@const key = `${type}:${id ?? ''}`}
+      <span
+        class="chip-drop"
+        use:dndzone={{ items: drops[key] ?? [], type, flipDurationMs: 0, ...DROP_TARGET }}
+        onconsider={(e) => (drops[key] = e.detail.items)}
+        onfinalize={(e) => finalize(key, id, e)}
+      >
+        {#each drops[key] ?? [] as d (d.id)}<span></span>{/each}
+      </span>
+    {/each}
   </span>
 {/snippet}
 

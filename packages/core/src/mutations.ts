@@ -519,10 +519,11 @@ async function tabsUnder(tx: Tx, parentId: Id | null): Promise<ItemRecord[]> {
 }
 
 /**
- * Remove duplicate tabs under `scopeId`, comparing normalized URLs. The first copy in display
- * order stays. Tabs in locked groups cannot be removed, so they are skipped. Returns the count trashed.
+ * Remove duplicate tabs under `scopeId`, or in the whole list for null, comparing normalized URLs.
+ * The first copy in display order stays. Tabs in locked groups cannot be removed, so they are
+ * skipped. Returns the count trashed.
  */
-export async function removeDuplicates(tx: Tx, scopeId: Id): Promise<number> {
+export async function removeDuplicates(tx: Tx, scopeId: Id | null): Promise<number> {
   const seen = new Set<string>();
   const doomed = (await tabsUnder(tx, scopeId)).filter((t) => {
     const u = normalizeUrl(t.url ?? '');

@@ -36,3 +36,27 @@ test('makes a folder, drags a group onto its chip, opens it, and returns through
   await expect(work).toBeVisible();
   await expect(main.locator('.tab-link')).toHaveCount(0);
 });
+
+test('ticked tabs dropped on a folder chip become a new group in it', async ({ context, worker, extensionId }) => {
+  await openPages(context, ['k1', 'k2', 'k3']);
+  await sendWindow(worker);
+  const list = await onetabPage(context, extensionId);
+  const main = list.getByRole('main');
+  const nav = main.getByRole('navigation', { name: 'Folders' });
+  const work = nav.getByRole('button', { name: 'Work', exact: true });
+
+  await nav.getByRole('button', { name: 'New folder' }).click();
+  await list.getByRole('textbox', { name: 'Folder name' }).fill('Work');
+  await list.keyboard.press('Enter');
+  await expect(work).toBeVisible();
+
+  await main.locator('.tab').filter({ hasText: 'Page k1' }).hover();
+  await list.getByRole('checkbox', { name: 'Select Page k1' }).check();
+  await list.getByRole('checkbox', { name: 'Select Page k3' }).check();
+  await drag(list, main.getByRole('link', { name: 'Page k1' }), work);
+  await expect(main.locator('.tab-link')).toHaveText(['Page k2']);
+
+  await work.click();
+  await expect(main.locator('.group')).toHaveCount(1);
+  await expect(main.locator('.tab-link')).toHaveText(['Page k1', 'Page k3']);
+});

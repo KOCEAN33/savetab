@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { trashItems, updateItem, type Id, type Item, type ItemPatch, type ListView, type Tab } from '@savetab/core';
+  import { trashItems, updateItem, type Id, type ItemPatch, type ListView, type Tab } from '@savetab/core';
   import { copyLinks } from '@/lib/clipboard';
   import { clickIntent, restoreSelected } from '@/lib/restore';
   import { selectCommand, type SelectCommand } from '@/lib/selection';
-  import { act, chooser, selectMenu, selection } from '@/lib/ui.svelte';
+  import { act, choose, selectMenu, selection, ticked } from '@/lib/ui.svelte';
   import { t } from '@/lib/i18n';
 
   let { view, order }: { view: ListView; order: Id[] } = $props();
 
-  const items = $derived([...selection].flatMap((id) => view.get(id) ?? []));
+  const items = $derived(ticked(view));
 
   /** Tabs of the selection, each once, in list order. */
   const tabs = $derived.by(() => {
@@ -39,15 +39,6 @@
   function trash() {
     const ids = items.map((i) => i.id);
     done(() => act((tx) => trashItems(tx, ids)));
-  }
-
-  function choose(mode: 'move' | 'copy') {
-    const kinds = new Set(items.map((i: Item) => i.kind === 'tab'));
-    if (kinds.size > 1) {
-      alert(t('moveMixedKinds'));
-      return;
-    }
-    done(() => Object.assign(chooser, { ids: items.map((i) => i.id), mode }));
   }
 
   function command(c: SelectCommand) {
@@ -90,8 +81,8 @@
     <button class="link-button" onclick={(e) => done(() => restoreSelected(tabs, clickIntent(e, view.settings), view.settings))}>
       {t('restore')}
     </button>
-    <button class="link-button" onclick={() => choose('move')}>{t('menuMove')}</button>
-    <button class="link-button" onclick={() => choose('copy')}>{t('menuCopy')}</button>
+    <button class="link-button" onclick={() => choose(items, 'move') && selection.clear()}>{t('menuMove')}</button>
+    <button class="link-button" onclick={() => choose(items, 'copy') && selection.clear()}>{t('menuCopy')}</button>
     <button class="link-button" onclick={() => setAll({ star: true })}>{t('star')}</button>
     <button class="link-button" onclick={() => copyLinks(view, items)}>{t('copyLinks')}</button>
     <button class="link-button" onclick={trash}>{t('moveToTrash')}</button>
