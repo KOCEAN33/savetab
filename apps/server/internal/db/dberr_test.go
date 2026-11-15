@@ -9,7 +9,6 @@ import (
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
-	"github.com/KOCEAN33/savetab/apps/server/internal/platform/testdb"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -66,20 +65,8 @@ func TestMapErrorHidesTheDriverTypeOfAnInternalError(t *testing.T) {
 }
 
 func TestMapErrorOnARealDatabase(t *testing.T) {
-	url, stop, err := testdb.Start()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stop()
+	store, url := openStore(t)
 	ctx := context.Background()
-	store, err := db.Open(ctx, url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
 
 	if _, err := store.Key(ctx, "01900000-0000-7000-8000-000000000001"); errs.KindOf(err) != errs.NotFound {
 		t.Errorf("missing id: kind %d, want NotFound (%v)", errs.KindOf(err), err)
