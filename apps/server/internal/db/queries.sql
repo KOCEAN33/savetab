@@ -111,3 +111,25 @@ WHERE state_hash = @state_hash::bytea AND code_hash IS NULL AND expires_at > now
 DELETE FROM logins
 WHERE code_hash = @code_hash::bytea AND expires_at > now() AND user_id IS NOT NULL
 RETURNING user_id::uuid AS user_id, code_challenge;
+
+-- name: InsertSessions :exec
+-- Stores the access and the refresh session of one token pair.
+INSERT INTO sessions (token_hash, device_id, kind, expires_at)
+VALUES
+(@access_hash::bytea, @device_id::uuid, 'access', now() + make_interval(secs => @access_ttl_seconds::float8)),
+(@refresh_hash::bytea, @device_id::uuid, 'refresh', now() + make_interval(secs => @refresh_ttl_seconds::float8));
+
+-- name: AccessSession :one
+-- The device and user of an access token's session, unless it expired or the device is revoked.
+SELECT d.id AS device_id, d.user_id
+FROM sessions AS s
+INNER JOIN devices AS d ON s.device_id = d.id
+WHERE s.token_hash = @token_hash::bytea AND s.kind = 'access' AND s.expires_at > now() AND d.revoked_at IS NULL;
+
+-- name: TakeRefreshSession :one
+-- Deletes a refresh token's session, unless it expired or the device is revoked.
+DELETE FROM sessions AS s
+WHERE
+  s.token_hash = @token_hash::bytea AND s.kind = 'refresh' AND s.expires_at > now()
+  AND EXISTS (SELECT 1 FROM devices AS d WHERE d.id = s.device_id AND d.revoked_at IS NULL)
+RETURNING s.device_id, (SELECT d.user_id FROM devices AS d WHERE d.id = s.device_id)::uuid AS user_id;

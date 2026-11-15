@@ -41,20 +41,20 @@ func randomToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
-func issueSession(ctx context.Context, q *db.Queries, deviceID uuid.UUID, kind db.SessionKind, ttl time.Duration) (string, error) {
-	token, err := randomToken()
-	if err != nil {
-		return "", err
-	}
-	return token, q.InsertSession(ctx, hashToken(token), deviceID, kind, ttl)
-}
-
 func issueTokens(ctx context.Context, q *db.Queries, deviceID, userID uuid.UUID) (t Tokens, err error) {
 	t.DeviceID, t.UserID = deviceID, userID
-	if t.Access, err = issueSession(ctx, q, deviceID, db.Access, AccessTTL); err != nil {
+	if t.Access, err = randomToken(); err != nil {
 		return Tokens{}, err
 	}
-	if t.Refresh, err = issueSession(ctx, q, deviceID, db.Refresh, refreshTTL); err != nil {
+	if t.Refresh, err = randomToken(); err != nil {
+		return Tokens{}, err
+	}
+	err = q.InsertSessions(ctx, db.InsertSessionsParams{
+		DeviceID:   deviceID,
+		AccessHash: hashToken(t.Access), AccessTTLSeconds: AccessTTL.Seconds(),
+		RefreshHash: hashToken(t.Refresh), RefreshTTLSeconds: refreshTTL.Seconds(),
+	})
+	if err != nil {
 		return Tokens{}, err
 	}
 	return t, nil
@@ -63,13 +63,11 @@ func issueTokens(ctx context.Context, q *db.Queries, deviceID, userID uuid.UUID)
 // Authenticate resolves an access token. An expired token, a refresh token, and a token of a
 // revoked device all give an Unauthenticated error.
 func (b *Bus) Authenticate(ctx context.Context, token string) (Caller, error) {
-	var c Caller
-	var err error
-	c.DeviceID, c.UserID, err = b.store.Queries().AccessSession(ctx, hashToken(token))
+	session, err := b.store.Queries().AccessSession(ctx, hashToken(token))
 	if errs.KindOf(err) == errs.NotFound {
 		return Caller{}, errs.Wrap(errs.Unauthenticated, "authenticate", "no such session", err)
 	}
-	return c, err
+	return Caller(session), err
 }
 
 // RefreshSession spends a refresh token and returns a new pair. A spent or expired token,
@@ -77,14 +75,14 @@ func (b *Bus) Authenticate(ctx context.Context, token string) (Caller, error) {
 func (b *Bus) RefreshSession(ctx context.Context, refreshToken string) (t Tokens, err error) {
 	err = b.store.InTx(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
-		deviceID, userID, err := q.TakeRefreshSession(ctx, hashToken(refreshToken))
+		session, err := q.TakeRefreshSession(ctx, hashToken(refreshToken))
 		if errs.KindOf(err) == errs.NotFound {
 			return errs.Wrap(errs.Unauthenticated, "refresh session", "no such session", err)
 		}
 		if err != nil {
 			return err
 		}
-		t, err = issueTokens(ctx, q, deviceID, userID)
+		t, err = issueTokens(ctx, q, session.DeviceID, session.UserID)
 		return err
 	})
 	return t, err

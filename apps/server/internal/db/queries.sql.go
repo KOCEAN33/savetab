@@ -12,6 +12,26 @@ import (
 	"github.com/google/uuid"
 )
 
+const accessSession = `-- name: AccessSession :one
+SELECT d.id AS device_id, d.user_id
+FROM sessions AS s
+INNER JOIN devices AS d ON s.device_id = d.id
+WHERE s.token_hash = $1::bytea AND s.kind = 'access' AND s.expires_at > now() AND d.revoked_at IS NULL
+`
+
+type AccessSessionRow struct {
+	DeviceID uuid.UUID
+	UserID   uuid.UUID
+}
+
+// The device and user of an access token's session, unless it expired or the device is revoked.
+func (q *Queries) AccessSession(ctx context.Context, tokenHash []byte) (AccessSessionRow, error) {
+	row := q.db.QueryRow(ctx, accessSession, tokenHash)
+	var i AccessSessionRow
+	err := row.Scan(&i.DeviceID, &i.UserID)
+	return i, err
+}
+
 const deleteOpsThrough = `-- name: DeleteOpsThrough :exec
 DELETE FROM ops WHERE user_id = $1::uuid AND seq <= $2::bigint
 `
@@ -201,6 +221,33 @@ func (q *Queries) InsertOps(ctx context.Context, arg InsertOpsParams) (int64, er
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const insertSessions = `-- name: InsertSessions :exec
+INSERT INTO sessions (token_hash, device_id, kind, expires_at)
+VALUES
+($1::bytea, $2::uuid, 'access', now() + make_interval(secs => $3::float8)),
+($4::bytea, $2::uuid, 'refresh', now() + make_interval(secs => $5::float8))
+`
+
+type InsertSessionsParams struct {
+	AccessHash        []byte
+	DeviceID          uuid.UUID
+	AccessTTLSeconds  float64
+	RefreshHash       []byte
+	RefreshTTLSeconds float64
+}
+
+// Stores the access and the refresh session of one token pair.
+func (q *Queries) InsertSessions(ctx context.Context, arg InsertSessionsParams) error {
+	_, err := q.db.Exec(ctx, insertSessions,
+		arg.AccessHash,
+		arg.DeviceID,
+		arg.AccessTTLSeconds,
+		arg.RefreshHash,
+		arg.RefreshTTLSeconds,
+	)
+	return err
 }
 
 const insertUser = `-- name: InsertUser :one
@@ -431,6 +478,27 @@ func (q *Queries) TakeLogin(ctx context.Context, codeHash []byte) (TakeLoginRow,
 	row := q.db.QueryRow(ctx, takeLogin, codeHash)
 	var i TakeLoginRow
 	err := row.Scan(&i.UserID, &i.CodeChallenge)
+	return i, err
+}
+
+const takeRefreshSession = `-- name: TakeRefreshSession :one
+DELETE FROM sessions AS s
+WHERE
+  s.token_hash = $1::bytea AND s.kind = 'refresh' AND s.expires_at > now()
+  AND EXISTS (SELECT 1 FROM devices AS d WHERE d.id = s.device_id AND d.revoked_at IS NULL)
+RETURNING s.device_id, (SELECT d.user_id FROM devices AS d WHERE d.id = s.device_id)::uuid AS user_id
+`
+
+type TakeRefreshSessionRow struct {
+	DeviceID uuid.UUID
+	UserID   uuid.UUID
+}
+
+// Deletes a refresh token's session, unless it expired or the device is revoked.
+func (q *Queries) TakeRefreshSession(ctx context.Context, tokenHash []byte) (TakeRefreshSessionRow, error) {
+	row := q.db.QueryRow(ctx, takeRefreshSession, tokenHash)
+	var i TakeRefreshSessionRow
+	err := row.Scan(&i.DeviceID, &i.UserID)
 	return i, err
 }
 
