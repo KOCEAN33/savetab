@@ -181,7 +181,7 @@ func TestUsedRefreshTokenIsRejected(t *testing.T) {
 
 func TestRefreshTokenOfARevokedDeviceIsRejected(t *testing.T) {
 	got := logIn(t, "erin-"+randomString(t), "desktop")
-	if _, err := store.Queries().RevokeDevice(context.Background(), uuid.MustParse(got.UserID), uuid.MustParse(got.DeviceID)); err != nil {
+	if _, err := store.Queries().RevokeDevice(context.Background(), db.RevokeDeviceParams{UserID: uuid.MustParse(got.UserID), DeviceID: uuid.MustParse(got.DeviceID)}); err != nil {
 		t.Fatal(err)
 	}
 	expect(t, "refresh", refresh(t, got.RefreshToken), http.StatusUnauthorized, "unauthorized")

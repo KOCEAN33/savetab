@@ -12,6 +12,56 @@ import (
 	"github.com/google/uuid"
 )
 
+const devices = `-- name: Devices :many
+SELECT id, name, created_at
+FROM devices
+WHERE user_id = $1::uuid AND revoked_at IS NULL
+ORDER BY created_at, id
+`
+
+type DevicesRow struct {
+	ID        uuid.UUID
+	Name      string
+	CreatedAt time.Time
+}
+
+// The user's devices that are not revoked, oldest first.
+func (q *Queries) Devices(ctx context.Context, userID uuid.UUID) ([]DevicesRow, error) {
+	rows, err := q.db.Query(ctx, devices, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DevicesRow
+	for rows.Next() {
+		var i DevicesRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertDevice = `-- name: InsertDevice :one
+INSERT INTO devices (user_id, name) VALUES ($1::uuid, $2::text) RETURNING id
+`
+
+type InsertDeviceParams struct {
+	UserID uuid.UUID
+	Name   string
+}
+
+func (q *Queries) InsertDevice(ctx context.Context, arg InsertDeviceParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertDevice, arg.UserID, arg.Name)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertOps = `-- name: InsertOps :execrows
 WITH fresh AS (
   SELECT i.op_id, c.ciphertext, row_number() OVER (ORDER BY i.ord) AS n
@@ -108,6 +158,25 @@ func (q *Queries) OpsAfter(ctx context.Context, arg OpsAfterParams) ([]OpsAfterR
 		return nil, err
 	}
 	return items, nil
+}
+
+const revokeDevice = `-- name: RevokeDevice :execrows
+UPDATE devices SET revoked_at = now()
+WHERE id = $1::uuid AND user_id = $2::uuid AND revoked_at IS NULL
+`
+
+type RevokeDeviceParams struct {
+	DeviceID uuid.UUID
+	UserID   uuid.UUID
+}
+
+// Revokes one of the user's devices that is not revoked yet, which ends its sessions.
+func (q *Queries) RevokeDevice(ctx context.Context, arg RevokeDeviceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeDevice, arg.DeviceID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setNextSeq = `-- name: SetNextSeq :exec

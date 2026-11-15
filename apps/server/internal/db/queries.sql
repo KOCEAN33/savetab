@@ -30,3 +30,18 @@ FROM ops
 WHERE user_id = @user_id::uuid AND seq > @after_seq::bigint
 ORDER BY seq
 LIMIT @max_ops::int;
+
+-- name: InsertDevice :one
+INSERT INTO devices (user_id, name) VALUES (@user_id::uuid, @name::text) RETURNING id;
+
+-- name: Devices :many
+-- The user's devices that are not revoked, oldest first.
+SELECT id, name, created_at
+FROM devices
+WHERE user_id = @user_id::uuid AND revoked_at IS NULL
+ORDER BY created_at, id;
+
+-- name: RevokeDevice :execrows
+-- Revokes one of the user's devices that is not revoked yet, which ends its sessions.
+UPDATE devices SET revoked_at = now()
+WHERE id = @device_id::uuid AND user_id = @user_id::uuid AND revoked_at IS NULL;

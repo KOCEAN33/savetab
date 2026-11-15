@@ -84,7 +84,7 @@ func (b *Bus) RedeemLogin(ctx context.Context, code, codeVerifier, deviceName st
 	}
 	err = b.store.InTx(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
-		deviceID, err := q.InsertDevice(ctx, userID, deviceName)
+		deviceID, err := q.InsertDevice(ctx, db.InsertDeviceParams{UserID: userID, Name: deviceName})
 		if err != nil {
 			return err
 		}

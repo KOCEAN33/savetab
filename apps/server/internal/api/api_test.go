@@ -319,7 +319,7 @@ func TestRequestsWithoutAValidAccessTokenGet401(t *testing.T) {
 	expired := expiredAccessToken(t, d.id)
 	refresh := signedIn.RefreshToken
 	revoked := newDevice(t, user)
-	if _, err := store.Queries().RevokeDevice(ctx, uuid.MustParse(user.id), uuid.MustParse(revoked.id)); err != nil {
+	if _, err := store.Queries().RevokeDevice(ctx, db.RevokeDeviceParams{UserID: uuid.MustParse(user.id), DeviceID: uuid.MustParse(revoked.id)}); err != nil {
 		t.Fatal(err)
 	}
 
