@@ -2,9 +2,9 @@ package db
 
 import (
 	"context"
-	"errors"
 	"time"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -37,7 +37,7 @@ func (s *Store) AppendOps(ctx context.Context, c Caller, ops []NewOp) error {
 		ids = append(ids, op.ID)
 		blobs = append(blobs, op.Ciphertext)
 	}
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	return MapError(ctx, "append ops", pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		// The row lock makes one user's pushes run one at a time, so a reader that has seen
 		// seq n never later finds a new op at or below n.
 		var next int64
@@ -55,14 +55,12 @@ func (s *Store) AppendOps(ctx context.Context, c Caller, ops []NewOp) error {
 		}
 		_, err = tx.Exec(ctx, `UPDATE users SET next_seq = $2 WHERE id = $1`, c.UserID, next+tag.RowsAffected())
 		return err
-	})
+	}))
 }
 
-// ErrSnapshotRequired means the log no longer holds every op above the requested seq.
-var ErrSnapshotRequired = errors.New("ops at or below the snapshot are gone")
-
 // OpsAfter returns up to limit of the user's ops with seq above after, in seq order, and
-// whether more remain. It gives ErrSnapshotRequired when after is below the snapshot's seq.
+// whether more remain. It gives a Conflict when after is below the snapshot's seq, since the
+// log no longer holds every op above it.
 func (s *Store) OpsAfter(ctx context.Context, userID string, after int64, limit int) (ops []StoredOp, more bool, err error) {
 	// One view for both reads, so a snapshot that lands between them cannot hide ops it deleted.
 	view := pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}
@@ -72,7 +70,7 @@ func (s *Store) OpsAfter(ctx context.Context, userID string, after int64, limit 
 			return err
 		}
 		if stale {
-			return ErrSnapshotRequired
+			return errs.New(errs.Conflict, "read ops", "ops at or below the snapshot are gone")
 		}
 		rows, err := tx.Query(ctx, `
 			SELECT seq, op_id, device_id, ciphertext, received_at
@@ -89,7 +87,7 @@ func (s *Store) OpsAfter(ctx context.Context, userID string, after int64, limit 
 		return err
 	})
 	if err != nil {
-		return nil, false, err
+		return nil, false, MapError(ctx, "read ops", err)
 	}
 	if len(ops) > limit {
 		return ops[:limit], true, nil

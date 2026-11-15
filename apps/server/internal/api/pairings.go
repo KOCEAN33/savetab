@@ -2,10 +2,10 @@ package api
 
 import (
 	"crypto/sha256"
-	"errors"
 	"net/http"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
 type pairingBody struct {
@@ -66,7 +66,7 @@ func (s *server) getPairing(w http.ResponseWriter, r *http.Request, c db.Caller)
 		return
 	}
 	p, err := s.store.Pairing(r.Context(), c.UserID, id)
-	if errors.Is(err, db.ErrNotFound) {
+	if errs.KindOf(err) == errs.NotFound {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}
@@ -108,11 +108,11 @@ func (s *server) putPairing(w http.ResponseWriter, r *http.Request, c db.Caller)
 	}
 	err := s.store.SetPairingMessage(r.Context(), c, id, message, value)
 	switch {
-	case errors.Is(err, db.ErrNotFound):
+	case errs.KindOf(err) == errs.NotFound:
 		writeError(w, http.StatusNotFound, "not_found")
-	case errors.Is(err, db.ErrForbidden):
+	case errs.KindOf(err) == errs.Forbidden:
 		writeError(w, http.StatusForbidden, "forbidden")
-	case errors.Is(err, db.ErrPairingConflict):
+	case errs.KindOf(err) == errs.Conflict:
 		writeError(w, http.StatusConflict, "pairing_conflict")
 	case err != nil:
 		internalError(w, r, err)

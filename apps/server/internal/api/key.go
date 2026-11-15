@@ -1,10 +1,10 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
 type keyBody struct {
@@ -13,7 +13,7 @@ type keyBody struct {
 
 func (s *server) getKey(w http.ResponseWriter, r *http.Request, c db.Caller) {
 	wrapped, err := s.store.Key(r.Context(), c.UserID)
-	if errors.Is(err, db.ErrNotFound) {
+	if errs.KindOf(err) == errs.NotFound {
 		writeError(w, http.StatusNotFound, "no_key")
 		return
 	}
@@ -34,7 +34,7 @@ func (s *server) putKey(w http.ResponseWriter, r *http.Request, c db.Caller) {
 		return
 	}
 	err := s.store.PutKey(r.Context(), c.UserID, body.Data)
-	if errors.Is(err, db.ErrKeyExists) {
+	if errs.KindOf(err) == errs.Conflict {
 		writeError(w, http.StatusConflict, "key_exists")
 		return
 	}

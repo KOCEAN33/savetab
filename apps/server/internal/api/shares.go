@@ -2,11 +2,11 @@ package api
 
 import (
 	_ "embed"
-	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
 // The viewer decrypts in the browser with the key from the URL fragment, which never reaches
@@ -56,7 +56,7 @@ func (s *server) getShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sh, err := s.store.Share(r.Context(), id)
-	if errors.Is(err, db.ErrNotFound) {
+	if errs.KindOf(err) == errs.NotFound {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}
@@ -75,7 +75,7 @@ func (s *server) deleteShare(w http.ResponseWriter, r *http.Request, c db.Caller
 	}
 	err := s.store.DeleteShare(r.Context(), c.UserID, id)
 	switch {
-	case errors.Is(err, db.ErrNotFound):
+	case errs.KindOf(err) == errs.NotFound:
 		writeError(w, http.StatusNotFound, "not_found")
 	case err != nil:
 		internalError(w, r, err)

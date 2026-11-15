@@ -13,6 +13,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,27 +32,29 @@ type Store struct {
 func Open(ctx context.Context, url string) (*Store, error) {
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
-		return nil, err
+		return nil, MapError(ctx, "open database", err)
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		return nil, err
+		return nil, MapError(ctx, "open database", err)
 	}
 	return &Store{pool: pool}, nil
 }
 
 func (s *Store) Close() { s.pool.Close() }
 
-func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
+func (s *Store) Ping(ctx context.Context) error {
+	return MapError(ctx, "ping database", s.pool.Ping(ctx))
+}
 
 // Migrate applies every embedded migration not yet recorded, in file name order.
 func (s *Store) Migrate(ctx context.Context) error {
 	names, err := fs.Glob(migrations, "migrations/*.sql")
 	if err != nil {
-		return err
+		return MapError(ctx, "migrate", err)
 	}
 	sort.Strings(names)
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	return MapError(ctx, "migrate", pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, migrationLock); err != nil {
 			return err
 		}
@@ -78,7 +81,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			}
 		}
 		return nil
-	})
+	}))
 }
 
 type Device struct {
@@ -94,26 +97,27 @@ func (s *Store) Devices(ctx context.Context, userID string) ([]Device, error) {
 		WHERE user_id = $1 AND revoked_at IS NULL
 		ORDER BY created_at, id`, userID)
 	if err != nil {
-		return nil, err
+		return nil, MapError(ctx, "list devices", err)
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Device, error) {
+	devices, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Device, error) {
 		var d Device
 		err := row.Scan(&d.ID, &d.Name, &d.CreatedAt)
 		return d, err
 	})
+	return devices, MapError(ctx, "list devices", err)
 }
 
 // RevokeDevice revokes one of the user's devices, which ends its sessions. A device of another
-// user and one already revoked give ErrNotFound.
+// user and one already revoked give a NotFound error.
 func (s *Store) RevokeDevice(ctx context.Context, userID, deviceID string) error {
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE devices SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL`,
 		deviceID, userID)
 	if err != nil {
-		return err
+		return MapError(ctx, "revoke device", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return errs.New(errs.NotFound, "revoke device", "not found")
 	}
 	return nil
 }
@@ -159,10 +163,8 @@ type Caller struct {
 	UserID   string
 }
 
-var ErrNoSession = errors.New("no such session")
-
 // Authenticate resolves an access token. An expired token, a refresh token, and a token of a
-// revoked device all give ErrNoSession.
+// revoked device all give an Unauthenticated error.
 func (s *Store) Authenticate(ctx context.Context, token string) (Caller, error) {
 	var c Caller
 	err := s.pool.QueryRow(ctx, `
@@ -171,7 +173,7 @@ func (s *Store) Authenticate(ctx context.Context, token string) (Caller, error) 
 		WHERE s.token_hash = $1 AND s.kind = 'access' AND s.expires_at > now() AND d.revoked_at IS NULL`,
 		hashToken(token)).Scan(&c.DeviceID, &c.UserID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Caller{}, ErrNoSession
+		return Caller{}, errs.Wrap(errs.Unauthenticated, "authenticate", "no such session", err)
 	}
-	return c, err
+	return c, MapError(ctx, "authenticate", err)
 }

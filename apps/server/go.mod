@@ -4,6 +4,7 @@ go 1.27.4
 
 require (
 	github.com/coreos/go-oidc/v3 v3.21.0
+	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.13.0
 	golang.org/x/oauth2 v0.38.0
 )

@@ -3,7 +3,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
 const (
@@ -122,7 +122,7 @@ func (s *server) authed(next func(http.ResponseWriter, *http.Request, db.Caller)
 			return
 		}
 		caller, err := s.store.Authenticate(r.Context(), token)
-		if errors.Is(err, db.ErrNoSession) {
+		if errs.KindOf(err) == errs.Unauthenticated {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
@@ -190,7 +190,7 @@ func (s *server) pullOps(w http.ResponseWriter, r *http.Request, c db.Caller) {
 		}
 	}
 	stored, more, err := s.store.OpsAfter(r.Context(), c.UserID, after, limit)
-	if errors.Is(err, db.ErrSnapshotRequired) {
+	if errs.KindOf(err) == errs.Conflict {
 		writeError(w, http.StatusConflict, "snapshot_required")
 		return
 	}

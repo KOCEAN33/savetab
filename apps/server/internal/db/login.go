@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -34,20 +35,20 @@ func (s *Store) CreateLogin(ctx context.Context, l Login, ttl time.Duration) (st
 		INSERT INTO logins (state_hash, redirect_uri, client_state, code_challenge, nonce, issuer_verifier, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(secs => $7))`,
 		hashToken(state), l.RedirectURI, l.ClientState, l.CodeChallenge, l.Nonce, l.IssuerVerifier, ttl.Seconds())
-	return state, err
+	return state, MapError(ctx, "create login", err)
 }
 
 // PendingLogin returns the login the state belongs to. An expired login and one the issuer
-// already answered give ErrNotFound.
+// already answered give a NotFound error.
 func (s *Store) PendingLogin(ctx context.Context, state string) (l Login, err error) {
 	err = s.pool.QueryRow(ctx, `
 		SELECT redirect_uri, client_state, code_challenge, nonce, issuer_verifier
 		FROM logins WHERE state_hash = $1 AND code_hash IS NULL AND expires_at > now()`,
 		hashToken(state)).Scan(&l.RedirectURI, &l.ClientState, &l.CodeChallenge, &l.Nonce, &l.IssuerVerifier)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Login{}, ErrNotFound
+	if err != nil {
+		return Login{}, MapError(ctx, "get pending login", err)
 	}
-	return l, err
+	return l, nil
 }
 
 // CompleteLogin records who the issuer says logged in, making the user on a first login,
@@ -80,11 +81,11 @@ func (s *Store) CompleteLogin(ctx context.Context, state, issuer, subject string
 			return err
 		}
 		if tag.RowsAffected() == 0 {
-			return ErrNotFound
+			return errs.New(errs.NotFound, "complete login", "not found")
 		}
 		return nil
 	})
-	return code, err
+	return code, MapError(ctx, "complete login", err)
 }
 
 // Tokens is what a device holds after a login or a refresh.
@@ -107,17 +108,17 @@ func issueTokens(ctx context.Context, tx pgx.Tx, deviceID, userID string) (t Tok
 }
 
 // RedeemLogin trades a login code for a new device and its tokens. The code is spent by any
-// attempt, so a wrong challenge also gives ErrNotFound on the next try with the right one.
+// attempt, so a wrong challenge also gives a NotFound error on the next try with the right one.
 func (s *Store) RedeemLogin(ctx context.Context, code, codeChallenge, deviceName string) (t Tokens, err error) {
 	var userID, challenge string
 	err = s.pool.QueryRow(ctx,
 		`DELETE FROM logins WHERE code_hash = $1 AND expires_at > now() RETURNING user_id, code_challenge`,
 		hashToken(code)).Scan(&userID, &challenge)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && challenge != codeChallenge) {
-		return Tokens{}, ErrNotFound
+		return Tokens{}, errs.New(errs.NotFound, "redeem login", "not found")
 	}
 	if err != nil {
-		return Tokens{}, err
+		return Tokens{}, MapError(ctx, "redeem login", err)
 	}
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		var deviceID string
@@ -127,11 +128,11 @@ func (s *Store) RedeemLogin(ctx context.Context, code, codeChallenge, deviceName
 		t, err = issueTokens(ctx, tx, deviceID, userID)
 		return err
 	})
-	return t, err
+	return t, MapError(ctx, "redeem login", err)
 }
 
 // RefreshSession spends a refresh token and returns a new pair. A spent or expired token,
-// an access token, and a token of a revoked device all give ErrNoSession.
+// an access token, and a token of a revoked device all give an Unauthenticated error.
 func (s *Store) RefreshSession(ctx context.Context, refreshToken string) (t Tokens, err error) {
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		var deviceID, userID string
@@ -142,7 +143,7 @@ func (s *Store) RefreshSession(ctx context.Context, refreshToken string) (t Toke
 			RETURNING d.id, d.user_id`,
 			hashToken(refreshToken)).Scan(&deviceID, &userID)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNoSession
+			return errs.Wrap(errs.Unauthenticated, "refresh session", "no such session", err)
 		}
 		if err != nil {
 			return err
@@ -150,5 +151,5 @@ func (s *Store) RefreshSession(ctx context.Context, refreshToken string) (t Toke
 		t, err = issueTokens(ctx, tx, deviceID, userID)
 		return err
 	})
-	return t, err
+	return t, MapError(ctx, "refresh session", err)
 }

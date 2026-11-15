@@ -18,6 +18,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
 const (
@@ -130,7 +131,7 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	state := q.Get("state")
 	login, err := s.store.PendingLogin(r.Context(), state)
-	if errors.Is(err, db.ErrNotFound) {
+	if errs.KindOf(err) == errs.NotFound {
 		writeError(w, http.StatusBadRequest, "invalid_state")
 		return
 	}
@@ -191,7 +192,7 @@ func (s *server) authToken(w http.ResponseWriter, r *http.Request) {
 	}
 	challenge := sha256.Sum256([]byte(body.CodeVerifier))
 	tokens, err := s.store.RedeemLogin(r.Context(), body.Code, base64.RawURLEncoding.EncodeToString(challenge[:]), body.DeviceName)
-	if errors.Is(err, db.ErrNotFound) {
+	if errs.KindOf(err) == errs.NotFound {
 		writeError(w, http.StatusBadRequest, "invalid_grant")
 		return
 	}
@@ -210,7 +211,7 @@ func (s *server) authRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tokens, err := s.store.RefreshSession(r.Context(), body.RefreshToken)
-	if errors.Is(err, db.ErrNoSession) {
+	if errs.KindOf(err) == errs.Unauthenticated {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}

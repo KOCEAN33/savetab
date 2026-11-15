@@ -2,15 +2,10 @@ package db
 
 import (
 	"context"
-	"errors"
 	"time"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 	"github.com/jackc/pgx/v5"
-)
-
-var (
-	ErrForbidden       = errors.New("the message belongs to the other side of the pairing")
-	ErrPairingConflict = errors.New("the message is out of order or already set")
 )
 
 // Pairing is one key exchange between a new device and a signed-in device of the same user.
@@ -57,9 +52,10 @@ func (s *Store) CreatePairing(ctx context.Context, c Caller, commitment []byte, 
 		SELECT `+pairingColumns+` FROM p JOIN devices d ON d.id = p.new_device_id`,
 		c.UserID, c.DeviceID, commitment, ttl.Seconds())
 	if err != nil {
-		return Pairing{}, err
+		return Pairing{}, MapError(ctx, "create pairing", err)
 	}
-	return pgx.CollectExactlyOneRow(rows, scanPairing)
+	p, err := pgx.CollectExactlyOneRow(rows, scanPairing)
+	return p, MapError(ctx, "create pairing", err)
 }
 
 // Pairings returns the user's pairings that have not expired, oldest first.
@@ -69,41 +65,36 @@ func (s *Store) Pairings(ctx context.Context, userID string) ([]Pairing, error) 
 		WHERE p.user_id = $1 AND p.expires_at > now() ORDER BY p.expires_at, p.id`,
 		userID)
 	if err != nil {
-		return nil, err
+		return nil, MapError(ctx, "list pairings", err)
 	}
-	return pgx.CollectRows(rows, scanPairing)
+	ps, err := pgx.CollectRows(rows, scanPairing)
+	return ps, MapError(ctx, "list pairings", err)
 }
 
-// Pairing returns one of the user's pairings. An expired pairing gives ErrNotFound.
+// Pairing returns one of the user's pairings. An expired pairing gives a NotFound error.
 func (s *Store) Pairing(ctx context.Context, userID, id string) (Pairing, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT `+pairingColumns+` FROM pairings p JOIN devices d ON d.id = p.new_device_id
 		WHERE p.id = $1 AND p.user_id = $2 AND p.expires_at > now()`,
 		id, userID)
 	if err != nil {
-		return Pairing{}, err
+		return Pairing{}, MapError(ctx, "get pairing", err)
 	}
 	p, err := pgx.CollectExactlyOneRow(rows, scanPairing)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Pairing{}, ErrNotFound
-	}
-	return p, err
+	return p, MapError(ctx, "get pairing", err)
 }
 
 // SetPairingMessage stores one message of the exchange. The order is OldPublic from a signed-in
 // device, NewPublic from the new device, then WrappedKey from a signed-in device. Each is set
 // once, so a later request cannot swap a public key the other side has already read.
 func (s *Store) SetPairingMessage(ctx context.Context, c Caller, id string, message PairingMessage, value []byte) error {
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	return MapError(ctx, "set pairing message", pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		var newDeviceID string
 		var hasOld, hasNew, hasKey bool
 		err := tx.QueryRow(ctx, `
 			SELECT new_device_id, old_public IS NOT NULL, new_public IS NOT NULL, wrapped_key IS NOT NULL
 			FROM pairings WHERE id = $1 AND user_id = $2 AND expires_at > now() FOR UPDATE`,
 			id, c.UserID).Scan(&newDeviceID, &hasOld, &hasNew, &hasKey)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
 		if err != nil {
 			return err
 		}
@@ -118,12 +109,12 @@ func (s *Store) SetPairingMessage(ctx context.Context, c Caller, id string, mess
 			ready = hasNew && !hasKey
 		}
 		if fromNew != (message == NewPublic) {
-			return ErrForbidden
+			return errs.New(errs.Forbidden, "set pairing message", "the message belongs to the other side of the pairing")
 		}
 		if !ready {
-			return ErrPairingConflict
+			return errs.New(errs.Conflict, "set pairing message", "the message is out of order or already set")
 		}
 		_, err = tx.Exec(ctx, `UPDATE pairings SET `+string(message)+` = $2 WHERE id = $1`, id, value)
 		return err
-	})
+	}))
 }
