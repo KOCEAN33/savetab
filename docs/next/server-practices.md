@@ -24,6 +24,8 @@ The layers the remaining steps build on, with `internal/bus/ops.go` and `interna
 Orders from the owner that bind later steps:
 
 - Every finding of the review gets fixed, architecture phase first, in the plan's step order.
+- The steps run one after another without a pause for approval. Work stops only for a choice only the owner can make, and a session that runs short of context moves to a new one by itself.
+- The image tag stays the commit SHA until step 19 moves it to the version. Step 19 is not pulled forward.
 - `/v2` takes the practice's form, and `/v1` goes once the extension has moved.
 - The server and the extension share one version and one `v<version>` tag per merge.
 - The chart is `charts/savetab/` in this repository. Steps 11 and 19 change it in their own commit. A deploy moves `chartRevision` and `image.tag` together in `KOCEAN33/homelab-workloads` and is the owner's.
