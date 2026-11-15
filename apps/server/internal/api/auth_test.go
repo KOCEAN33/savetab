@@ -181,7 +181,7 @@ func TestUsedRefreshTokenIsRejected(t *testing.T) {
 
 func TestRefreshTokenOfARevokedDeviceIsRejected(t *testing.T) {
 	got := logIn(t, "erin-"+randomString(t), "desktop")
-	if err := store.RevokeDevice(context.Background(), got.UserID, got.DeviceID); err != nil {
+	if _, err := store.Queries().RevokeDevice(context.Background(), got.UserID, got.DeviceID); err != nil {
 		t.Fatal(err)
 	}
 	expect(t, "refresh", refresh(t, got.RefreshToken), http.StatusUnauthorized, "unauthorized")
@@ -257,7 +257,9 @@ func TestCallbackRefusesAStateItDidNotIssue(t *testing.T) {
 	}
 	expect(t, "unknown state", browse(t, callback("nope")), http.StatusBadRequest, "invalid_state")
 
-	expired, err := store.CreateLogin(context.Background(), db.Login{
+	expired := "expired-" + randomString(t)
+	hash := sha256.Sum256([]byte(expired))
+	err := store.Queries().InsertLogin(context.Background(), hash[:], db.Login{
 		RedirectURI: extensionRedirect, ClientState: "s", CodeChallenge: s256("v"), Nonce: "n", IssuerVerifier: "iv",
 	}, -time.Second)
 	if err != nil {

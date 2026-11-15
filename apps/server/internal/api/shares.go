@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
@@ -28,7 +28,7 @@ type shareBody struct {
 	ExpiresAt int64  `json:"expiresAt"`
 }
 
-func (s *server) createShare(w http.ResponseWriter, r *http.Request, c db.Caller) {
+func (s *server) createShare(w http.ResponseWriter, r *http.Request, c bus.Caller) {
 	var body struct {
 		Data []byte `json:"data"`
 	}
@@ -67,7 +67,7 @@ func (s *server) getShare(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, shareBody{Data: sh.Ciphertext, ExpiresAt: sh.ExpiresAt.UnixMilli()})
 }
 
-func (s *server) deleteShare(w http.ResponseWriter, r *http.Request, c db.Caller) {
+func (s *server) deleteShare(w http.ResponseWriter, r *http.Request, c bus.Caller) {
 	id := r.PathValue("id")
 	if !uuidPattern.MatchString(id) {
 		writeError(w, http.StatusNotFound, "not_found")

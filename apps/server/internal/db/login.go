@@ -2,16 +2,7 @@ package db
 
 import (
 	"context"
-	"errors"
 	"time"
-
-	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
-	"github.com/jackc/pgx/v5"
-)
-
-const (
-	AccessTTL  = time.Hour
-	RefreshTTL = 90 * 24 * time.Hour
 )
 
 // Login is one OIDC login in flight. The client's values go back to it at the end, the
@@ -24,132 +15,69 @@ type Login struct {
 	IssuerVerifier string
 }
 
-// CreateLogin stores the login and returns the state to send to the issuer. It also clears
-// expired logins.
-func (s *Store) CreateLogin(ctx context.Context, l Login, ttl time.Duration) (state string, err error) {
-	if state, err = randomToken(); err != nil {
-		return "", err
-	}
-	_, err = s.pool.Exec(ctx, `
+// InsertLogin stores the login under the hash of its state and clears expired logins.
+func (q *Queries) InsertLogin(ctx context.Context, stateHash []byte, l Login, ttl time.Duration) error {
+	_, err := q.db.Exec(ctx, `
 		WITH gone AS (DELETE FROM logins WHERE expires_at <= now())
 		INSERT INTO logins (state_hash, redirect_uri, client_state, code_challenge, nonce, issuer_verifier, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(secs => $7))`,
-		hashToken(state), l.RedirectURI, l.ClientState, l.CodeChallenge, l.Nonce, l.IssuerVerifier, ttl.Seconds())
-	return state, MapError(ctx, "create login", err)
+		stateHash, l.RedirectURI, l.ClientState, l.CodeChallenge, l.Nonce, l.IssuerVerifier, ttl.Seconds())
+	return MapError(ctx, "create login", err)
 }
 
-// PendingLogin returns the login the state belongs to. An expired login and one the issuer
-// already answered give a NotFound error.
-func (s *Store) PendingLogin(ctx context.Context, state string) (l Login, err error) {
-	err = s.pool.QueryRow(ctx, `
+// PendingLogin returns the login the state hash belongs to. An expired login and one the
+// issuer already answered give a NotFound error.
+func (q *Queries) PendingLogin(ctx context.Context, stateHash []byte) (l Login, err error) {
+	err = q.db.QueryRow(ctx, `
 		SELECT redirect_uri, client_state, code_challenge, nonce, issuer_verifier
 		FROM logins WHERE state_hash = $1 AND code_hash IS NULL AND expires_at > now()`,
-		hashToken(state)).Scan(&l.RedirectURI, &l.ClientState, &l.CodeChallenge, &l.Nonce, &l.IssuerVerifier)
+		stateHash).Scan(&l.RedirectURI, &l.ClientState, &l.CodeChallenge, &l.Nonce, &l.IssuerVerifier)
 	if err != nil {
 		return Login{}, MapError(ctx, "get pending login", err)
 	}
 	return l, nil
 }
 
-// CompleteLogin records who the issuer says logged in, making the user on a first login,
-// and returns the code the client redeems.
-func (s *Store) CompleteLogin(ctx context.Context, state, issuer, subject string) (code string, err error) {
-	if code, err = randomToken(); err != nil {
-		return "", err
-	}
-	err = s.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		// Two first logins of one identity at once would each make a user.
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1 || ' ' || $2, 0))`, issuer, subject); err != nil {
-			return err
-		}
-		var userID string
-		err := tx.QueryRow(ctx, `SELECT user_id FROM identities WHERE issuer = $1 AND subject = $2`, issuer, subject).Scan(&userID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			err = tx.QueryRow(ctx, `
-				WITH u AS (INSERT INTO users DEFAULT VALUES RETURNING id)
-				INSERT INTO identities (issuer, subject, user_id) SELECT $1, $2, id FROM u RETURNING user_id`,
-				issuer, subject).Scan(&userID)
-		}
-		if err != nil {
-			return err
-		}
-		tag, err := tx.Exec(ctx, `
-			UPDATE logins SET code_hash = $2, user_id = $3
-			WHERE state_hash = $1 AND code_hash IS NULL AND expires_at > now()`,
-			hashToken(state), hashToken(code), userID)
-		if err != nil {
-			return err
-		}
-		if tag.RowsAffected() == 0 {
-			return errs.New(errs.NotFound, "complete login", "not found")
-		}
-		return nil
-	})
-	return code, MapError(ctx, "complete login", err)
+// LockIdentity locks the identity until the transaction ends, whether or not it exists yet.
+func (q *Queries) LockIdentity(ctx context.Context, issuer, subject string) error {
+	_, err := q.db.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1 || ' ' || $2, 0))`, issuer, subject)
+	return MapError(ctx, "lock identity", err)
 }
 
-// Tokens is what a device holds after a login or a refresh.
-type Tokens struct {
-	Access   string
-	Refresh  string
-	DeviceID string
-	UserID   string
+// IdentityUser returns the user the identity belongs to. An unknown identity gives a NotFound
+// error.
+func (q *Queries) IdentityUser(ctx context.Context, issuer, subject string) (userID string, err error) {
+	err = q.db.QueryRow(ctx, `SELECT user_id FROM identities WHERE issuer = $1 AND subject = $2`, issuer, subject).Scan(&userID)
+	return userID, MapError(ctx, "get identity", err)
 }
 
-func issueTokens(ctx context.Context, tx pgx.Tx, deviceID, userID string) (t Tokens, err error) {
-	t.DeviceID, t.UserID = deviceID, userID
-	if t.Access, err = issueSession(ctx, tx, deviceID, Access, AccessTTL); err != nil {
-		return Tokens{}, err
-	}
-	if t.Refresh, err = issueSession(ctx, tx, deviceID, Refresh, RefreshTTL); err != nil {
-		return Tokens{}, err
-	}
-	return t, nil
+// InsertUser makes a user with the identity.
+func (q *Queries) InsertUser(ctx context.Context, issuer, subject string) (userID string, err error) {
+	err = q.db.QueryRow(ctx, `
+		WITH u AS (INSERT INTO users DEFAULT VALUES RETURNING id)
+		INSERT INTO identities (issuer, subject, user_id) SELECT $1, $2, id FROM u RETURNING user_id`,
+		issuer, subject).Scan(&userID)
+	return userID, MapError(ctx, "create user", err)
 }
 
-// RedeemLogin trades a login code for a new device and its tokens. The code is spent by any
-// attempt, so a wrong challenge also gives a NotFound error on the next try with the right one.
-func (s *Store) RedeemLogin(ctx context.Context, code, codeChallenge, deviceName string) (t Tokens, err error) {
-	var userID, challenge string
-	err = s.pool.QueryRow(ctx,
-		`DELETE FROM logins WHERE code_hash = $1 AND expires_at > now() RETURNING user_id, code_challenge`,
-		hashToken(code)).Scan(&userID, &challenge)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && challenge != codeChallenge) {
-		return Tokens{}, errs.New(errs.NotFound, "redeem login", "not found")
-	}
+// SetLoginCode records the code and the user of a pending login, and reports whether the login
+// was still pending.
+func (q *Queries) SetLoginCode(ctx context.Context, stateHash, codeHash []byte, userID string) (bool, error) {
+	tag, err := q.db.Exec(ctx, `
+		UPDATE logins SET code_hash = $2, user_id = $3
+		WHERE state_hash = $1 AND code_hash IS NULL AND expires_at > now()`,
+		stateHash, codeHash, userID)
 	if err != nil {
-		return Tokens{}, MapError(ctx, "redeem login", err)
+		return false, MapError(ctx, "complete login", err)
 	}
-	err = s.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		var deviceID string
-		if err := tx.QueryRow(ctx, `INSERT INTO devices (user_id, name) VALUES ($1, $2) RETURNING id`, userID, deviceName).Scan(&deviceID); err != nil {
-			return err
-		}
-		t, err = issueTokens(ctx, tx, deviceID, userID)
-		return err
-	})
-	return t, MapError(ctx, "redeem login", err)
+	return tag.RowsAffected() == 1, nil
 }
 
-// RefreshSession spends a refresh token and returns a new pair. A spent or expired token,
-// an access token, and a token of a revoked device all give an Unauthenticated error.
-func (s *Store) RefreshSession(ctx context.Context, refreshToken string) (t Tokens, err error) {
-	err = s.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		var deviceID, userID string
-		err := tx.QueryRow(ctx, `
-			DELETE FROM sessions s USING devices d
-			WHERE s.token_hash = $1 AND s.kind = 'refresh' AND s.expires_at > now()
-				AND d.id = s.device_id AND d.revoked_at IS NULL
-			RETURNING d.id, d.user_id`,
-			hashToken(refreshToken)).Scan(&deviceID, &userID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return errs.Wrap(errs.Unauthenticated, "refresh session", "no such session", err)
-		}
-		if err != nil {
-			return err
-		}
-		t, err = issueTokens(ctx, tx, deviceID, userID)
-		return err
-	})
-	return t, MapError(ctx, "refresh session", err)
+// TakeLogin deletes the unexpired login the code hash belongs to and returns its user and
+// code challenge. An unknown code gives a NotFound error.
+func (q *Queries) TakeLogin(ctx context.Context, codeHash []byte) (userID, codeChallenge string, err error) {
+	err = q.db.QueryRow(ctx,
+		`DELETE FROM logins WHERE code_hash = $1 AND expires_at > now() RETURNING user_id, code_challenge`,
+		codeHash).Scan(&userID, &codeChallenge)
+	return userID, codeChallenge, MapError(ctx, "redeem login", err)
 }

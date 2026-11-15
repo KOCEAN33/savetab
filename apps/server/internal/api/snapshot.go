@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
-	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
@@ -13,7 +12,7 @@ type snapshotBody struct {
 	Data []byte `json:"data"`
 }
 
-func (s *server) getSnapshot(w http.ResponseWriter, r *http.Request, c db.Caller) {
+func (s *server) getSnapshot(w http.ResponseWriter, r *http.Request, c bus.Caller) {
 	snap, err := s.bus.Snapshot(r.Context(), c.UserID)
 	if errs.KindOf(err) == errs.NotFound {
 		writeError(w, http.StatusNotFound, "no_snapshot")
@@ -26,7 +25,7 @@ func (s *server) getSnapshot(w http.ResponseWriter, r *http.Request, c db.Caller
 	writeJSON(w, http.StatusOK, snapshotBody{Seq: snap.Seq, Data: snap.Ciphertext})
 }
 
-func (s *server) putSnapshot(w http.ResponseWriter, r *http.Request, c db.Caller) {
+func (s *server) putSnapshot(w http.ResponseWriter, r *http.Request, c bus.Caller) {
 	var body snapshotBody
 	if !readJSON(w, r, maxSnapshotBytes, &body) {
 		return

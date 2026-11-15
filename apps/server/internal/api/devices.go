@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
@@ -14,8 +14,8 @@ type deviceBody struct {
 	Current   bool   `json:"current"`
 }
 
-func (s *server) listDevices(w http.ResponseWriter, r *http.Request, c db.Caller) {
-	stored, err := s.store.Devices(r.Context(), c.UserID)
+func (s *server) listDevices(w http.ResponseWriter, r *http.Request, c bus.Caller) {
+	stored, err := s.bus.Devices(r.Context(), c.UserID)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -27,13 +27,13 @@ func (s *server) listDevices(w http.ResponseWriter, r *http.Request, c db.Caller
 	writeJSON(w, http.StatusOK, map[string]any{"devices": devices})
 }
 
-func (s *server) revokeDevice(w http.ResponseWriter, r *http.Request, c db.Caller) {
+func (s *server) revokeDevice(w http.ResponseWriter, r *http.Request, c bus.Caller) {
 	id := r.PathValue("id")
 	if !uuidPattern.MatchString(id) {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}
-	err := s.store.RevokeDevice(r.Context(), c.UserID, id)
+	err := s.bus.RevokeDevice(r.Context(), c.UserID, id)
 	switch {
 	case errs.KindOf(err) == errs.NotFound:
 		writeError(w, http.StatusNotFound, "not_found")

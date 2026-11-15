@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
-	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
@@ -28,7 +27,7 @@ func pairingView(p bus.Pairing) pairingBody {
 	}
 }
 
-func (s *server) startPairing(w http.ResponseWriter, r *http.Request, c db.Caller) {
+func (s *server) startPairing(w http.ResponseWriter, r *http.Request, c bus.Caller) {
 	var body struct {
 		Commitment []byte `json:"commitment"`
 	}
@@ -39,7 +38,7 @@ func (s *server) startPairing(w http.ResponseWriter, r *http.Request, c db.Calle
 		writeError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	p, err := s.bus.StartPairing(r.Context(), bus.Caller(c), body.Commitment)
+	p, err := s.bus.StartPairing(r.Context(), c, body.Commitment)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -47,7 +46,7 @@ func (s *server) startPairing(w http.ResponseWriter, r *http.Request, c db.Calle
 	writeJSON(w, http.StatusCreated, pairingView(p))
 }
 
-func (s *server) listPairings(w http.ResponseWriter, r *http.Request, c db.Caller) {
+func (s *server) listPairings(w http.ResponseWriter, r *http.Request, c bus.Caller) {
 	stored, err := s.bus.Pairings(r.Context(), c.UserID)
 	if err != nil {
 		internalError(w, r, err)
@@ -60,7 +59,7 @@ func (s *server) listPairings(w http.ResponseWriter, r *http.Request, c db.Calle
 	writeJSON(w, http.StatusOK, map[string]any{"pairings": pairings})
 }
 
-func (s *server) getPairing(w http.ResponseWriter, r *http.Request, c db.Caller) {
+func (s *server) getPairing(w http.ResponseWriter, r *http.Request, c bus.Caller) {
 	id := r.PathValue("id")
 	if !uuidPattern.MatchString(id) {
 		writeError(w, http.StatusNotFound, "not_found")
@@ -78,7 +77,7 @@ func (s *server) getPairing(w http.ResponseWriter, r *http.Request, c db.Caller)
 	writeJSON(w, http.StatusOK, pairingView(p))
 }
 
-func (s *server) putPairing(w http.ResponseWriter, r *http.Request, c db.Caller) {
+func (s *server) putPairing(w http.ResponseWriter, r *http.Request, c bus.Caller) {
 	id := r.PathValue("id")
 	if !uuidPattern.MatchString(id) {
 		writeError(w, http.StatusNotFound, "not_found")
@@ -107,7 +106,7 @@ func (s *server) putPairing(w http.ResponseWriter, r *http.Request, c db.Caller)
 		writeError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	err := s.bus.SetPairingMessage(r.Context(), bus.Caller(c), id, message, value)
+	err := s.bus.SetPairingMessage(r.Context(), c, id, message, value)
 	switch {
 	case errs.KindOf(err) == errs.NotFound:
 		writeError(w, http.StatusNotFound, "not_found")

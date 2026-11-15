@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"log/slog"
@@ -12,17 +11,15 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
 const (
-	loginTTL         = 10 * time.Minute
 	maxStateBytes    = 512
 	maxDeviceNameLen = 100
 )
@@ -95,11 +92,11 @@ func (s *server) authStart(w http.ResponseWriter, r *http.Request) {
 		internalError(w, r, err)
 		return
 	}
-	login := db.Login{
+	login := bus.Login{
 		RedirectURI: redirectURI, ClientState: state, CodeChallenge: challenge,
 		Nonce: base64.RawURLEncoding.EncodeToString(nonce), IssuerVerifier: oauth2.GenerateVerifier(),
 	}
-	issuerState, err := s.store.CreateLogin(r.Context(), login, loginTTL)
+	issuerState, err := s.bus.StartLogin(r.Context(), login)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -108,7 +105,7 @@ func (s *server) authStart(w http.ResponseWriter, r *http.Request) {
 }
 
 // identify trades the issuer's code for an ID token and returns who it names.
-func (s *server) identify(ctx context.Context, login db.Login, code string) (issuer, subject string, err error) {
+func (s *server) identify(ctx context.Context, login bus.Login, code string) (issuer, subject string, err error) {
 	token, err := s.login.oauth.Exchange(ctx, code, oauth2.VerifierOption(login.IssuerVerifier))
 	if err != nil {
 		return "", "", err
@@ -130,7 +127,7 @@ func (s *server) identify(ctx context.Context, login db.Login, code string) (iss
 func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	state := q.Get("state")
-	login, err := s.store.PendingLogin(r.Context(), state)
+	login, err := s.bus.PendingLogin(r.Context(), state)
 	if errs.KindOf(err) == errs.NotFound {
 		writeError(w, http.StatusBadRequest, "invalid_state")
 		return
@@ -153,7 +150,7 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 		fail("login_failed")
 		return
 	}
-	code, err := s.store.CompleteLogin(r.Context(), state, issuer, subject)
+	code, err := s.bus.CompleteLogin(r.Context(), state, issuer, subject)
 	if err != nil {
 		slog.Error("login failed", "err", err)
 		fail("login_failed")
@@ -170,9 +167,9 @@ type tokensBody struct {
 	DeviceID     string `json:"deviceId"`
 }
 
-func tokensView(t db.Tokens) tokensBody {
+func tokensView(t bus.Tokens) tokensBody {
 	return tokensBody{
-		AccessToken: t.Access, RefreshToken: t.Refresh, ExpiresIn: int(db.AccessTTL.Seconds()),
+		AccessToken: t.Access, RefreshToken: t.Refresh, ExpiresIn: int(bus.AccessTTL.Seconds()),
 		UserID: t.UserID, DeviceID: t.DeviceID,
 	}
 }
@@ -190,8 +187,7 @@ func (s *server) authToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	challenge := sha256.Sum256([]byte(body.CodeVerifier))
-	tokens, err := s.store.RedeemLogin(r.Context(), body.Code, base64.RawURLEncoding.EncodeToString(challenge[:]), body.DeviceName)
+	tokens, err := s.bus.RedeemLogin(r.Context(), body.Code, body.CodeVerifier, body.DeviceName)
 	if errs.KindOf(err) == errs.NotFound {
 		writeError(w, http.StatusBadRequest, "invalid_grant")
 		return
@@ -210,7 +206,7 @@ func (s *server) authRefresh(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, smallBodyBytes, &body) {
 		return
 	}
-	tokens, err := s.store.RefreshSession(r.Context(), body.RefreshToken)
+	tokens, err := s.bus.RefreshSession(r.Context(), body.RefreshToken)
 	if errs.KindOf(err) == errs.Unauthenticated {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return

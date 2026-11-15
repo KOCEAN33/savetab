@@ -115,14 +115,14 @@ func (s *server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-func (s *server) authed(next func(http.ResponseWriter, *http.Request, db.Caller)) http.HandlerFunc {
+func (s *server) authed(next func(http.ResponseWriter, *http.Request, bus.Caller)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if !ok || token == "" {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		caller, err := s.store.Authenticate(r.Context(), token)
+		caller, err := s.bus.Authenticate(r.Context(), token)
 		if errs.KindOf(err) == errs.Unauthenticated {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
@@ -140,8 +140,7 @@ type pushedOp struct {
 	Data []byte `json:"data"`
 }
 
-func (s *server) pushOps(w http.ResponseWriter, r *http.Request, c db.Caller) {
-	caller := bus.Caller(c)
+func (s *server) pushOps(w http.ResponseWriter, r *http.Request, c bus.Caller) {
 	var body struct {
 		Ops []pushedOp `json:"ops"`
 	}
@@ -160,7 +159,7 @@ func (s *server) pushOps(w http.ResponseWriter, r *http.Request, c db.Caller) {
 		}
 		ops[i] = bus.NewOp{ID: op.ID, Ciphertext: op.Data}
 	}
-	if err := s.bus.PushOps(r.Context(), caller, ops); err != nil {
+	if err := s.bus.PushOps(r.Context(), c, ops); err != nil {
 		internalError(w, r, err)
 		return
 	}
@@ -175,7 +174,7 @@ type pulledOp struct {
 	ReceivedAt int64  `json:"receivedAt"`
 }
 
-func (s *server) pullOps(w http.ResponseWriter, r *http.Request, c db.Caller) {
+func (s *server) pullOps(w http.ResponseWriter, r *http.Request, c bus.Caller) {
 	q := r.URL.Query()
 	after, limit := int64(0), maxOpsPerRequest
 	var err error
