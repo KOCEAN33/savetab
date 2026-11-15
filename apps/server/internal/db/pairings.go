@@ -88,7 +88,7 @@ func (s *Store) Pairing(ctx context.Context, userID, id string) (Pairing, error)
 // device, NewPublic from the new device, then WrappedKey from a signed-in device. Each is set
 // once, so a later request cannot swap a public key the other side has already read.
 func (s *Store) SetPairingMessage(ctx context.Context, c Caller, id string, message PairingMessage, value []byte) error {
-	return MapError(ctx, "set pairing message", pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	return MapError(ctx, "set pairing message", s.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		var newDeviceID string
 		var hasOld, hasNew, hasKey bool
 		err := tx.QueryRow(ctx, `

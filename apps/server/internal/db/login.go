@@ -57,7 +57,7 @@ func (s *Store) CompleteLogin(ctx context.Context, state, issuer, subject string
 	if code, err = randomToken(); err != nil {
 		return "", err
 	}
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		// Two first logins of one identity at once would each make a user.
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1 || ' ' || $2, 0))`, issuer, subject); err != nil {
 			return err
@@ -120,7 +120,7 @@ func (s *Store) RedeemLogin(ctx context.Context, code, codeChallenge, deviceName
 	if err != nil {
 		return Tokens{}, MapError(ctx, "redeem login", err)
 	}
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		var deviceID string
 		if err := tx.QueryRow(ctx, `INSERT INTO devices (user_id, name) VALUES ($1, $2) RETURNING id`, userID, deviceName).Scan(&deviceID); err != nil {
 			return err
@@ -134,7 +134,7 @@ func (s *Store) RedeemLogin(ctx context.Context, code, codeChallenge, deviceName
 // RefreshSession spends a refresh token and returns a new pair. A spent or expired token,
 // an access token, and a token of a revoked device all give an Unauthenticated error.
 func (s *Store) RefreshSession(ctx context.Context, refreshToken string) (t Tokens, err error) {
-	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	err = s.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		var deviceID, userID string
 		err := tx.QueryRow(ctx, `
 			DELETE FROM sessions s USING devices d

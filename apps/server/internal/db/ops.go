@@ -37,7 +37,7 @@ func (s *Store) AppendOps(ctx context.Context, c Caller, ops []NewOp) error {
 		ids = append(ids, op.ID)
 		blobs = append(blobs, op.Ciphertext)
 	}
-	return MapError(ctx, "append ops", pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	return MapError(ctx, "append ops", s.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		// The row lock makes one user's pushes run one at a time, so a reader that has seen
 		// seq n never later finds a new op at or below n.
 		var next int64
@@ -64,7 +64,7 @@ func (s *Store) AppendOps(ctx context.Context, c Caller, ops []NewOp) error {
 func (s *Store) OpsAfter(ctx context.Context, userID string, after int64, limit int) (ops []StoredOp, more bool, err error) {
 	// One view for both reads, so a snapshot that lands between them cannot hide ops it deleted.
 	view := pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}
-	err = pgx.BeginTxFunc(ctx, s.pool, view, func(tx pgx.Tx) error {
+	err = s.InTx(ctx, view, func(tx pgx.Tx) error {
 		var stale bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM snapshots WHERE user_id = $1 AND seq > $2)`, userID, after).Scan(&stale); err != nil {
 			return err

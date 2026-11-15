@@ -15,7 +15,7 @@ type Snapshot struct {
 
 // PutSnapshot replaces the user's snapshot and deletes the ops it covers.
 func (s *Store) PutSnapshot(ctx context.Context, userID string, snap Snapshot) error {
-	return MapError(ctx, "put snapshot", pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	return MapError(ctx, "put snapshot", s.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		// The same row lock a push takes, so no op lands at or below snap.Seq after the check.
 		var next int64
 		if err := tx.QueryRow(ctx, `SELECT next_seq FROM users WHERE id = $1 FOR UPDATE`, userID).Scan(&next); err != nil {
