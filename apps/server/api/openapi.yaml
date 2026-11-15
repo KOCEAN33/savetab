@@ -1,0 +1,544 @@
+openapi: 3.0.3
+info:
+  title: savetab sync server
+  version: "2"
+  description: >-
+    The sync API of the savetab extension. The server stores ciphertext only: every `data`
+    field and every pairing message is sealed on a device, base64 in JSON.
+    A time is an RFC 3339 string in UTC. An error is an RFC 9457 problem whose `type` is
+    `/problems/<kind>`. Every operation can also answer 404, 405, 413, 499, 500, and 503 problems.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: login
+  - name: ops
+  - name: key
+  - name: snapshot
+  - name: pairings
+  - name: devices
+  - name: shares
+
+paths:
+  /v2/authorizations:
+    get:
+      operationId: startAuthorization
+      tags: [login]
+      summary: Send the browser to the OIDC issuer.
+      security: []
+      parameters:
+        - name: redirect_uri
+          in: query
+          required: true
+          description: One of the redirect URIs the server is configured with, matched exactly.
+          schema: { type: string, maxLength: 2048 }
+        - name: code_challenge
+          in: query
+          required: true
+          description: The S256 PKCE challenge, 32 bytes as unpadded base64url.
+          schema: { type: string, pattern: "^[A-Za-z0-9_-]{43}$" }
+        - name: state
+          in: query
+          required: true
+          description: Returned unchanged on the redirect back to redirect_uri.
+          schema: { type: string, minLength: 1, maxLength: 512 }
+      responses:
+        "302":
+          description: Redirect to the issuer's authorization endpoint.
+          headers:
+            Location: { required: true, schema: { type: string } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /v2/authorizations/callback:
+    get:
+      operationId: finishAuthorization
+      tags: [login]
+      summary: Take the issuer's answer and send the browser back to the client.
+      description: >-
+        The redirect carries `code` and `state`, or `error` (`access_denied` or
+        `login_failed`) and `state`. An unknown or expired `state` answers 400, since no
+        client is known to redirect to.
+      security: []
+      parameters:
+        - name: state
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 512 }
+        - name: code
+          in: query
+          schema: { type: string, maxLength: 4096 }
+        - name: error
+          in: query
+          schema: { type: string, maxLength: 512 }
+      responses:
+        "302":
+          description: Redirect to the login's redirect_uri.
+          headers:
+            Location: { required: true, schema: { type: string } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /v2/tokens:
+    post:
+      operationId: createTokens
+      tags: [login]
+      summary: Trade a login code or a refresh token for a token pair.
+      description: >-
+        `authorization_code` makes a new device. The code and the refresh token are each
+        spent by one attempt and serve as the request's idempotency key: a repeat of a spent
+        code answers 400, and a repeat of a spent refresh token 401.
+      security: []
+      x-body-limit-bytes: 8192
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TokenRequest" }
+      responses:
+        "200":
+          description: The token pair.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tokens" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+  /v2/ops:
+    post:
+      operationId: pushOps
+      tags: [ops]
+      summary: Append ops to the caller's log.
+      description: An op whose id the log already holds is skipped, so a retried push succeeds.
+      x-body-limit-bytes: 8388608
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PushOpsRequest" }
+      responses:
+        "200":
+          description: Every op is in the log.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PushOpsResponse" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+    get:
+      operationId: listOps
+      tags: [ops]
+      summary: Read the caller's log after a seq, oldest first.
+      description: >-
+        The cursor is `after`, the last seq the device holds, in place of a page token.
+        409 means a snapshot has replaced the ops after that seq: read the snapshot first.
+      parameters:
+        - name: after
+          in: query
+          schema: { type: integer, format: int64, minimum: 0, default: 0 }
+        - name: page_size
+          in: query
+          description: Zero or absent uses the default. A value above the maximum is lowered to it.
+          schema: { type: integer, format: int32, minimum: 0, default: 500, maximum: 2147483647, x-page-size-maximum: 500 }
+      responses:
+        "200":
+          description: One page of ops.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OpList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v2/key:
+    get:
+      operationId: getKey
+      tags: [key]
+      summary: Read the caller's wrapped data key.
+      responses:
+        "200":
+          description: The wrapped key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Key" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: putKey
+      tags: [key]
+      summary: Store the caller's wrapped data key, once.
+      x-body-limit-bytes: 8192
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Key" }
+      responses:
+        "204": { description: Stored. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v2/snapshot:
+    get:
+      operationId: getSnapshot
+      tags: [snapshot]
+      summary: Read the caller's snapshot.
+      responses:
+        "200":
+          description: The snapshot.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Snapshot" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: putSnapshot
+      tags: [snapshot]
+      summary: Replace the caller's snapshot with one of a later seq.
+      description: A seq past the end of the log answers 400. A seq not after the stored snapshot's answers 409.
+      x-body-limit-bytes: 67108864
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Snapshot" }
+      responses:
+        "204": { description: Stored. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v2/pairings:
+    post:
+      operationId: createPairing
+      tags: [pairings]
+      summary: Open a pairing for the calling device, the new one.
+      description: >-
+        Replaces a pairing the device still has open. `id` is the client's idempotency key:
+        an id that a pairing already has answers 409.
+      x-body-limit-bytes: 8192
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePairingRequest" }
+      responses:
+        "201":
+          description: The pairing.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Pairing" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+    get:
+      operationId: listPairings
+      tags: [pairings]
+      summary: List the caller's pairings that have not expired, oldest first.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: One page of pairings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PairingList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+  /v2/pairings/{pairing_id}:
+    parameters:
+      - name: pairing_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getPairing
+      tags: [pairings]
+      summary: Read one of the caller's pairings.
+      responses:
+        "200":
+          description: The pairing.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Pairing" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: putPairingMessage
+      tags: [pairings]
+      summary: Store one message of the exchange.
+      description: >-
+        The order is `old_public` from a signed-in device, `new_public` from the new device,
+        then `wrapped_key` from a signed-in device. Each is set once. A message from the wrong
+        side answers 403, one out of order or already set 409.
+      x-body-limit-bytes: 8192
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PairingMessage" }
+      responses:
+        "204": { description: Stored. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v2/devices:
+    get:
+      operationId: listDevices
+      tags: [devices]
+      summary: List the caller's devices, oldest first.
+      parameters:
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: One page of devices.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+  /v2/devices/{device_id}:
+    parameters:
+      - name: device_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      operationId: deleteDevice
+      tags: [devices]
+      summary: Revoke one of the caller's devices and its tokens.
+      responses:
+        "204": { description: Revoked. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v2/shares:
+    post:
+      operationId: createShare
+      tags: [shares]
+      summary: Store a sealed group for its share URL.
+      description: "`id` is the client's idempotency key: an id that a share already has answers 409."
+      x-body-limit-bytes: 8388608
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateShareRequest" }
+      responses:
+        "201":
+          description: The share.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareCreated" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v2/shares/{share_id}:
+    parameters:
+      - name: share_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getShare
+      tags: [shares]
+      summary: Read a share. The share URL is the only credential.
+      security: []
+      responses:
+        "200":
+          description: The share.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Share" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteShare
+      tags: [shares]
+      summary: Stop sharing one of the caller's shares.
+      responses:
+        "204": { description: Deleted. }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The access token of POST /v2/tokens.
+  parameters:
+    PageSize:
+      name: page_size
+      in: query
+      description: Zero or absent uses the default. A value above the maximum is lowered to it.
+      schema: { type: integer, format: int32, minimum: 0, default: 50, maximum: 2147483647, x-page-size-maximum: 100 }
+    PageToken:
+      name: page_token
+      in: query
+      description: The next_page_token of the page before, with the same caller.
+      schema: { type: string, maxLength: 1024 }
+  responses:
+    Problem:
+      description: The request failed. `type` names the kind.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, trace_id]
+      properties:
+        type:
+          type: string
+          description: "`/problems/<kind>`, one fixed `title` per type."
+          example: /problems/not-found
+        title: { type: string }
+        status: { type: integer, format: int32, minimum: 400, maximum: 599 }
+        detail: { type: string }
+        trace_id: { type: string }
+        errors:
+          type: array
+          description: The failures of a request that did not match this document.
+          items:
+            type: object
+            required: [detail]
+            properties:
+              detail: { type: string }
+    TokenRequest:
+      type: object
+      required: [grant_type]
+      description: >-
+        `authorization_code` takes `code`, `code_verifier`, and `device_name`.
+        `refresh_token` takes `refresh_token`. A missing field of the grant answers 400.
+      properties:
+        grant_type: { type: string, enum: [authorization_code, refresh_token] }
+        code: { type: string, minLength: 1, maxLength: 512 }
+        code_verifier: { type: string, minLength: 1, maxLength: 512 }
+        device_name: { type: string, minLength: 1, maxLength: 100 }
+        refresh_token: { type: string, minLength: 1, maxLength: 512 }
+    Tokens:
+      type: object
+      required: [access_token, refresh_token, expires_in, user_id, device_id]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_in: { type: integer, format: int32, description: Seconds the access token lasts. }
+        user_id: { type: string, format: uuid }
+        device_id: { type: string, format: uuid }
+    PushOpsRequest:
+      type: object
+      required: [ops]
+      properties:
+        ops:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [id, data]
+            properties:
+              id: { type: string, format: uuid }
+              data: { type: string, format: byte, minLength: 1 }
+    PushOpsResponse:
+      type: object
+      required: [server_time]
+      properties:
+        server_time: { type: string, format: date-time }
+    OpList:
+      type: object
+      required: [ops, more, server_time]
+      properties:
+        ops:
+          type: array
+          items: { $ref: "#/components/schemas/Op" }
+        more: { type: boolean, description: True when ops after the last one remain. }
+        server_time: { type: string, format: date-time }
+    Op:
+      type: object
+      required: [seq, id, device_id, data, received_at]
+      properties:
+        seq: { type: integer, format: int64 }
+        id: { type: string, format: uuid }
+        device_id: { type: string, format: uuid }
+        data: { type: string, format: byte }
+        received_at: { type: string, format: date-time }
+    Key:
+      type: object
+      required: [data]
+      properties:
+        data: { type: string, format: byte, minLength: 1, maxLength: 1368, description: At most 1024 bytes. }
+    Snapshot:
+      type: object
+      required: [seq, data]
+      properties:
+        seq: { type: integer, format: int64, minimum: 1, description: The last seq the snapshot holds. }
+        data: { type: string, format: byte, minLength: 1 }
+    CreatePairingRequest:
+      type: object
+      required: [id, commitment]
+      properties:
+        id: { type: string, format: uuid }
+        commitment: { type: string, format: byte, minLength: 44, maxLength: 44, description: "A SHA-256: 32 bytes." }
+    Pairing:
+      type: object
+      required: [id, new_device_id, new_device_name, commitment, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        new_device_id: { type: string, format: uuid }
+        new_device_name: { type: string }
+        commitment: { type: string, format: byte }
+        old_public: { type: string, format: byte }
+        new_public: { type: string, format: byte }
+        wrapped_key: { type: string, format: byte }
+        expires_at: { type: string, format: date-time }
+    PairingList:
+      type: object
+      required: [pairings]
+      properties:
+        pairings:
+          type: array
+          items: { $ref: "#/components/schemas/Pairing" }
+        next_page_token: { type: string, description: Absent on the last page. }
+    PairingMessage:
+      type: object
+      description: Exactly one of the three messages, at most 1024 bytes.
+      minProperties: 1
+      maxProperties: 1
+      additionalProperties: false
+      properties:
+        old_public: { type: string, format: byte, minLength: 1, maxLength: 1368 }
+        new_public: { type: string, format: byte, minLength: 1, maxLength: 1368 }
+        wrapped_key: { type: string, format: byte, minLength: 1, maxLength: 1368 }
+    Device:
+      type: object
+      required: [id, name, created_at, current]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+        current: { type: boolean, description: True for the device that sent the request. }
+    DeviceList:
+      type: object
+      required: [devices]
+      properties:
+        devices:
+          type: array
+          items: { $ref: "#/components/schemas/Device" }
+        next_page_token: { type: string, description: Absent on the last page. }
+    CreateShareRequest:
+      type: object
+      required: [id, data]
+      properties:
+        id: { type: string, format: uuid }
+        data: { type: string, format: byte, minLength: 1 }
+    ShareCreated:
+      type: object
+      required: [id, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        expires_at: { type: string, format: date-time }
+    Share:
+      type: object
+      required: [data, expires_at]
+      properties:
+        data: { type: string, format: byte }
+        expires_at: { type: string, format: date-time }

@@ -10,6 +10,9 @@ Goal: `apps/server` meets the vault pages under `practices/backend/` and `practi
 - The server is in the small form: one package per layer.
 - `cmd/savetab-e2e` stays as a second main package: a thin caller that prepares the test database and the fake issuer, then calls `wire.Run`. The archtest allow-list names it.
 - `GET /v2/ops` keeps `after` as its cursor in place of `page_token`, since the device stores that seq. A repeated op id in `POST /v2/ops` is skipped, not answered 409, so a retried push succeeds. Both are recorded exceptions to the practice rules.
+- `POST /v2/tokens` takes no separate idempotency key: the login code and the refresh token are each spent by one attempt and serve as the key. A spent code answers 400 and a spent refresh token 401, not 409. An `Idempotency-Key` record would store the token pair in the clear, which the database otherwise holds only hashed. A recorded exception.
+- A `/v2` time is an RFC 3339 string, where `/v1` sends epoch milliseconds.
+- `POST /v2/pairings` and `POST /v2/shares` take a client `id` as their idempotency key. `GET /v2/devices` and `GET /v2/pairings` page by `page_size` and `page_token`, and `GET /v2/ops` takes `page_size` in place of `limit`.
 - The `/v2` paths are the ones step 17 lists.
 - The server takes no OIDC client secret: the Zitadel application is a public client on PKCE.
 
@@ -69,7 +72,7 @@ Each step is one commit that leaves `pnpm test`, `pnpm check`, and `pnpm lint` g
 
     Paths: `GET /v2/authorizations` and `GET /v2/authorizations/callback` for the login redirect pair, `POST /v2/tokens` with `grant_type` `authorization_code` or `refresh_token`, and the other resources under their `/v1` names. A snapshot ahead of the log answers 400, a stale one 409, so the client tells them apart by status.
 
-    Recorded exceptions to the practice rules: `GET /v2/ops` keeps `after` as its cursor, and a repeated op id in `POST /v2/ops` is skipped. The Decisions section gives the reasons.
+    Recorded exceptions to the practice rules: `GET /v2/ops` keeps `after` as its cursor, a repeated op id in `POST /v2/ops` is skipped, and `POST /v2/tokens` takes its code or refresh token as its idempotency key. The Decisions section gives the reasons.
 
 ### Phase 4: tests and release
 
