@@ -53,3 +53,16 @@ ON CONFLICT (user_id) DO NOTHING;
 
 -- name: Key :one
 SELECT wrapped_key FROM key_wraps WHERE user_id = @user_id::uuid;
+
+-- name: UpsertSnapshot :execrows
+-- Replaces the user's snapshot unless the stored one has a higher seq.
+INSERT INTO snapshots (user_id, seq, ciphertext) VALUES (@user_id::uuid, @seq::bigint, @ciphertext::bytea)
+ON CONFLICT (user_id) DO UPDATE SET seq = excluded.seq, ciphertext = excluded.ciphertext, created_at = now()
+WHERE snapshots.seq <= excluded.seq;
+
+-- name: DeleteOpsThrough :exec
+-- Deletes the user's ops at or below the seq.
+DELETE FROM ops WHERE user_id = @user_id::uuid AND seq <= @seq::bigint;
+
+-- name: Snapshot :one
+SELECT seq, ciphertext FROM snapshots WHERE user_id = @user_id::uuid;

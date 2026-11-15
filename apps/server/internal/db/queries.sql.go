@@ -12,6 +12,21 @@ import (
 	"github.com/google/uuid"
 )
 
+const deleteOpsThrough = `-- name: DeleteOpsThrough :exec
+DELETE FROM ops WHERE user_id = $1::uuid AND seq <= $2::bigint
+`
+
+type DeleteOpsThroughParams struct {
+	UserID uuid.UUID
+	Seq    int64
+}
+
+// Deletes the user's ops at or below the seq.
+func (q *Queries) DeleteOpsThrough(ctx context.Context, arg DeleteOpsThroughParams) error {
+	_, err := q.db.Exec(ctx, deleteOpsThrough, arg.UserID, arg.Seq)
+	return err
+}
+
 const devices = `-- name: Devices :many
 SELECT id, name, created_at
 FROM devices
@@ -223,6 +238,22 @@ func (q *Queries) SetNextSeq(ctx context.Context, arg SetNextSeqParams) error {
 	return err
 }
 
+const snapshot = `-- name: Snapshot :one
+SELECT seq, ciphertext FROM snapshots WHERE user_id = $1::uuid
+`
+
+type SnapshotRow struct {
+	Seq        int64
+	Ciphertext []byte
+}
+
+func (q *Queries) Snapshot(ctx context.Context, userID uuid.UUID) (SnapshotRow, error) {
+	row := q.db.QueryRow(ctx, snapshot, userID)
+	var i SnapshotRow
+	err := row.Scan(&i.Seq, &i.Ciphertext)
+	return i, err
+}
+
 const snapshotAbove = `-- name: SnapshotAbove :one
 SELECT (EXISTS (SELECT 1 FROM snapshots WHERE user_id = $1::uuid AND seq > $2::bigint))::bool AS above
 `
@@ -238,4 +269,25 @@ func (q *Queries) SnapshotAbove(ctx context.Context, arg SnapshotAboveParams) (b
 	var above bool
 	err := row.Scan(&above)
 	return above, err
+}
+
+const upsertSnapshot = `-- name: UpsertSnapshot :execrows
+INSERT INTO snapshots (user_id, seq, ciphertext) VALUES ($1::uuid, $2::bigint, $3::bytea)
+ON CONFLICT (user_id) DO UPDATE SET seq = excluded.seq, ciphertext = excluded.ciphertext, created_at = now()
+WHERE snapshots.seq <= excluded.seq
+`
+
+type UpsertSnapshotParams struct {
+	UserID     uuid.UUID
+	Seq        int64
+	Ciphertext []byte
+}
+
+// Replaces the user's snapshot unless the stored one has a higher seq.
+func (q *Queries) UpsertSnapshot(ctx context.Context, arg UpsertSnapshotParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertSnapshot, arg.UserID, arg.Seq, arg.Ciphertext)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

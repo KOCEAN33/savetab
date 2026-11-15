@@ -28,14 +28,14 @@ func (b *Bus) PutSnapshot(ctx context.Context, userID uuid.UUID, snap Snapshot) 
 		if snap.Seq >= next {
 			return errs.New(errs.Invalid, "put snapshot", "the snapshot seq is above the log's last seq")
 		}
-		stored, err := q.UpsertSnapshot(ctx, userID, db.Snapshot(snap))
+		stored, err := q.UpsertSnapshot(ctx, db.UpsertSnapshotParams{UserID: userID, Seq: snap.Seq, Ciphertext: snap.Ciphertext})
 		if err != nil {
 			return err
 		}
-		if !stored {
+		if stored == 0 {
 			return errs.New(errs.Conflict, "put snapshot", "the user has a snapshot at a higher seq")
 		}
-		return q.DeleteOpsThrough(ctx, userID, snap.Seq)
+		return q.DeleteOpsThrough(ctx, db.DeleteOpsThroughParams{UserID: userID, Seq: snap.Seq})
 	})
 }
 
