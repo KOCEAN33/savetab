@@ -29,7 +29,7 @@ apps/server/
     httpserver/  gin engine, middleware, kind-to-status function, /livez, /readyz
     api/         oapi-codegen output and the strict handlers, one file per entity
     bus/         use cases and rules, one file per entity: ops, key, snapshot, pairing, login, session, device, share
-    db/          queries.sql, sqlc output, dynamic.go, tx.go, dberr.go, migrate.go, migrations/
+    db/          queries.sql, sqlc output, dynamic.go, mapped.go, tx.go, dberr.go, migrate.go, migrations/
     platform/    errs, config, logline, testdb, fakeoidc
     archtest/
 ```

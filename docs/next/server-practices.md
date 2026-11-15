@@ -6,19 +6,22 @@
 
 ## Start
 
-Step 15 of `docs/plans/server-practices.md`, sqlc, since every later step follows the plan's order. Steps 1 to 14 are committed.
+Step 16 of `docs/plans/server-practices.md`, migration and role timeouts, since every later step follows the plan's order. Steps 1 to 15 are committed.
 
 The layers the remaining steps build on, with `internal/bus/ops.go` and `internal/db/ops.go` as the pattern files:
 
-- `db` exports `Queries` over a `DBTX` (`internal/db/queries.go`): `db.New(tx)` inside a transaction, `store.Queries()` outside one. A `Queries` method holds one statement, every error through `MapError`.
+- sqlc generates `Queries` from `internal/db/queries.sql` per `apps/server/sqlc.yaml`: `db.New(tx)` inside a transaction, `store.Queries()` outside one. After a query change, run `sqlc generate` in `apps/server`. An id is a `uuid.UUID` from `db` through `bus`, and `api` parses it with `parseID`.
+- Generated code returns the driver error as it is. `internal/db/mapped.go` sits under every `Queries` and maps it to a kind: `store.Queries()` and the `pgx.Tx` an `InTx` closure gets both run on it. A `Queries` built on a raw pool or transaction returns unmapped errors.
+- `internal/db/dynamic.go` holds the SQL sqlc cannot compile: the pairing message update, whose column varies, and the migration runner's statements. Its functions take a `DBTX` and call `MapError` themselves.
+- sqlc 1.31 rejects a window function beside a parameter in an `INSERT ... SELECT`, a `SELECT` from a data-modifying CTE, and a `USING` table in `DELETE ... RETURNING`. `queries.sql` shows the form that passes for each: `InsertOps`, `CreatePairing`, `TakeRefreshSession`.
 - A `bus` use case opens the transaction with `store.InTx(ctx, fn)`, or `store.InSnapshot` for reads that must agree, holds the rule, and sets the kind of a broken rule with `errs.New`. `bus` declares the types `api` uses and holds token making, hashing, and every lifetime. `api.New` takes a `*bus.Bus`.
 - The handler tests use `db` and pgx to write states the endpoints cannot produce, per step 3. The 39 handler tests in `internal/api` pin `/v1`.
 - `internal/platform/config` loads every variable. `cmd/savetab-server` calls `wire.Main`, which loads the configuration and calls `wire.Run`. `wire.Run` (`internal/wire/wire.go`) uses every config field. The shutdown budget goes only to the start line, since the chart's grace period and the config validation are what act on it.
 - `httpserver.New` (`internal/httpserver/server.go`) builds the `http.Server` on a gin engine with the request line middleware first, then the request deadline middleware. It mounts the `api.New` handler on `/v1`, `/s/`, and `/healthz` through `gin.WrapH`, and serves `/livez` and `/readyz`. Its `Serve` marks the listener open for `/readyz`. `httpserver.Status` is the kind-to-status function, unused until `/v2`.
-- `pnpm check` needs golangci-lint v2, helm, and conftest on the PATH. `scripts/check-chart.sh` lints `charts/savetab/` with the stand-in values of `charts/savetab/ci/lint-values.yaml` and runs the Conftest policies of `charts/savetab/policy/` on its render.
+- `pnpm check` needs golangci-lint v2, sqlc, sqlfluff, helm, and conftest on the PATH. `apps/server/scripts/check-sql.sh` runs `sqlc diff`, the parameter and type greps, and SQLFluff. `apps/server/scripts/test.sh` fails a full run when a generated query or a `dynamic.go` function runs in no test. `scripts/check-chart.sh` lints `charts/savetab/` with the stand-in values of `charts/savetab/ci/lint-values.yaml` and runs the Conftest policies of `charts/savetab/policy/` on its render.
 - `pnpm lint` needs semgrep on the PATH. `apps/server/scripts/semgrep.sh` tests then runs the rules in `apps/server/_semgrep/`, a name the Go tools and the archtest skip, one rule file with a test file of the same name each.
 - `internal/platform/logline` holds every log key. A request writes one line, from `requestLine` in `internal/httpserver/requestline.go`. Code under a request adds to that line through the context: `logline.SetError`, `SetUser`, `SetRoute`, and the pgx tracer in `internal/db/tracer.go`. `wire.Run` builds the one logger and writes the start and stop lines. The Semgrep rules `log-through-logline` and `log-an-error-or-return-it` hold this.
-- `internal/archtest` and the depguard rules in `apps/server/.golangci.yml` hold the layout. The allow-lists at the top of `archtest_test.go` name what later steps remove: `internal/db/queries.go` (exported `DBTX`) and `internal/db/store.go` (migration statements) at step 15, `internal/platform/testdb/testdb.go` at step 18. No `/v1` file needs an entry.
+- `internal/archtest` and the depguard rules in `apps/server/.golangci.yml` hold the layout. The allow-list at the top of `archtest_test.go` names what a later step removes: `internal/platform/testdb/testdb.go` at step 18. No `/v1` file needs an entry.
 - The image takes its commit from the `COMMIT` build argument, and `version` stays `dev` until step 19 sets `VERSION`.
 
 Orders from the owner that bind later steps:
@@ -32,4 +35,4 @@ Orders from the owner that bind later steps:
 
 ## Next steps
 
-Steps 15 to 19 of the plan, in order, each with the done-when the plan gives.
+Steps 16 to 19 of the plan, in order, each with the done-when the plan gives.
