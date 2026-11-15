@@ -81,16 +81,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 	})
 }
 
-func (s *Store) CreateUser(ctx context.Context) (id string, err error) {
-	err = s.pool.QueryRow(ctx, `INSERT INTO users DEFAULT VALUES RETURNING id`).Scan(&id)
-	return id, err
-}
-
-func (s *Store) CreateDevice(ctx context.Context, userID, name string) (id string, err error) {
-	err = s.pool.QueryRow(ctx, `INSERT INTO devices (user_id, name) VALUES ($1, $2) RETURNING id`, userID, name).Scan(&id)
-	return id, err
-}
-
 type Device struct {
 	ID        string
 	Name      string
@@ -161,11 +151,6 @@ func issueSession(ctx context.Context, db execer, deviceID string, kind SessionK
 		`INSERT INTO sessions (token_hash, device_id, kind, expires_at) VALUES ($1, $2, $3, now() + make_interval(secs => $4))`,
 		hashToken(token), deviceID, string(kind), ttl.Seconds())
 	return token, err
-}
-
-// IssueSession makes an opaque token for the device. Only its hash is stored.
-func (s *Store) IssueSession(ctx context.Context, deviceID string, kind SessionKind, ttl time.Duration) (string, error) {
-	return issueSession(ctx, s.pool, deviceID, kind, ttl)
 }
 
 // Caller is the device and user an access token stands for.

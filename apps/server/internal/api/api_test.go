@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"github.com/KOCEAN33/savetab/apps/server/internal/fakeoidc"
 	"github.com/KOCEAN33/savetab/apps/server/internal/store"
 	"github.com/KOCEAN33/savetab/apps/server/internal/testdb"
+	"github.com/jackc/pgx/v5"
 )
 
 var (
@@ -70,27 +72,41 @@ type device struct {
 	token string
 }
 
-func newUser(t *testing.T) string {
-	t.Helper()
-	id, err := db.CreateUser(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return id
+// user is an identity at the fake issuer and the account its first login made.
+type user struct {
+	id      string
+	subject string
 }
 
-func newDevice(t *testing.T, userID string) device {
+func newUser(t *testing.T) user {
+	t.Helper()
+	subject := "user-" + randomString(t)
+	return user{id: logIn(t, subject, "test").UserID, subject: subject}
+}
+
+func newDevice(t *testing.T, u user) device {
+	t.Helper()
+	return logIn(t, u.subject, "test").device()
+}
+
+// expiredAccessToken stores an access token of the device that expired a minute ago. No
+// endpoint makes one, so it goes into the table directly.
+func expiredAccessToken(t *testing.T, deviceID string) string {
 	t.Helper()
 	ctx := context.Background()
-	id, err := db.CreateDevice(ctx, userID, "test")
+	conn, err := pgx.Connect(ctx, dbURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	token, err := db.IssueSession(ctx, id, store.Access, time.Hour)
-	if err != nil {
+	defer conn.Close(ctx)
+	token := randomString(t)
+	hash := sha256.Sum256([]byte(token))
+	if _, err := conn.Exec(ctx,
+		`INSERT INTO sessions (token_hash, device_id, kind, expires_at) VALUES ($1, $2, 'access', now() - interval '1 minute')`,
+		hash[:], deviceID); err != nil {
 		t.Fatal(err)
 	}
-	return device{id: id, token: token}
+	return token
 }
 
 type op struct {
@@ -296,17 +312,12 @@ func TestConcurrentPushesGiveGaplessSeq(t *testing.T) {
 func TestRequestsWithoutAValidAccessTokenGet401(t *testing.T) {
 	ctx := context.Background()
 	user := newUser(t)
-	d := newDevice(t, user)
-	expired, err := db.IssueSession(ctx, d.id, store.Access, -time.Minute)
-	if err != nil {
-		t.Fatal(err)
-	}
-	refresh, err := db.IssueSession(ctx, d.id, store.Refresh, time.Hour)
-	if err != nil {
-		t.Fatal(err)
-	}
+	signedIn := logIn(t, user.subject, "test")
+	d := signedIn.device()
+	expired := expiredAccessToken(t, d.id)
+	refresh := signedIn.RefreshToken
 	revoked := newDevice(t, user)
-	if err := db.RevokeDevice(ctx, user, revoked.id); err != nil {
+	if err := db.RevokeDevice(ctx, user.id, revoked.id); err != nil {
 		t.Fatal(err)
 	}
 

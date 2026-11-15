@@ -82,7 +82,7 @@ func TestShareIsReadBackWithoutAToken(t *testing.T) {
 func TestExpiredShareAnswers404AndTheNextPostDeletesIt(t *testing.T) {
 	user := newUser(t)
 	owner := newDevice(t, user)
-	expired, err := db.CreateShare(context.Background(), user, []byte("x"), -time.Second)
+	expired, err := db.CreateShare(context.Background(), user.id, []byte("x"), -time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}

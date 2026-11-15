@@ -53,7 +53,7 @@ func TestSnapshotDropsOlderOpsAndStaleAfterGets409(t *testing.T) {
 		t.Errorf("snapshot = seq %d %q, want seq 3 %q", got.Seq, got.Data, "state")
 	}
 
-	if n := storedOps(t, user); n != 2 {
+	if n := storedOps(t, user.id); n != 2 {
 		t.Errorf("%d ops stored after a snapshot at seq 3 of 5, want 2", n)
 	}
 	for _, query := range []string{"", "?after=0", "?after=2"} {
