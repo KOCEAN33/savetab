@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -30,6 +29,14 @@ const (
 	WrappedKey PairingMessage = "wrapped_key"
 )
 
+// PairingState is which messages a pairing holds.
+type PairingState struct {
+	NewDeviceID string
+	HasOld      bool
+	HasNew      bool
+	HasKey      bool
+}
+
 const pairingColumns = `p.id, p.new_device_id, d.name, p.commitment, p.old_public, p.new_public, p.wrapped_key, p.expires_at`
 
 func scanPairing(row pgx.CollectableRow) (Pairing, error) {
@@ -38,10 +45,10 @@ func scanPairing(row pgx.CollectableRow) (Pairing, error) {
 	return p, err
 }
 
-// CreatePairing opens a pairing for the calling device, which is the new one. It replaces a
-// pairing the device still has open and clears the user's expired ones.
-func (s *Store) CreatePairing(ctx context.Context, c Caller, commitment []byte, ttl time.Duration) (Pairing, error) {
-	rows, err := s.pool.Query(ctx, `
+// CreatePairing opens a pairing for the device, which is the new one. It replaces a pairing the
+// device still has open and clears the user's expired ones.
+func (q *Queries) CreatePairing(ctx context.Context, userID, deviceID string, commitment []byte, ttl time.Duration) (Pairing, error) {
+	rows, err := q.db.Query(ctx, `
 		WITH gone AS (
 			DELETE FROM pairings WHERE user_id = $1 AND (expires_at <= now() OR new_device_id = $2)
 		), p AS (
@@ -50,7 +57,7 @@ func (s *Store) CreatePairing(ctx context.Context, c Caller, commitment []byte, 
 			RETURNING *
 		)
 		SELECT `+pairingColumns+` FROM p JOIN devices d ON d.id = p.new_device_id`,
-		c.UserID, c.DeviceID, commitment, ttl.Seconds())
+		userID, deviceID, commitment, ttl.Seconds())
 	if err != nil {
 		return Pairing{}, MapError(ctx, "create pairing", err)
 	}
@@ -59,8 +66,8 @@ func (s *Store) CreatePairing(ctx context.Context, c Caller, commitment []byte, 
 }
 
 // Pairings returns the user's pairings that have not expired, oldest first.
-func (s *Store) Pairings(ctx context.Context, userID string) ([]Pairing, error) {
-	rows, err := s.pool.Query(ctx, `
+func (q *Queries) Pairings(ctx context.Context, userID string) ([]Pairing, error) {
+	rows, err := q.db.Query(ctx, `
 		SELECT `+pairingColumns+` FROM pairings p JOIN devices d ON d.id = p.new_device_id
 		WHERE p.user_id = $1 AND p.expires_at > now() ORDER BY p.expires_at, p.id`,
 		userID)
@@ -72,8 +79,8 @@ func (s *Store) Pairings(ctx context.Context, userID string) ([]Pairing, error) 
 }
 
 // Pairing returns one of the user's pairings. An expired pairing gives a NotFound error.
-func (s *Store) Pairing(ctx context.Context, userID, id string) (Pairing, error) {
-	rows, err := s.pool.Query(ctx, `
+func (q *Queries) Pairing(ctx context.Context, userID, id string) (Pairing, error) {
+	rows, err := q.db.Query(ctx, `
 		SELECT `+pairingColumns+` FROM pairings p JOIN devices d ON d.id = p.new_device_id
 		WHERE p.id = $1 AND p.user_id = $2 AND p.expires_at > now()`,
 		id, userID)
@@ -84,37 +91,17 @@ func (s *Store) Pairing(ctx context.Context, userID, id string) (Pairing, error)
 	return p, MapError(ctx, "get pairing", err)
 }
 
-// SetPairingMessage stores one message of the exchange. The order is OldPublic from a signed-in
-// device, NewPublic from the new device, then WrappedKey from a signed-in device. Each is set
-// once, so a later request cannot swap a public key the other side has already read.
-func (s *Store) SetPairingMessage(ctx context.Context, c Caller, id string, message PairingMessage, value []byte) error {
-	return MapError(ctx, "set pairing message", s.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		var newDeviceID string
-		var hasOld, hasNew, hasKey bool
-		err := tx.QueryRow(ctx, `
-			SELECT new_device_id, old_public IS NOT NULL, new_public IS NOT NULL, wrapped_key IS NOT NULL
-			FROM pairings WHERE id = $1 AND user_id = $2 AND expires_at > now() FOR UPDATE`,
-			id, c.UserID).Scan(&newDeviceID, &hasOld, &hasNew, &hasKey)
-		if err != nil {
-			return err
-		}
-		fromNew := c.DeviceID == newDeviceID
-		var ready bool
-		switch message {
-		case OldPublic:
-			ready = !hasOld
-		case NewPublic:
-			ready = hasOld && !hasNew
-		case WrappedKey:
-			ready = hasNew && !hasKey
-		}
-		if fromNew != (message == NewPublic) {
-			return errs.New(errs.Forbidden, "set pairing message", "the message belongs to the other side of the pairing")
-		}
-		if !ready {
-			return errs.New(errs.Conflict, "set pairing message", "the message is out of order or already set")
-		}
-		_, err = tx.Exec(ctx, `UPDATE pairings SET `+string(message)+` = $2 WHERE id = $1`, id, value)
-		return err
-	}))
+// LockPairing returns which messages one of the user's pairings holds and locks its row until
+// the transaction ends. An expired pairing gives a NotFound error.
+func (q *Queries) LockPairing(ctx context.Context, userID, id string) (s PairingState, err error) {
+	err = q.db.QueryRow(ctx, `
+		SELECT new_device_id, old_public IS NOT NULL, new_public IS NOT NULL, wrapped_key IS NOT NULL
+		FROM pairings WHERE id = $1 AND user_id = $2 AND expires_at > now() FOR UPDATE`,
+		id, userID).Scan(&s.NewDeviceID, &s.HasOld, &s.HasNew, &s.HasKey)
+	return s, MapError(ctx, "lock pairing", err)
+}
+
+func (q *Queries) SetPairingMessage(ctx context.Context, id string, message PairingMessage, value []byte) error {
+	_, err := q.db.Exec(ctx, `UPDATE pairings SET `+string(message)+` = $2 WHERE id = $1`, id, value)
+	return MapError(ctx, "set pairing message", err)
 }

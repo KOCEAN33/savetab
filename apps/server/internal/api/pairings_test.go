@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"testing"
 	"time"
-
-	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 )
 
 type pairing struct {
@@ -130,7 +128,7 @@ func TestPairingMessagesAreSetOnceInOrderByTheRightSide(t *testing.T) {
 func TestPairingExpires(t *testing.T) {
 	user := newUser(t)
 	signedIn, joining := newDevice(t, user), newDevice(t, user)
-	expired, err := store.CreatePairing(context.Background(), db.Caller{DeviceID: joining.id, UserID: user.id}, commitmentOf("x"), -time.Second)
+	expired, err := store.Queries().CreatePairing(context.Background(), user.id, joining.id, commitmentOf("x"), -time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -23,7 +23,6 @@ const (
 	// A wrapped key or a pairing message is under 100 bytes in the v1 formats.
 	maxMessageBytes = 1024
 	smallBodyBytes  = 8 << 10
-	pairingTTL      = 5 * time.Minute
 	shareTTL        = 30 * 24 * time.Hour
 )
 

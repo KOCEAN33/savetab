@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"net/http"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
@@ -19,7 +20,7 @@ type pairingBody struct {
 	ExpiresAt     int64  `json:"expiresAt"`
 }
 
-func pairingView(p db.Pairing) pairingBody {
+func pairingView(p bus.Pairing) pairingBody {
 	return pairingBody{
 		ID: p.ID, NewDeviceID: p.NewDeviceID, NewDeviceName: p.NewDeviceName,
 		Commitment: p.Commitment, OldPublic: p.OldPublic, NewPublic: p.NewPublic, WrappedKey: p.WrappedKey,
@@ -38,7 +39,7 @@ func (s *server) startPairing(w http.ResponseWriter, r *http.Request, c db.Calle
 		writeError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	p, err := s.store.CreatePairing(r.Context(), c, body.Commitment, pairingTTL)
+	p, err := s.bus.StartPairing(r.Context(), bus.Caller(c), body.Commitment)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -47,7 +48,7 @@ func (s *server) startPairing(w http.ResponseWriter, r *http.Request, c db.Calle
 }
 
 func (s *server) listPairings(w http.ResponseWriter, r *http.Request, c db.Caller) {
-	stored, err := s.store.Pairings(r.Context(), c.UserID)
+	stored, err := s.bus.Pairings(r.Context(), c.UserID)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -65,7 +66,7 @@ func (s *server) getPairing(w http.ResponseWriter, r *http.Request, c db.Caller)
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}
-	p, err := s.store.Pairing(r.Context(), c.UserID, id)
+	p, err := s.bus.Pairing(r.Context(), c.UserID, id)
 	if errs.KindOf(err) == errs.NotFound {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
@@ -91,11 +92,11 @@ func (s *server) putPairing(w http.ResponseWriter, r *http.Request, c db.Caller)
 	if !readJSON(w, r, smallBodyBytes, &body) {
 		return
 	}
-	var message db.PairingMessage
+	var message bus.PairingMessage
 	var value []byte
 	sent := 0
-	for m, v := range map[db.PairingMessage][]byte{
-		db.OldPublic: body.OldPublic, db.NewPublic: body.NewPublic, db.WrappedKey: body.WrappedKey,
+	for m, v := range map[bus.PairingMessage][]byte{
+		bus.OldPublic: body.OldPublic, bus.NewPublic: body.NewPublic, bus.WrappedKey: body.WrappedKey,
 	} {
 		if len(v) > 0 {
 			message, value = m, v
@@ -106,7 +107,7 @@ func (s *server) putPairing(w http.ResponseWriter, r *http.Request, c db.Caller)
 		writeError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	err := s.store.SetPairingMessage(r.Context(), c, id, message, value)
+	err := s.bus.SetPairingMessage(r.Context(), bus.Caller(c), id, message, value)
 	switch {
 	case errs.KindOf(err) == errs.NotFound:
 		writeError(w, http.StatusNotFound, "not_found")
