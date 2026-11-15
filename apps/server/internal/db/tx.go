@@ -17,7 +17,17 @@ const txAttempts = 3
 // serialization failure or a deadlock reruns fn in a new transaction, so fn reads every value
 // it decides on inside the transaction and changes no state outside it. The error it returns
 // carries a kind.
-func (s *Store) InTx(ctx context.Context, opts pgx.TxOptions, fn func(tx pgx.Tx) error) error {
+func (s *Store) InTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	return s.inTx(ctx, pgx.TxOptions{}, fn)
+}
+
+// InSnapshot is InTx for reads that must agree with each other: fn sees one snapshot of the
+// database and can write nothing.
+func (s *Store) InSnapshot(ctx context.Context, fn func(tx pgx.Tx) error) error {
+	return s.inTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, fn)
+}
+
+func (s *Store) inTx(ctx context.Context, opts pgx.TxOptions, fn func(tx pgx.Tx) error) error {
 	var err error
 	for range txAttempts {
 		if err = pgx.BeginTxFunc(ctx, s.pool, opts, fn); !retryable(err) {

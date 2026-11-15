@@ -3,10 +3,53 @@ version: "2"
 linters:
   default: none
   enable:
+    - depguard
     - errorlint
     - exhaustive
     - forbidigo
   settings:
+    # The import rules of the layers. internal/archtest holds what import paths cannot show.
+    depguard:
+      rules:
+        api:
+          list-mode: lax
+          files: ["!$test", "**/internal/api/*.go", "**/internal/api/**/*.go"]
+          allow: [github.com/KOCEAN33/savetab/apps/server/internal/api/apigen$, github.com/KOCEAN33/savetab/apps/server/internal/bus$, github.com/KOCEAN33/savetab/apps/server/internal/bus/, github.com/KOCEAN33/savetab/apps/server/internal/platform/]
+          deny:
+            - { pkg: github.com/KOCEAN33/savetab/apps/server/internal/, desc: "api imports apigen, bus, and platform only" }
+            - { pkg: github.com/jackc/pgx, desc: "SQL and the database driver stay in db" }
+        bus:
+          list-mode: lax
+          files: ["!$test", "**/internal/bus/*.go", "**/internal/bus/**/*.go"]
+          allow: [github.com/KOCEAN33/savetab/apps/server/internal/bus$, github.com/KOCEAN33/savetab/apps/server/internal/bus/, github.com/KOCEAN33/savetab/apps/server/internal/db$, github.com/KOCEAN33/savetab/apps/server/internal/db/, github.com/KOCEAN33/savetab/apps/server/internal/platform/, github.com/jackc/pgx/v5$]
+          deny:
+            - { pkg: github.com/KOCEAN33/savetab/apps/server/internal/, desc: "bus imports bus, db, and platform only" }
+            - { pkg: github.com/jackc/pgx, desc: "bus imports pgx only for the transaction type" }
+            - { pkg: github.com/jackc/pgerrcode, desc: "db maps driver errors to kinds" }
+        db:
+          list-mode: lax
+          files: ["!$test", "**/internal/db/*.go", "**/internal/db/**/*.go"]
+          allow: [github.com/KOCEAN33/savetab/apps/server/internal/platform/]
+          deny:
+            - { pkg: github.com/KOCEAN33/savetab/apps/server/internal/, desc: "db imports platform only" }
+        platform:
+          list-mode: lax
+          files: ["!$test", "**/internal/platform/*.go", "**/internal/platform/**/*.go"]
+          allow: [github.com/KOCEAN33/savetab/apps/server/internal/platform/]
+          deny:
+            - { pkg: github.com/KOCEAN33/savetab/apps/server/internal/, desc: "platform imports no layer" }
+        httpserver:
+          list-mode: lax
+          files: ["!$test", "**/internal/httpserver/*.go", "**/internal/httpserver/**/*.go"]
+          allow: [github.com/KOCEAN33/savetab/apps/server/internal/platform/]
+          deny:
+            - { pkg: github.com/KOCEAN33/savetab/apps/server/internal/, desc: "the HTTP server imports platform only" }
+            - { pkg: github.com/jackc/pgx, desc: "SQL and the database driver stay in db" }
+        main:
+          list-mode: strict
+          # cmd/savetab-e2e prepares a test database and a fake issuer before it calls wire.
+          files: ["!$test", "**/cmd/**/*.go", "!**/cmd/savetab-e2e/*.go"]
+          allow: [$gostd, github.com/KOCEAN33/savetab/apps/server/internal/wire$]
     exhaustive:
       check:
         - switch

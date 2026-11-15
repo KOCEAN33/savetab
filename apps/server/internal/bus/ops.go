@@ -38,7 +38,7 @@ func (b *Bus) PushOps(ctx context.Context, c Caller, ops []NewOp) error {
 		ids = append(ids, op.ID)
 		ciphertexts = append(ciphertexts, op.Ciphertext)
 	}
-	return b.store.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	return b.store.InTx(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		// The row lock makes one user's pushes run one at a time, so a reader that has seen
 		// seq n never later finds a new op at or below n.
@@ -59,8 +59,7 @@ func (b *Bus) PushOps(ctx context.Context, c Caller, ops []NewOp) error {
 // log no longer holds every op above it.
 func (b *Bus) PullOps(ctx context.Context, userID string, after int64, limit int) (ops []StoredOp, more bool, err error) {
 	// One view for both reads, so a snapshot that lands between them cannot hide ops it deleted.
-	view := pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}
-	err = b.store.InTx(ctx, view, func(tx pgx.Tx) error {
+	err = b.store.InSnapshot(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		stale, err := q.SnapshotAbove(ctx, userID, after)
 		if err != nil {

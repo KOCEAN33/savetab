@@ -42,7 +42,7 @@ func TestInTxRerunsTheClosureAfterASerializationFailure(t *testing.T) {
 	ctx := context.Background()
 	const id = "01900000-0000-7000-8000-000000000001"
 	runs := 0
-	err := store.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	err := store.InTx(ctx, func(tx pgx.Tx) error {
 		runs++
 		if _, err := tx.Exec(ctx, `INSERT INTO users (id) VALUES ($1)`, id); err != nil {
 			return err
@@ -59,7 +59,7 @@ func TestInTxRerunsTheClosureAfterASerializationFailure(t *testing.T) {
 		t.Errorf("closure ran %d times, want 2", runs)
 	}
 	var n int
-	if err := store.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	if err := store.InTx(ctx, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `SELECT count(*) FROM users WHERE id = $1`, id).Scan(&n)
 	}); err != nil {
 		t.Fatal(err)
@@ -73,7 +73,7 @@ func TestInTxGivesUpAfterItsAttempts(t *testing.T) {
 	store, _ := openStore(t)
 	ctx := context.Background()
 	runs := 0
-	err := store.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	err := store.InTx(ctx, func(tx pgx.Tx) error {
 		runs++
 		return serializationFailure(ctx)
 	})
@@ -89,7 +89,7 @@ func TestInTxDoesNotRetryOtherErrors(t *testing.T) {
 	store, _ := openStore(t)
 	ctx := context.Background()
 	runs := 0
-	_ = store.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	_ = store.InTx(ctx, func(tx pgx.Tx) error {
 		runs++
 		return errs.New(errs.Conflict, "update", "taken")
 	})

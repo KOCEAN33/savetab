@@ -45,7 +45,7 @@ func (b *Bus) CompleteLogin(ctx context.Context, state, issuer, subject string) 
 	if code, err = randomToken(); err != nil {
 		return "", err
 	}
-	err = b.store.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	err = b.store.InTx(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		// Two first logins of one identity at once would each make a user.
 		if err := q.LockIdentity(ctx, issuer, subject); err != nil {
@@ -82,7 +82,7 @@ func (b *Bus) RedeemLogin(ctx context.Context, code, codeVerifier, deviceName st
 	if challenge != base64.RawURLEncoding.EncodeToString(sum[:]) {
 		return Tokens{}, errs.New(errs.NotFound, "redeem login", "not found")
 	}
-	err = b.store.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	err = b.store.InTx(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		deviceID, err := q.InsertDevice(ctx, userID, deviceName)
 		if err != nil {

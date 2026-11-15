@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/caarlos0/env/v11"
+
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
@@ -34,6 +36,22 @@ type Options struct {
 	// Version and Commit name the build on every log line.
 	Version string
 	Commit  string
+}
+
+// Main is the whole of the server command: it loads the configuration from the environment,
+// runs the server, and returns the process's exit code. version and commit name the build.
+func Main(version, commit string) int {
+	cfg, err := config.Load(env.Options{})
+	if err != nil {
+		// The log format is itself configuration, so a bad configuration has no logger yet.
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	// Run's stop line holds its error.
+	if Run(context.Background(), cfg, Options{Version: version, Commit: commit}) != nil {
+		return 1
+	}
+	return 0
 }
 
 // Run starts the server and serves until ctx ends or SIGINT or SIGTERM arrives, then stops

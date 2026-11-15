@@ -17,7 +17,7 @@ type Snapshot struct {
 // PutSnapshot replaces the user's snapshot and deletes the ops it covers. A seq at or above the
 // log's next seq is Invalid, and one below the stored snapshot's seq is a Conflict.
 func (b *Bus) PutSnapshot(ctx context.Context, userID string, snap Snapshot) error {
-	return b.store.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	return b.store.InTx(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		// The same row lock a push takes, so no op lands at or below snap.Seq after the check.
 		next, err := q.LockNextSeq(ctx, userID)

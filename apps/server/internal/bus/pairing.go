@@ -63,7 +63,7 @@ func (b *Bus) Pairing(ctx context.Context, userID, id string) (Pairing, error) {
 // device, NewPublic from the new device, then WrappedKey from a signed-in device. Each is set
 // once, so a later request cannot swap a public key the other side has already read.
 func (b *Bus) SetPairingMessage(ctx context.Context, c Caller, id string, message PairingMessage, value []byte) error {
-	return b.store.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	return b.store.InTx(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		state, err := q.LockPairing(ctx, c.UserID, id)
 		if err != nil {

@@ -74,7 +74,7 @@ func (b *Bus) Authenticate(ctx context.Context, token string) (Caller, error) {
 // RefreshSession spends a refresh token and returns a new pair. A spent or expired token,
 // an access token, and a token of a revoked device all give an Unauthenticated error.
 func (b *Bus) RefreshSession(ctx context.Context, refreshToken string) (t Tokens, err error) {
-	err = b.store.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	err = b.store.InTx(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		deviceID, userID, err := q.TakeRefreshSession(ctx, hashToken(refreshToken))
 		if errs.KindOf(err) == errs.NotFound {

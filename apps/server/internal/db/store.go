@@ -54,7 +54,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return MapError(ctx, "migrate", err)
 	}
 	sort.Strings(names)
-	return MapError(ctx, "migrate", s.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	return MapError(ctx, "migrate", s.InTx(ctx, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, migrationLock); err != nil {
 			return err
 		}
