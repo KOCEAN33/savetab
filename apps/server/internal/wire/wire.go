@@ -87,7 +87,9 @@ func run(ctx context.Context, cfg config.Config, opts Options, logger *slog.Logg
 
 	start, cancel := context.WithTimeout(ctx, cfg.StartWait)
 	defer cancel()
-	store, err := db.Open(start, cfg.DatabaseURL.Reveal(), cfg.DBPoolMax)
+	store, err := db.Open(start, cfg.DatabaseURL.Reveal(), db.Options{
+		MaxConns: cfg.DBPoolMax, StatementTimeout: cfg.DBStatementTimeout, IdleInTxTimeout: cfg.DBIdleInTxTimeout,
+	})
 	if err != nil {
 		return err
 	}
@@ -112,7 +114,8 @@ func run(ctx context.Context, cfg config.Config, opts Options, logger *slog.Logg
 	}
 	logger.LogAttrs(ctx, slog.LevelInfo, logline.EventStart, logline.StartAttrs(traceID, logline.Settings{
 		ListenAddr: l.Addr().String(), PublicURL: cfg.PublicURL, OIDCIssuer: cfg.OIDCIssuer, OIDCClientID: cfg.OIDCClientID,
-		AuthRedirectURIs: cfg.AuthRedirectURIs, DBPoolMax: cfg.DBPoolMax, StartWait: cfg.StartWait,
+		AuthRedirectURIs: cfg.AuthRedirectURIs, DBPoolMax: cfg.DBPoolMax, DBStatementTimeout: cfg.DBStatementTimeout,
+		DBIdleInTxTimeout: cfg.DBIdleInTxTimeout, StartWait: cfg.StartWait,
 		RequestDeadline: cfg.RequestDeadline, ReadyPingTimeout: cfg.ReadyPingTimeout, HTTPDrainTimeout: cfg.HTTPDrainTimeout,
 		ShutdownBudget: cfg.ShutdownBudget, LogFormat: cfg.LogFormat, LogLevel: cfg.LogLevel,
 	})...)

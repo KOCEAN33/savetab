@@ -49,19 +49,21 @@ func NewLogger(w io.Writer, format string, level slog.Level, p Process) *slog.Lo
 // Settings is the effective configuration as the start line shows it. It has no field for a
 // secret.
 type Settings struct {
-	ListenAddr       string
-	PublicURL        string
-	OIDCIssuer       string
-	OIDCClientID     string
-	AuthRedirectURIs []string
-	DBPoolMax        int32
-	StartWait        time.Duration
-	RequestDeadline  time.Duration
-	ReadyPingTimeout time.Duration
-	HTTPDrainTimeout time.Duration
-	ShutdownBudget   time.Duration
-	LogFormat        string
-	LogLevel         slog.Level
+	ListenAddr         string
+	PublicURL          string
+	OIDCIssuer         string
+	OIDCClientID       string
+	AuthRedirectURIs   []string
+	DBPoolMax          int32
+	DBStatementTimeout time.Duration
+	DBIdleInTxTimeout  time.Duration
+	StartWait          time.Duration
+	RequestDeadline    time.Duration
+	ReadyPingTimeout   time.Duration
+	HTTPDrainTimeout   time.Duration
+	ShutdownBudget     time.Duration
+	LogFormat          string
+	LogLevel           slog.Level
 }
 
 // StartAttrs returns the attributes of the start line. traceID joins it to the stop line.
@@ -75,6 +77,8 @@ func StartAttrs(traceID string, s Settings) []slog.Attr {
 			slog.String("oidc_client_id", s.OIDCClientID),
 			slog.Any("auth_redirect_uris", s.AuthRedirectURIs),
 			slog.Int64("db_pool_max", int64(s.DBPoolMax)),
+			durationMS("db_statement_timeout_ms", s.DBStatementTimeout),
+			durationMS("db_idle_in_tx_timeout_ms", s.DBIdleInTxTimeout),
 			durationMS("start_wait_ms", s.StartWait),
 			durationMS("request_deadline_ms", s.RequestDeadline),
 			durationMS("ready_ping_timeout_ms", s.ReadyPingTimeout),

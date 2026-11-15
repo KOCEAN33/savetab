@@ -42,7 +42,7 @@ func run(m *testing.M) int {
 	defer stop()
 	dbURL = url
 	ctx := context.Background()
-	if store, err = db.Open(ctx, url, 4); err != nil {
+	if store, err = db.Open(ctx, url, db.Options{MaxConns: 4, StatementTimeout: 5 * time.Second, IdleInTxTimeout: 10 * time.Second}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}

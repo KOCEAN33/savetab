@@ -178,7 +178,7 @@ func TestRunWritesAStartLineAndAStopLine(t *testing.T) {
 	}
 	addr := l.Addr().String()
 	cfg := config.Config{
-		DatabaseURL: config.Secret(dbURL), DBPoolMax: 2, ListenAddr: addr, PublicURL: "http://" + addr,
+		DatabaseURL: config.Secret(dbURL), DBPoolMax: 2, DBStatementTimeout: 3 * time.Second, DBIdleInTxTimeout: 4 * time.Second, ListenAddr: addr, PublicURL: "http://" + addr,
 		OIDCIssuer: issuer.URL, OIDCClientID: "savetab", AuthRedirectURIs: []string{"https://a.example/"},
 		StartWait: 10 * time.Second, RequestDeadline: 5 * time.Second, ReadyPingTimeout: time.Second,
 		HTTPDrainTimeout: 6 * time.Second, ShutdownBudget: 7 * time.Second, LogFormat: "json",
@@ -227,6 +227,7 @@ func TestRunWritesAStartLineAndAStopLine(t *testing.T) {
 	shown, _ := start["config"].(map[string]any)
 	for key, want := range map[string]any{
 		"listen_addr": addr, "oidc_issuer": issuer.URL, "oidc_client_id": "savetab", "db_pool_max": float64(2),
+		"db_statement_timeout_ms": float64(3000), "db_idle_in_tx_timeout_ms": float64(4000),
 		"request_deadline_ms": float64(5000), "http_drain_timeout_ms": float64(6000), "log_format": "json", "log_level": "INFO",
 	} {
 		if shown[key] != want {

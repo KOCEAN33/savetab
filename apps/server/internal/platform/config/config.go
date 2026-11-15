@@ -30,20 +30,22 @@ func (Secret) MarshalText() ([]byte, error) { return []byte(redacted), nil }
 
 // Config is every value the server reads at start. A field without a default is required.
 type Config struct {
-	DatabaseURL      Secret        `env:"DATABASE_URL_FILE,file,notEmpty"`
-	DBPoolMax        int32         `env:"DB_POOL_MAX" envDefault:"10"`
-	ListenAddr       string        `env:"LISTEN_ADDR,notEmpty"`
-	PublicURL        string        `env:"PUBLIC_URL,notEmpty"`
-	OIDCIssuer       string        `env:"OIDC_ISSUER,notEmpty"`
-	OIDCClientID     string        `env:"OIDC_CLIENT_ID,notEmpty"`
-	AuthRedirectURIs []string      `env:"AUTH_REDIRECT_URIS,notEmpty" envSeparator:" "`
-	StartWait        time.Duration `env:"START_WAIT" envDefault:"30s"`
-	RequestDeadline  time.Duration `env:"REQUEST_DEADLINE" envDefault:"10s"`
-	ReadyPingTimeout time.Duration `env:"READY_PING_TIMEOUT" envDefault:"1s"`
-	HTTPDrainTimeout time.Duration `env:"HTTP_DRAIN_TIMEOUT" envDefault:"15s"`
-	ShutdownBudget   time.Duration `env:"SHUTDOWN_BUDGET" envDefault:"20s"`
-	LogFormat        string        `env:"LOG_FORMAT" envDefault:"json"`
-	LogLevel         slog.Level    `env:"LOG_LEVEL" envDefault:"info"`
+	DatabaseURL        Secret        `env:"DATABASE_URL_FILE,file,notEmpty"`
+	DBPoolMax          int32         `env:"DB_POOL_MAX" envDefault:"10"`
+	DBStatementTimeout time.Duration `env:"DB_STATEMENT_TIMEOUT" envDefault:"5s"`
+	DBIdleInTxTimeout  time.Duration `env:"DB_IDLE_IN_TX_TIMEOUT" envDefault:"10s"`
+	ListenAddr         string        `env:"LISTEN_ADDR,notEmpty"`
+	PublicURL          string        `env:"PUBLIC_URL,notEmpty"`
+	OIDCIssuer         string        `env:"OIDC_ISSUER,notEmpty"`
+	OIDCClientID       string        `env:"OIDC_CLIENT_ID,notEmpty"`
+	AuthRedirectURIs   []string      `env:"AUTH_REDIRECT_URIS,notEmpty" envSeparator:" "`
+	StartWait          time.Duration `env:"START_WAIT" envDefault:"30s"`
+	RequestDeadline    time.Duration `env:"REQUEST_DEADLINE" envDefault:"10s"`
+	ReadyPingTimeout   time.Duration `env:"READY_PING_TIMEOUT" envDefault:"1s"`
+	HTTPDrainTimeout   time.Duration `env:"HTTP_DRAIN_TIMEOUT" envDefault:"15s"`
+	ShutdownBudget     time.Duration `env:"SHUTDOWN_BUDGET" envDefault:"20s"`
+	LogFormat          string        `env:"LOG_FORMAT" envDefault:"json"`
+	LogLevel           slog.Level    `env:"LOG_LEVEL" envDefault:"info"`
 }
 
 // Load reads the configuration from opts.Environment, or from the process environment when
@@ -118,6 +120,7 @@ func (c Config) validate(failed map[string]bool) error {
 	for name, d := range map[string]time.Duration{
 		"START_WAIT": c.StartWait, "REQUEST_DEADLINE": c.RequestDeadline, "READY_PING_TIMEOUT": c.ReadyPingTimeout,
 		"HTTP_DRAIN_TIMEOUT": c.HTTPDrainTimeout, "SHUTDOWN_BUDGET": c.ShutdownBudget,
+		"DB_STATEMENT_TIMEOUT": c.DBStatementTimeout, "DB_IDLE_IN_TX_TIMEOUT": c.DBIdleInTxTimeout,
 	} {
 		if d <= 0 {
 			bad(name, "is %s, want a positive duration", d)

@@ -1,0 +1,7 @@
+# The runner applies the pending files in one transaction (internal/db/migrate.go).
+assume_in_transaction = true
+included_rules = ["require-lock-timeout", "require-statement-timeout"]
+# CONCURRENTLY cannot run in a transaction, so the timeouts bound an index build instead.
+excluded_rules = ["require-concurrent-index-creation", "require-concurrent-index-deletion"]
+# Applied before the timeout rule, and an applied file is never edited.
+excluded_paths = ["*0001_op_log.sql", "*0002_key_snapshot_pairing.sql", "*0003_login.sql", "*0004_shares.sql"]

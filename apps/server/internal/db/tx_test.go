@@ -3,6 +3,7 @@ package db_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
@@ -21,7 +22,7 @@ func openStore(t *testing.T) (*db.Store, string) {
 	}
 	t.Cleanup(stop)
 	ctx := context.Background()
-	store, err := db.Open(ctx, url, 4)
+	store, err := db.Open(ctx, url, db.Options{MaxConns: 4, StatementTimeout: 5 * time.Second, IdleInTxTimeout: 10 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}

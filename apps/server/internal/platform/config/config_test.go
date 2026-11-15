@@ -51,20 +51,22 @@ func TestLoadReadsTheEnvironmentAndFillsDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := config.Config{
-		DatabaseURL:      databaseURL,
-		DBPoolMax:        10,
-		ListenAddr:       ":8080",
-		PublicURL:        "https://savetab.example",
-		OIDCIssuer:       "https://auth.example",
-		OIDCClientID:     "399270715137720374",
-		AuthRedirectURIs: []string{"https://a.extensions.allizom.org/", "https://b.chromiumapp.org/"},
-		StartWait:        30 * time.Second,
-		RequestDeadline:  10 * time.Second,
-		ReadyPingTimeout: time.Second,
-		HTTPDrainTimeout: 15 * time.Second,
-		ShutdownBudget:   20 * time.Second,
-		LogFormat:        "json",
-		LogLevel:         slog.LevelInfo,
+		DatabaseURL:        databaseURL,
+		DBPoolMax:          10,
+		DBStatementTimeout: 5 * time.Second,
+		DBIdleInTxTimeout:  10 * time.Second,
+		ListenAddr:         ":8080",
+		PublicURL:          "https://savetab.example",
+		OIDCIssuer:         "https://auth.example",
+		OIDCClientID:       "399270715137720374",
+		AuthRedirectURIs:   []string{"https://a.extensions.allizom.org/", "https://b.chromiumapp.org/"},
+		StartWait:          30 * time.Second,
+		RequestDeadline:    10 * time.Second,
+		ReadyPingTimeout:   time.Second,
+		HTTPDrainTimeout:   15 * time.Second,
+		ShutdownBudget:     20 * time.Second,
+		LogFormat:          "json",
+		LogLevel:           slog.LevelInfo,
 	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("Load = %v, want %v", cfg, want)
@@ -96,19 +98,21 @@ func TestLoadNamesEveryMalformedAndOutOfRangeValueAtOnce(t *testing.T) {
 	t.Parallel()
 	environ := validEnvironment(t)
 	for name, value := range map[string]string{
-		"DB_POOL_MAX":        "many",
-		"START_WAIT":         "soon",
-		"REQUEST_DEADLINE":   "ten",
-		"READY_PING_TIMEOUT": "1 second",
-		"HTTP_DRAIN_TIMEOUT": "15",
-		"SHUTDOWN_BUDGET":    "-",
-		"PUBLIC_URL":         "savetab.example",
-		"LOG_LEVEL":          "loud",
+		"DB_POOL_MAX":           "many",
+		"DB_STATEMENT_TIMEOUT":  "5",
+		"DB_IDLE_IN_TX_TIMEOUT": "long",
+		"START_WAIT":            "soon",
+		"REQUEST_DEADLINE":      "ten",
+		"READY_PING_TIMEOUT":    "1 second",
+		"HTTP_DRAIN_TIMEOUT":    "15",
+		"SHUTDOWN_BUDGET":       "-",
+		"PUBLIC_URL":            "savetab.example",
+		"LOG_LEVEL":             "loud",
 	} {
 		environ[name] = value
 	}
 	_, err := load(environ)
-	assertNamesAll(t, err, "DB_POOL_MAX", "START_WAIT", "REQUEST_DEADLINE", "READY_PING_TIMEOUT", "HTTP_DRAIN_TIMEOUT", "SHUTDOWN_BUDGET", "PUBLIC_URL", "LOG_LEVEL")
+	assertNamesAll(t, err, "DB_POOL_MAX", "DB_STATEMENT_TIMEOUT", "DB_IDLE_IN_TX_TIMEOUT", "START_WAIT", "REQUEST_DEADLINE", "READY_PING_TIMEOUT", "HTTP_DRAIN_TIMEOUT", "SHUTDOWN_BUDGET", "PUBLIC_URL", "LOG_LEVEL")
 }
 
 func TestLoadReadsTheLogSettings(t *testing.T) {
@@ -137,6 +141,8 @@ func TestLoadRejectsOutOfRangeValues(t *testing.T) {
 		{"blank secret file", nil, "\n", []string{"DATABASE_URL_FILE"}},
 		{"no pool connection", map[string]string{"DB_POOL_MAX": "0"}, "", []string{"DB_POOL_MAX"}},
 		{"no start wait", map[string]string{"START_WAIT": "0s"}, "", []string{"START_WAIT"}},
+		{"no statement timeout", map[string]string{"DB_STATEMENT_TIMEOUT": "0s"}, "", []string{"DB_STATEMENT_TIMEOUT"}},
+		{"no idle in transaction timeout", map[string]string{"DB_IDLE_IN_TX_TIMEOUT": "0s"}, "", []string{"DB_IDLE_IN_TX_TIMEOUT"}},
 		{"unknown log format", map[string]string{"LOG_FORMAT": "xml"}, "", []string{"LOG_FORMAT"}},
 		{"redirect uri without a scheme", map[string]string{"AUTH_REDIRECT_URIS": "https://a.example/ b.example"}, "", []string{"AUTH_REDIRECT_URIS"}},
 		{"deadline not shorter than the drain", map[string]string{"REQUEST_DEADLINE": "15s"}, "", []string{"REQUEST_DEADLINE", "HTTP_DRAIN_TIMEOUT"}},

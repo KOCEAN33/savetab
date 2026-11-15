@@ -53,6 +53,11 @@ jobs:
           curl -sSfLo /tmp/conftest.tgz https://github.com/open-policy-agent/conftest/releases/download/v0.71.1/conftest_0.71.1_Linux_x86_64.tar.gz
           echo "c3f6b2a753bd56e377a1e51a95ae3e057f926f2e9139f7d5b5dfbbaf810f7985  /tmp/conftest.tgz" | sha256sum -c
           sudo tar -xzf /tmp/conftest.tgz -C /usr/local/bin conftest
+      - name: Install squawk
+        run: |
+          curl -sSfLo /tmp/squawk https://github.com/sbdchd/squawk/releases/download/v2.72.0/squawk-linux-x64
+          echo "a61661808119a82515565503111099b070c869f73698f61cb1785de5d0c8b11a  /tmp/squawk" | sha256sum -c
+          sudo install -m 755 /tmp/squawk /usr/local/bin/squawk
       - run: pnpm --filter @savetab/extension exec playwright install --with-deps chromium
       - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
         with:
