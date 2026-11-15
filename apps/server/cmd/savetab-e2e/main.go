@@ -1,7 +1,7 @@
 // Command savetab-e2e serves the sync API for the extension's e2e tests. It makes its own
 // database on the Postgres that TEST_DATABASE_URL names, logs every visitor in as one user
 // through an issuer it runs itself, prints its URL as the first line of stdout, and drops the
-// database when it is told to stop.
+// database when it is told to stop. Its arguments are the redirect URIs a login may end at.
 package main
 
 import (
@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -40,7 +39,7 @@ func run() error {
 		return err
 	}
 	defer drop()
-	store, err := db.Open(ctx, dbURL)
+	store, err := db.Open(ctx, dbURL, 4)
 	if err != nil {
 		return err
 	}
@@ -49,7 +48,7 @@ func run() error {
 		return err
 	}
 
-	issuer := fakeoidc.New("savetab", "issuer-secret")
+	issuer := fakeoidc.New("savetab")
 	defer issuer.Close()
 	issuer.Set(fakeoidc.Behavior{Subject: "e2e"})
 
@@ -59,8 +58,7 @@ func run() error {
 	}
 	url := "http://" + listener.Addr().String()
 	login, err := api.NewLogin(ctx, api.LoginConfig{
-		Issuer: issuer.URL, ClientID: "savetab", ClientSecret: "issuer-secret",
-		PublicURL: url, RedirectURIs: strings.Fields(os.Getenv("AUTH_REDIRECT_URIS")),
+		Issuer: issuer.URL, ClientID: "savetab", PublicURL: url, RedirectURIs: os.Args[1:],
 	})
 	if err != nil {
 		return err

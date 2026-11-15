@@ -3,19 +3,20 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
+
+	"github.com/caarlos0/env/v11"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/config"
 )
 
 func main() {
@@ -26,29 +27,16 @@ func main() {
 }
 
 func run() error {
+	cfg, err := config.Load(env.Options{})
+	if err != nil {
+		return err
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		return errors.New("DATABASE_URL is not set")
-	}
-	addr := os.Getenv("LISTEN_ADDR")
-	if addr == "" {
-		addr = ":8080"
-	}
-	cfg := api.LoginConfig{
-		Issuer:       os.Getenv("OIDC_ISSUER"),
-		ClientID:     os.Getenv("OIDC_CLIENT_ID"),
-		ClientSecret: os.Getenv("OIDC_CLIENT_SECRET"),
-		PublicURL:    os.Getenv("PUBLIC_URL"),
-		RedirectURIs: strings.Fields(os.Getenv("AUTH_REDIRECT_URIS")),
-	}
-	if cfg.Issuer == "" || cfg.ClientID == "" || cfg.PublicURL == "" || len(cfg.RedirectURIs) == 0 {
-		return errors.New("OIDC_ISSUER, OIDC_CLIENT_ID, PUBLIC_URL, and AUTH_REDIRECT_URIS must be set")
-	}
-
-	store, err := db.Open(ctx, url)
+	start, cancel := context.WithTimeout(ctx, cfg.StartWait)
+	defer cancel()
+	store, err := db.Open(start, cfg.DatabaseURL.Reveal(), cfg.DBPoolMax)
 	if err != nil {
 		return err
 	}
@@ -57,21 +45,23 @@ func run() error {
 		return err
 	}
 
-	login, err := api.NewLogin(ctx, cfg)
+	login, err := api.NewLogin(ctx, api.LoginConfig{
+		Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, PublicURL: cfg.PublicURL, RedirectURIs: cfg.AuthRedirectURIs,
+	})
 	if err != nil {
-		return fmt.Errorf("OIDC issuer %s: %w", cfg.Issuer, err)
+		return fmt.Errorf("OIDC issuer %s: %w", cfg.OIDCIssuer, err)
 	}
 
-	srv := &http.Server{Addr: addr, Handler: api.New(bus.New(store), login), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Addr: cfg.ListenAddr, Handler: api.New(bus.New(store), login), ReadHeaderTimeout: 10 * time.Second}
 	failed := make(chan error, 1)
 	go func() { failed <- srv.ListenAndServe() }()
-	slog.Info("listening", "addr", addr)
+	slog.Info("listening", "addr", cfg.ListenAddr)
 	select {
 	case err := <-failed:
 		return err
 	case <-ctx.Done():
-		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		drain, cancel := context.WithTimeout(context.Background(), cfg.HTTPDrainTimeout)
 		defer cancel()
-		return srv.Shutdown(shutdown)
+		return srv.Shutdown(drain)
 	}
 }

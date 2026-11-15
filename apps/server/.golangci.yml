@@ -4,3 +4,16 @@ linters:
   default: none
   enable:
     - errorlint
+    - forbidigo
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: ^(os\.(Getenv|LookupEnv|Environ|ExpandEnv)|syscall\.(Getenv|Environ))$
+          msg: read configuration through internal/platform/config
+      analyze-types: true
+  exclusions:
+    rules:
+      # The test database helper reads TEST_DATABASE_URL, the one variable outside config.
+      - path: internal/platform/testdb/
+        linters:
+          - forbidigo

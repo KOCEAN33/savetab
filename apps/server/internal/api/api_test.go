@@ -41,7 +41,7 @@ func run(m *testing.M) int {
 	defer stop()
 	dbURL = url
 	ctx := context.Background()
-	if store, err = db.Open(ctx, url); err != nil {
+	if store, err = db.Open(ctx, url, 4); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
@@ -50,14 +50,14 @@ func run(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	issuer = fakeoidc.New(clientID, clientSecret)
+	issuer = fakeoidc.New(clientID)
 	defer issuer.Close()
 	// The login needs the server's URL, which exists only once the server listens.
 	var handler http.Handler
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r) }))
 	defer srv.Close()
 	login, err := api.NewLogin(ctx, api.LoginConfig{
-		Issuer: issuer.URL, ClientID: clientID, ClientSecret: clientSecret,
+		Issuer: issuer.URL, ClientID: clientID,
 		PublicURL: srv.URL, RedirectURIs: []string{extensionRedirect},
 	})
 	if err != nil {

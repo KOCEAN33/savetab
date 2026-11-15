@@ -45,24 +45,23 @@ type Issuer struct {
 	// URL is the issuer URL, the value of OIDC_ISSUER.
 	URL string
 
-	srv          *httptest.Server
-	key          *rsa.PrivateKey
-	clientID     string
-	clientSecret string
-	mu           sync.Mutex
-	next         int
+	srv      *httptest.Server
+	key      *rsa.PrivateKey
+	clientID string
+	mu       sync.Mutex
+	next     int
 	// codes holds the grants the token endpoint has not yet redeemed.
 	codes    map[string]grant
 	behavior Behavior
 }
 
-// New starts an issuer that knows one client.
-func New(clientID, clientSecret string) *Issuer {
+// New starts an issuer that knows one public client, which sends no secret.
+func New(clientID string) *Issuer {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		panic(err)
 	}
-	f := &Issuer{key: key, clientID: clientID, clientSecret: clientSecret, codes: map[string]grant{}}
+	f := &Issuer{key: key, clientID: clientID, codes: map[string]grant{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
@@ -120,12 +119,9 @@ func (f *Issuer) authorize(w http.ResponseWriter, r *http.Request) {
 }
 
 func (f *Issuer) token(w http.ResponseWriter, r *http.Request) {
-	id, secret, basic := r.BasicAuth()
+	id, _, basic := r.BasicAuth()
 	if !basic {
-		id, secret = r.PostFormValue("client_id"), r.PostFormValue("client_secret")
-	}
-	if unescaped, err := url.QueryUnescape(secret); err == nil {
-		secret = unescaped
+		id = r.PostFormValue("client_id")
 	}
 	f.mu.Lock()
 	g, ok := f.codes[r.PostFormValue("code")]
@@ -136,7 +132,7 @@ func (f *Issuer) token(w http.ResponseWriter, r *http.Request) {
 	}
 	f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
-	if !ok || id != f.clientID || secret != f.clientSecret || r.PostFormValue("grant_type") != "authorization_code" ||
+	if !ok || id != f.clientID || r.PostFormValue("grant_type") != "authorization_code" ||
 		r.PostFormValue("redirect_uri") != g.redirectURI || s256(r.PostFormValue("code_verifier")) != g.challenge {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_grant"})

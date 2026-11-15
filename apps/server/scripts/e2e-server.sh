@@ -7,4 +7,6 @@ source scripts/test-db.sh
 
 bin="$(mktemp -d)/savetab-e2e"
 go build -o "$bin" ./cmd/savetab-e2e
-exec "$bin"
+# Unquoted, so each space-separated redirect URI is one argument.
+# shellcheck disable=SC2086
+exec "$bin" ${AUTH_REDIRECT_URIS:-}

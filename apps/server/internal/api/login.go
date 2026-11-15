@@ -28,9 +28,8 @@ const (
 var challengePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 
 type LoginConfig struct {
-	Issuer       string
-	ClientID     string
-	ClientSecret string
+	Issuer   string
+	ClientID string
 	// PublicURL is the server's own base URL as the issuer and the clients reach it.
 	PublicURL string
 	// RedirectURIs are the client redirect URIs a login may end at, matched exactly.
@@ -52,11 +51,10 @@ func NewLogin(ctx context.Context, cfg LoginConfig) (*Login, error) {
 	}
 	return &Login{
 		oauth: oauth2.Config{
-			ClientID:     cfg.ClientID,
-			ClientSecret: cfg.ClientSecret,
-			Endpoint:     provider.Endpoint(),
-			RedirectURL:  strings.TrimSuffix(cfg.PublicURL, "/") + "/v1/auth/callback",
-			Scopes:       []string{oidc.ScopeOpenID},
+			ClientID:    cfg.ClientID,
+			Endpoint:    provider.Endpoint(),
+			RedirectURL: strings.TrimSuffix(cfg.PublicURL, "/") + "/v1/auth/callback",
+			Scopes:      []string{oidc.ScopeOpenID},
 		},
 		verifier:     provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}),
 		redirectURIs: cfg.RedirectURIs,

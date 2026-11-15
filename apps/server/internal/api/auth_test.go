@@ -18,7 +18,6 @@ import (
 
 const (
 	clientID          = "savetab"
-	clientSecret      = "issuer-secret"
 	extensionRedirect = "https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/"
 )
 

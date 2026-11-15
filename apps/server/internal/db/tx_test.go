@@ -21,7 +21,7 @@ func openStore(t *testing.T) (*db.Store, string) {
 	}
 	t.Cleanup(stop)
 	ctx := context.Background()
-	store, err := db.Open(ctx, url)
+	store, err := db.Open(ctx, url, 4)
 	if err != nil {
 		t.Fatal(err)
 	}
