@@ -24,6 +24,14 @@ oidc:
 # accepts, one per extension build.
 authRedirectUris: []
 
+# The server's stop: the preStop sleep, then SHUTDOWN_BUDGET for draining and
+# closing. terminationGracePeriodSeconds is their sum.
+lifecycle:
+  preStopSleepSeconds: 5
+  shutdownBudgetSeconds: 20
+  # READY_PING_TIMEOUT. The readiness probe waits one second longer.
+  readyPingTimeoutSeconds: 1
+
 resources:
   requests:
     cpu: 20m

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -51,9 +52,14 @@ func run() error {
 		return fmt.Errorf("OIDC issuer %s: %w", cfg.OIDCIssuer, err)
 	}
 
-	srv := httpserver.New(cfg.ListenAddr, cfg.RequestDeadline, api.New(bus.New(store), login))
+	b := bus.New(store)
+	srv := httpserver.New(httpserver.Config{RequestDeadline: cfg.RequestDeadline, ReadyPingTimeout: cfg.ReadyPingTimeout}, b, api.New(b, login))
+	listener, err := net.Listen("tcp", cfg.ListenAddr)
+	if err != nil {
+		return err
+	}
 	failed := make(chan error, 1)
-	go func() { failed <- srv.ListenAndServe() }()
+	go func() { failed <- srv.Serve(listener) }()
 	slog.Info("listening", "addr", cfg.ListenAddr)
 	select {
 	case err := <-failed:

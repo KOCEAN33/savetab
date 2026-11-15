@@ -64,7 +64,8 @@ func run() error {
 		return err
 	}
 
-	srv := httpserver.New("", 10*time.Second, api.New(bus.New(store), login))
+	b := bus.New(store)
+	srv := httpserver.New(httpserver.Config{RequestDeadline: 10 * time.Second, ReadyPingTimeout: time.Second}, b, api.New(b, login))
 	failed := make(chan error, 1)
 	go func() { failed <- srv.Serve(listener) }()
 	fmt.Println(url)

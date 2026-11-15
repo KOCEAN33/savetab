@@ -23,6 +23,7 @@ spec:
         {{- $selector | nindent 8 }}
     spec:
       {{- include "savetab.podSecurity" . | nindent 6 }}
+      terminationGracePeriodSeconds: {{ add .Values.lifecycle.preStopSleepSeconds .Values.lifecycle.shutdownBudgetSeconds }}
       containers:
         - name: server
           image: {{ .Values.image.repository }}:{{ required "image.tag is required: the commit sha of a savetab image build" .Values.image.tag }}
@@ -39,14 +40,39 @@ spec:
               value: https://{{ required "host is required" .Values.host }}
             - name: AUTH_REDIRECT_URIS
               value: {{ join " " .Values.authRedirectUris | quote }}
+            - name: READY_PING_TIMEOUT
+              value: {{ .Values.lifecycle.readyPingTimeoutSeconds }}s
+            - name: SHUTDOWN_BUDGET
+              value: {{ .Values.lifecycle.shutdownBudgetSeconds }}s
           ports:
             - name: http
               containerPort: 8080
-          readinessProbe:
+          # The listener opens after the database is reached, which START_WAIT
+          # bounds at 30s.
+          startupProbe:
             httpGet:
-              path: /healthz
+              path: /livez
+              port: http
+            periodSeconds: 2
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /livez
               port: http
             periodSeconds: 10
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: {{ add1 .Values.lifecycle.readyPingTimeoutSeconds }}
+            failureThreshold: 3
+          lifecycle:
+            # Keeps serving while the endpoint removal reaches the Gateway.
+            preStop:
+              sleep:
+                seconds: {{ .Values.lifecycle.preStopSleepSeconds }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           {{- include "savetab.containerSecurity" . | nindent 10 }}
