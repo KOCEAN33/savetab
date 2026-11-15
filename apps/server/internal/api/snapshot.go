@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/store"
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 )
 
 type snapshotBody struct {
@@ -12,9 +12,9 @@ type snapshotBody struct {
 	Data []byte `json:"data"`
 }
 
-func (s *server) getSnapshot(w http.ResponseWriter, r *http.Request, c store.Caller) {
+func (s *server) getSnapshot(w http.ResponseWriter, r *http.Request, c db.Caller) {
 	snap, err := s.store.Snapshot(r.Context(), c.UserID)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, db.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "no_snapshot")
 		return
 	}
@@ -25,7 +25,7 @@ func (s *server) getSnapshot(w http.ResponseWriter, r *http.Request, c store.Cal
 	writeJSON(w, http.StatusOK, snapshotBody{Seq: snap.Seq, Data: snap.Ciphertext})
 }
 
-func (s *server) putSnapshot(w http.ResponseWriter, r *http.Request, c store.Caller) {
+func (s *server) putSnapshot(w http.ResponseWriter, r *http.Request, c db.Caller) {
 	var body snapshotBody
 	if !readJSON(w, r, maxSnapshotBytes, &body) {
 		return
@@ -34,11 +34,11 @@ func (s *server) putSnapshot(w http.ResponseWriter, r *http.Request, c store.Cal
 		writeError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	err := s.store.PutSnapshot(r.Context(), c.UserID, store.Snapshot{Seq: body.Seq, Ciphertext: body.Data})
+	err := s.store.PutSnapshot(r.Context(), c.UserID, db.Snapshot{Seq: body.Seq, Ciphertext: body.Data})
 	switch {
-	case errors.Is(err, store.ErrSnapshotAhead):
+	case errors.Is(err, db.ErrSnapshotAhead):
 		writeError(w, http.StatusConflict, "snapshot_ahead")
-	case errors.Is(err, store.ErrStaleSnapshot):
+	case errors.Is(err, db.ErrStaleSnapshot):
 		writeError(w, http.StatusConflict, "stale_snapshot")
 	case err != nil:
 		internalError(w, r, err)

@@ -4,16 +4,16 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/store"
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 )
 
 type keyBody struct {
 	Data []byte `json:"data"`
 }
 
-func (s *server) getKey(w http.ResponseWriter, r *http.Request, c store.Caller) {
+func (s *server) getKey(w http.ResponseWriter, r *http.Request, c db.Caller) {
 	wrapped, err := s.store.Key(r.Context(), c.UserID)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, db.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "no_key")
 		return
 	}
@@ -24,7 +24,7 @@ func (s *server) getKey(w http.ResponseWriter, r *http.Request, c store.Caller) 
 	writeJSON(w, http.StatusOK, keyBody{Data: wrapped})
 }
 
-func (s *server) putKey(w http.ResponseWriter, r *http.Request, c store.Caller) {
+func (s *server) putKey(w http.ResponseWriter, r *http.Request, c db.Caller) {
 	var body keyBody
 	if !readJSON(w, r, smallBodyBytes, &body) {
 		return
@@ -34,7 +34,7 @@ func (s *server) putKey(w http.ResponseWriter, r *http.Request, c store.Caller) 
 		return
 	}
 	err := s.store.PutKey(r.Context(), c.UserID, body.Data)
-	if errors.Is(err, store.ErrKeyExists) {
+	if errors.Is(err, db.ErrKeyExists) {
 		writeError(w, http.StatusConflict, "key_exists")
 		return
 	}

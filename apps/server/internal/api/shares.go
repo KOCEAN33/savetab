@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/store"
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 )
 
 // The viewer decrypts in the browser with the key from the URL fragment, which never reaches
@@ -28,7 +28,7 @@ type shareBody struct {
 	ExpiresAt int64  `json:"expiresAt"`
 }
 
-func (s *server) createShare(w http.ResponseWriter, r *http.Request, c store.Caller) {
+func (s *server) createShare(w http.ResponseWriter, r *http.Request, c db.Caller) {
 	var body struct {
 		Data []byte `json:"data"`
 	}
@@ -56,7 +56,7 @@ func (s *server) getShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sh, err := s.store.Share(r.Context(), id)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, db.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}
@@ -67,7 +67,7 @@ func (s *server) getShare(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, shareBody{Data: sh.Ciphertext, ExpiresAt: sh.ExpiresAt.UnixMilli()})
 }
 
-func (s *server) deleteShare(w http.ResponseWriter, r *http.Request, c store.Caller) {
+func (s *server) deleteShare(w http.ResponseWriter, r *http.Request, c db.Caller) {
 	id := r.PathValue("id")
 	if !uuidPattern.MatchString(id) {
 		writeError(w, http.StatusNotFound, "not_found")
@@ -75,7 +75,7 @@ func (s *server) deleteShare(w http.ResponseWriter, r *http.Request, c store.Cal
 	}
 	err := s.store.DeleteShare(r.Context(), c.UserID, id)
 	switch {
-	case errors.Is(err, store.ErrNotFound):
+	case errors.Is(err, db.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found")
 	case err != nil:
 		internalError(w, r, err)

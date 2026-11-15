@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/store"
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 )
 
 type pairingBody struct {
@@ -19,7 +19,7 @@ type pairingBody struct {
 	ExpiresAt     int64  `json:"expiresAt"`
 }
 
-func pairingView(p store.Pairing) pairingBody {
+func pairingView(p db.Pairing) pairingBody {
 	return pairingBody{
 		ID: p.ID, NewDeviceID: p.NewDeviceID, NewDeviceName: p.NewDeviceName,
 		Commitment: p.Commitment, OldPublic: p.OldPublic, NewPublic: p.NewPublic, WrappedKey: p.WrappedKey,
@@ -27,7 +27,7 @@ func pairingView(p store.Pairing) pairingBody {
 	}
 }
 
-func (s *server) startPairing(w http.ResponseWriter, r *http.Request, c store.Caller) {
+func (s *server) startPairing(w http.ResponseWriter, r *http.Request, c db.Caller) {
 	var body struct {
 		Commitment []byte `json:"commitment"`
 	}
@@ -46,7 +46,7 @@ func (s *server) startPairing(w http.ResponseWriter, r *http.Request, c store.Ca
 	writeJSON(w, http.StatusCreated, pairingView(p))
 }
 
-func (s *server) listPairings(w http.ResponseWriter, r *http.Request, c store.Caller) {
+func (s *server) listPairings(w http.ResponseWriter, r *http.Request, c db.Caller) {
 	stored, err := s.store.Pairings(r.Context(), c.UserID)
 	if err != nil {
 		internalError(w, r, err)
@@ -59,14 +59,14 @@ func (s *server) listPairings(w http.ResponseWriter, r *http.Request, c store.Ca
 	writeJSON(w, http.StatusOK, map[string]any{"pairings": pairings})
 }
 
-func (s *server) getPairing(w http.ResponseWriter, r *http.Request, c store.Caller) {
+func (s *server) getPairing(w http.ResponseWriter, r *http.Request, c db.Caller) {
 	id := r.PathValue("id")
 	if !uuidPattern.MatchString(id) {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}
 	p, err := s.store.Pairing(r.Context(), c.UserID, id)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, db.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}
@@ -77,7 +77,7 @@ func (s *server) getPairing(w http.ResponseWriter, r *http.Request, c store.Call
 	writeJSON(w, http.StatusOK, pairingView(p))
 }
 
-func (s *server) putPairing(w http.ResponseWriter, r *http.Request, c store.Caller) {
+func (s *server) putPairing(w http.ResponseWriter, r *http.Request, c db.Caller) {
 	id := r.PathValue("id")
 	if !uuidPattern.MatchString(id) {
 		writeError(w, http.StatusNotFound, "not_found")
@@ -91,11 +91,11 @@ func (s *server) putPairing(w http.ResponseWriter, r *http.Request, c store.Call
 	if !readJSON(w, r, smallBodyBytes, &body) {
 		return
 	}
-	var message store.PairingMessage
+	var message db.PairingMessage
 	var value []byte
 	sent := 0
-	for m, v := range map[store.PairingMessage][]byte{
-		store.OldPublic: body.OldPublic, store.NewPublic: body.NewPublic, store.WrappedKey: body.WrappedKey,
+	for m, v := range map[db.PairingMessage][]byte{
+		db.OldPublic: body.OldPublic, db.NewPublic: body.NewPublic, db.WrappedKey: body.WrappedKey,
 	} {
 		if len(v) > 0 {
 			message, value = m, v
@@ -108,11 +108,11 @@ func (s *server) putPairing(w http.ResponseWriter, r *http.Request, c store.Call
 	}
 	err := s.store.SetPairingMessage(r.Context(), c, id, message, value)
 	switch {
-	case errors.Is(err, store.ErrNotFound):
+	case errors.Is(err, db.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found")
-	case errors.Is(err, store.ErrForbidden):
+	case errors.Is(err, db.ErrForbidden):
 		writeError(w, http.StatusForbidden, "forbidden")
-	case errors.Is(err, store.ErrPairingConflict):
+	case errors.Is(err, db.ErrPairingConflict):
 		writeError(w, http.StatusConflict, "pairing_conflict")
 	case err != nil:
 		internalError(w, r, err)

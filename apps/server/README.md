@@ -30,7 +30,7 @@ Tests run against a real Postgres. Each run creates a database `savetab_test_<ra
 
 ## Server for the extension's e2e tests
 
-`scripts/e2e-server.sh` builds and runs `cmd/savetab-e2e`: the API on a free local port, on a `savetab_test_<random>` database of its own, with an OIDC issuer it runs itself (`internal/fakeoidc`) that logs every visitor in as one user. It prints its URL as the first line of stdout and drops the database on SIGTERM. `AUTH_REDIRECT_URIS` sets the redirect URIs a login may end at. It finds the database the way `scripts/test.sh` does, through `scripts/test-db.sh`.
+`scripts/e2e-server.sh` builds and runs `cmd/savetab-e2e`: the API on a free local port, on a `savetab_test_<random>` database of its own, with an OIDC issuer it runs itself (`internal/platform/fakeoidc`) that logs every visitor in as one user. It prints its URL as the first line of stdout and drops the database on SIGTERM. `AUTH_REDIRECT_URIS` sets the redirect URIs a login may end at. It finds the database the way `scripts/test.sh` does, through `scripts/test-db.sh`.
 
 ## Deployment
 

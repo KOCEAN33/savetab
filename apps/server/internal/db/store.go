@@ -1,5 +1,5 @@
-// Package store is the server's Postgres access.
-package store
+// Package db is the server's Postgres access.
+package db
 
 import (
 	"context"

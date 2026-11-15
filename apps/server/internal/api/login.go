@@ -17,7 +17,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/store"
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 )
 
 const (
@@ -94,7 +94,7 @@ func (s *server) authStart(w http.ResponseWriter, r *http.Request) {
 		internalError(w, r, err)
 		return
 	}
-	login := store.Login{
+	login := db.Login{
 		RedirectURI: redirectURI, ClientState: state, CodeChallenge: challenge,
 		Nonce: base64.RawURLEncoding.EncodeToString(nonce), IssuerVerifier: oauth2.GenerateVerifier(),
 	}
@@ -107,7 +107,7 @@ func (s *server) authStart(w http.ResponseWriter, r *http.Request) {
 }
 
 // identify trades the issuer's code for an ID token and returns who it names.
-func (s *server) identify(ctx context.Context, login store.Login, code string) (issuer, subject string, err error) {
+func (s *server) identify(ctx context.Context, login db.Login, code string) (issuer, subject string, err error) {
 	token, err := s.login.oauth.Exchange(ctx, code, oauth2.VerifierOption(login.IssuerVerifier))
 	if err != nil {
 		return "", "", err
@@ -130,7 +130,7 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	state := q.Get("state")
 	login, err := s.store.PendingLogin(r.Context(), state)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, db.ErrNotFound) {
 		writeError(w, http.StatusBadRequest, "invalid_state")
 		return
 	}
@@ -169,9 +169,9 @@ type tokensBody struct {
 	DeviceID     string `json:"deviceId"`
 }
 
-func tokensView(t store.Tokens) tokensBody {
+func tokensView(t db.Tokens) tokensBody {
 	return tokensBody{
-		AccessToken: t.Access, RefreshToken: t.Refresh, ExpiresIn: int(store.AccessTTL.Seconds()),
+		AccessToken: t.Access, RefreshToken: t.Refresh, ExpiresIn: int(db.AccessTTL.Seconds()),
 		UserID: t.UserID, DeviceID: t.DeviceID,
 	}
 }
@@ -191,7 +191,7 @@ func (s *server) authToken(w http.ResponseWriter, r *http.Request) {
 	}
 	challenge := sha256.Sum256([]byte(body.CodeVerifier))
 	tokens, err := s.store.RedeemLogin(r.Context(), body.Code, base64.RawURLEncoding.EncodeToString(challenge[:]), body.DeviceName)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, db.ErrNotFound) {
 		writeError(w, http.StatusBadRequest, "invalid_grant")
 		return
 	}
@@ -210,7 +210,7 @@ func (s *server) authRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tokens, err := s.store.RefreshSession(r.Context(), body.RefreshToken)
-	if errors.Is(err, store.ErrNoSession) {
+	if errors.Is(err, db.ErrNoSession) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}

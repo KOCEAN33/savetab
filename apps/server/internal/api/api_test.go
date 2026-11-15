@@ -15,14 +15,14 @@ import (
 	"time"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
-	"github.com/KOCEAN33/savetab/apps/server/internal/fakeoidc"
-	"github.com/KOCEAN33/savetab/apps/server/internal/store"
-	"github.com/KOCEAN33/savetab/apps/server/internal/testdb"
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/testdb"
 	"github.com/jackc/pgx/v5"
 )
 
 var (
-	db    *store.Store
+	store *db.Store
 	srv   *httptest.Server
 	dbURL string
 )
@@ -40,12 +40,12 @@ func run(m *testing.M) int {
 	defer stop()
 	dbURL = url
 	ctx := context.Background()
-	if db, err = store.Open(ctx, url); err != nil {
+	if store, err = db.Open(ctx, url); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	defer db.Close()
-	if err := db.Migrate(ctx); err != nil {
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
@@ -63,7 +63,7 @@ func run(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	handler = api.New(db, login)
+	handler = api.New(store, login)
 	return m.Run()
 }
 
@@ -317,7 +317,7 @@ func TestRequestsWithoutAValidAccessTokenGet401(t *testing.T) {
 	expired := expiredAccessToken(t, d.id)
 	refresh := signedIn.RefreshToken
 	revoked := newDevice(t, user)
-	if err := db.RevokeDevice(ctx, user.id, revoked.id); err != nil {
+	if err := store.RevokeDevice(ctx, user.id, revoked.id); err != nil {
 		t.Fatal(err)
 	}
 

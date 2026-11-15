@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/fakeoidc"
-	"github.com/KOCEAN33/savetab/apps/server/internal/store"
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
 )
 
 const (
@@ -181,7 +181,7 @@ func TestUsedRefreshTokenIsRejected(t *testing.T) {
 
 func TestRefreshTokenOfARevokedDeviceIsRejected(t *testing.T) {
 	got := logIn(t, "erin-"+randomString(t), "desktop")
-	if err := db.RevokeDevice(context.Background(), got.UserID, got.DeviceID); err != nil {
+	if err := store.RevokeDevice(context.Background(), got.UserID, got.DeviceID); err != nil {
 		t.Fatal(err)
 	}
 	expect(t, "refresh", refresh(t, got.RefreshToken), http.StatusUnauthorized, "unauthorized")
@@ -257,7 +257,7 @@ func TestCallbackRefusesAStateItDidNotIssue(t *testing.T) {
 	}
 	expect(t, "unknown state", browse(t, callback("nope")), http.StatusBadRequest, "invalid_state")
 
-	expired, err := db.CreateLogin(context.Background(), store.Login{
+	expired, err := store.CreateLogin(context.Background(), db.Login{
 		RedirectURI: extensionRedirect, ClientState: "s", CodeChallenge: s256("v"), Nonce: "n", IssuerVerifier: "iv",
 	}, -time.Second)
 	if err != nil {

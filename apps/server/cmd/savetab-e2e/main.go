@@ -18,9 +18,9 @@ import (
 	"time"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
-	"github.com/KOCEAN33/savetab/apps/server/internal/fakeoidc"
-	"github.com/KOCEAN33/savetab/apps/server/internal/store"
-	"github.com/KOCEAN33/savetab/apps/server/internal/testdb"
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/testdb"
 )
 
 func main() {
@@ -39,12 +39,12 @@ func run() error {
 		return err
 	}
 	defer drop()
-	db, err := store.Open(ctx, dbURL)
+	store, err := db.Open(ctx, dbURL)
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	if err := db.Migrate(ctx); err != nil {
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
 		return err
 	}
 
@@ -65,7 +65,7 @@ func run() error {
 		return err
 	}
 
-	srv := &http.Server{Handler: api.New(db, login), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: api.New(store, login), ReadHeaderTimeout: 10 * time.Second}
 	failed := make(chan error, 1)
 	go func() { failed <- srv.Serve(listener) }()
 	fmt.Println(url)

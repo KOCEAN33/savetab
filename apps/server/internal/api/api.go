@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/store"
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 )
 
 const (
@@ -29,11 +29,11 @@ const (
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 type server struct {
-	store *store.Store
+	store *db.Store
 	login *Login
 }
 
-func New(s *store.Store, login *Login) http.Handler {
+func New(s *db.Store, login *Login) http.Handler {
 	srv := &server{store: s, login: login}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", srv.health)
@@ -114,7 +114,7 @@ func (s *server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-func (s *server) authed(next func(http.ResponseWriter, *http.Request, store.Caller)) http.HandlerFunc {
+func (s *server) authed(next func(http.ResponseWriter, *http.Request, db.Caller)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if !ok || token == "" {
@@ -122,7 +122,7 @@ func (s *server) authed(next func(http.ResponseWriter, *http.Request, store.Call
 			return
 		}
 		caller, err := s.store.Authenticate(r.Context(), token)
-		if errors.Is(err, store.ErrNoSession) {
+		if errors.Is(err, db.ErrNoSession) {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
@@ -139,7 +139,7 @@ type pushedOp struct {
 	Data []byte `json:"data"`
 }
 
-func (s *server) pushOps(w http.ResponseWriter, r *http.Request, c store.Caller) {
+func (s *server) pushOps(w http.ResponseWriter, r *http.Request, c db.Caller) {
 	var body struct {
 		Ops []pushedOp `json:"ops"`
 	}
@@ -150,13 +150,13 @@ func (s *server) pushOps(w http.ResponseWriter, r *http.Request, c store.Caller)
 		writeError(w, http.StatusBadRequest, "too_many_ops")
 		return
 	}
-	ops := make([]store.NewOp, len(body.Ops))
+	ops := make([]db.NewOp, len(body.Ops))
 	for i, op := range body.Ops {
 		if !uuidPattern.MatchString(op.ID) || len(op.Data) == 0 {
 			writeError(w, http.StatusBadRequest, "bad_request")
 			return
 		}
-		ops[i] = store.NewOp{ID: op.ID, Ciphertext: op.Data}
+		ops[i] = db.NewOp{ID: op.ID, Ciphertext: op.Data}
 	}
 	if err := s.store.AppendOps(r.Context(), c, ops); err != nil {
 		internalError(w, r, err)
@@ -173,7 +173,7 @@ type pulledOp struct {
 	ReceivedAt int64  `json:"receivedAt"`
 }
 
-func (s *server) pullOps(w http.ResponseWriter, r *http.Request, c store.Caller) {
+func (s *server) pullOps(w http.ResponseWriter, r *http.Request, c db.Caller) {
 	q := r.URL.Query()
 	after, limit := int64(0), maxOpsPerRequest
 	var err error
@@ -190,7 +190,7 @@ func (s *server) pullOps(w http.ResponseWriter, r *http.Request, c store.Caller)
 		}
 	}
 	stored, more, err := s.store.OpsAfter(r.Context(), c.UserID, after, limit)
-	if errors.Is(err, store.ErrSnapshotRequired) {
+	if errors.Is(err, db.ErrSnapshotRequired) {
 		writeError(w, http.StatusConflict, "snapshot_required")
 		return
 	}

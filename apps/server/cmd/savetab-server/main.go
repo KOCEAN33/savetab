@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
-	"github.com/KOCEAN33/savetab/apps/server/internal/store"
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 )
 
 func main() {
@@ -47,12 +47,12 @@ func run() error {
 		return errors.New("OIDC_ISSUER, OIDC_CLIENT_ID, PUBLIC_URL, and AUTH_REDIRECT_URIS must be set")
 	}
 
-	db, err := store.Open(ctx, url)
+	store, err := db.Open(ctx, url)
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	if err := db.Migrate(ctx); err != nil {
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
 		return err
 	}
 
@@ -61,7 +61,7 @@ func run() error {
 		return fmt.Errorf("OIDC issuer %s: %w", cfg.Issuer, err)
 	}
 
-	srv := &http.Server{Addr: addr, Handler: api.New(db, login), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Addr: addr, Handler: api.New(store, login), ReadHeaderTimeout: 10 * time.Second}
 	failed := make(chan error, 1)
 	go func() { failed <- srv.ListenAndServe() }()
 	slog.Info("listening", "addr", addr)
