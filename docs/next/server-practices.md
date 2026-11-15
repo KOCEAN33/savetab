@@ -6,7 +6,7 @@
 
 ## Start
 
-Step 8 of `docs/plans/server-practices.md`, from its third entity: pairing, then login and session and device, then share. Steps 1 to 7 and the ops, key, and snapshot commits of step 8 are committed.
+Step 8 of `docs/plans/server-practices.md`, from its fourth entity: login and session and device, then share. Steps 1 to 7 and the ops, key and snapshot, and pairing commits of step 8 are committed.
 
 The ops commit set the form the other entities follow, with `internal/bus/ops.go` and `internal/db/ops.go` as the pattern files:
 
