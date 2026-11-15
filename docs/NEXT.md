@@ -1,4 +1,4 @@
 # Next
 
-- Server practices refactor: steps 1-16 committed. Start: step 17 of `docs/plans/server-practices.md`, the Add release of `/v2`. Detail: `docs/next/server-practices.md`
+- Server practices refactor: steps 1-16 committed. Start: the Add release of step 17 of `docs/plans/server-practices.md`, from the committed `apps/server/api/openapi.yaml`. Detail: `docs/next/server-practices.md`
 - First real login on the deployed server: built and deployed, no login run. Start: sign in from an installed extension at `https://savetab.lab.hiriri.com`, which needs the owner at the browser. Detail: `docs/next/first-login.md`

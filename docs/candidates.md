@@ -81,6 +81,7 @@ Structure:
 - `sortGroups` reissues keys over live siblings only, so a trashed sibling can share a key with a live one. `orderKeys` re-keys the tie when something is inserted there.
 - `mutations.ts` holds capture policy, tree edits, and trash. Its `max-lines` limit in `.oxlintrc.json` is 600 until it splits into `capture.ts`, `tree.ts`, `trash.ts`.
 - A backup taken before database version 3 holds the excluded hosts as one `excludedDomains` array. `restoreSnapshot` drops that field, so a restore from such a backup loses the excluded hosts. The weekly backup replaces it within 7 days.
+- `e2e-firefox/pages.spec.ts` "imports \"URL | Title\" text and exports it back" fails about one run in two with `StaleElementReferenceError`. It uses no server.
 
 Lint rules not turned on:
 

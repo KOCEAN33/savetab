@@ -6,7 +6,14 @@
 
 ## Start
 
-Step 17 of `docs/plans/server-practices.md`, the Add release of `/v2`, since every later step follows the plan's order. Steps 1 to 16 are committed.
+The Add release of step 17 of `docs/plans/server-practices.md`, since every later step follows the plan's order. Steps 1 to 16 are committed, and so is the contract `apps/server/api/openapi.yaml`, which kin-openapi's `validate` accepts. Nothing reads it yet. What remains of Add, in the plan's words: generate the gin strict server with oapi-codegen, write the handlers over the same use cases, add the validation and size-cap middleware, the 404, 405, and 413 problems, the route-against-spec test, response validation in handler tests, Spectral, and `oasdiff`. The handler tests are written from the spec by an author who has not read the handlers, so that author starts as soon as the generated types exist.
+
+What the contract asks of the layers below, none of it built:
+
+- `bus.StartPairing` and `bus.CreateShare` take the client's `id`, and an id in use is `Conflict`.
+- `bus.Devices` and `bus.Pairings` page by keyset behind `page_size` and `page_token`.
+- A size-cap middleware reads each operation's `x-body-limit-bytes`, and a page size above `x-page-size-maximum` is lowered to it.
+- A handler answers a time as RFC 3339, and a spent login code as `Invalid`.
 
 The layers the remaining steps build on, with `internal/bus/ops.go` and `internal/db/ops.go` as the pattern files:
 
@@ -29,7 +36,8 @@ Orders from the owner that bind later steps:
 - Every finding of the review gets fixed, architecture phase first, in the plan's step order.
 - The steps run one after another without a pause for approval. Work stops only for a choice only the owner can make, and a session that runs short of context moves to a new one by itself.
 - The image tag stays the commit SHA until step 19 moves it to the version. Step 19 is not pulled forward.
-- `/v2` takes the practice's form, and `/v1` goes once the extension has moved.
+- `/v2` takes the practice's form, and `/v1` goes once the extension has moved. The owner's rulings on the contract are in the plan's Decisions section.
+- A point the plan and the practice pages both leave open is asked of the owner, never settled in the spec.
 - The server and the extension share one version and one `v<version>` tag per merge.
 - The chart is `charts/savetab/` in this repository. Steps 11 and 19 change it in their own commit. A deploy moves `chartRevision` and `image.tag` together in `KOCEAN33/homelab-workloads` and is the owner's.
 
