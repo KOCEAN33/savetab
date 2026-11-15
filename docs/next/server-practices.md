@@ -6,14 +6,14 @@
 
 ## Start
 
-Step 8 of `docs/plans/server-practices.md`, from its fourth entity: login and session and device, then share. Steps 1 to 7 and the ops, key and snapshot, and pairing commits of step 8 are committed.
+Step 8 of `docs/plans/server-practices.md`, from its last entity: share. Steps 1 to 7 and the ops, key and snapshot, pairing, and login and session and device commits of step 8 are committed.
 
 The ops commit set the form the other entities follow, with `internal/bus/ops.go` and `internal/db/ops.go` as the pattern files:
 
 - `db` exports `Queries` over a `DBTX` (`internal/db/queries.go`): `db.New(tx)` inside a transaction, `store.Queries()` outside one. An entity's `Store` methods become `Queries` methods holding one statement each, every error through `MapError`.
 - A `bus` use case opens the transaction with `store.InTx`, holds the rule, and sets the kind of a broken rule with `errs.New`. `bus` declares the types `api` uses and converts `db` rows to them.
 - `InTx` maps its own error, so a begin or commit failure also carries a kind.
-- Transitional until the session commit: `api.New` still takes `*db.Store` and builds the `bus` itself, `authed` still hands handlers a `db.Caller`, and a moved handler converts it with `bus.Caller(c)`. The session commit moves `Authenticate` and `Caller` to `bus`. The step is done when no file in `internal/api` imports `internal/db` or pgx. Every `db` function now returns a kinded error from `internal/platform/errs`, and transactions open through `Store.InTx`, which retries 40001 and 40P01. Every later step leans on the 39 handler tests in `internal/api` as its pin. `pnpm check` needs golangci-lint v2 on the PATH.
+- Transitional until the share commit: `api.New` still takes `*db.Store` and builds the `bus` itself, and `/healthz` pings the store. The share commit ends both. The step is done when no file in `internal/api` imports `internal/db` or pgx. Every `db` function now returns a kinded error from `internal/platform/errs`, and transactions open through `Store.InTx`, which retries 40001 and 40P01. Every later step leans on the 39 handler tests in `internal/api` as its pin. `pnpm check` needs golangci-lint v2 on the PATH.
 
 Orders from the owner that bind later steps:
 
