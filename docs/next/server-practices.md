@@ -6,7 +6,7 @@
 
 ## Start
 
-Step 3 of `docs/plans/server-practices.md`: the test-only exports `CreateUser`, `CreateDevice`, and `IssueSession` leave `store`. Steps 1 and 2 are committed. Every later step leans on the 39 handler tests as its pin.
+Step 8 of `docs/plans/server-practices.md`: `internal/bus` takes the use cases, one commit per entity in the order the plan lists. Steps 1 to 7 are committed. Every `db` function now returns a kinded error from `internal/platform/errs`, and transactions open through `Store.InTx`, which retries 40001 and 40P01. Every later step leans on the 39 handler tests in `internal/api` as its pin. `pnpm check` needs golangci-lint v2 on the PATH.
 
 Orders from the owner that bind later steps:
 
@@ -17,4 +17,4 @@ Orders from the owner that bind later steps:
 
 ## Next steps
 
-Steps 4 to 19 of the plan, in order, each with the done-when the plan gives.
+Steps 9 to 19 of the plan, in order, each with the done-when the plan gives.
