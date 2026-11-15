@@ -15,15 +15,16 @@ const txAttempts = 3
 
 // InTx runs fn in one transaction, committed when fn returns nil and rolled back otherwise. A
 // serialization failure or a deadlock reruns fn in a new transaction, so fn reads every value
-// it decides on inside the transaction and changes no state outside it.
+// it decides on inside the transaction and changes no state outside it. The error it returns
+// carries a kind.
 func (s *Store) InTx(ctx context.Context, opts pgx.TxOptions, fn func(tx pgx.Tx) error) error {
 	var err error
 	for range txAttempts {
 		if err = pgx.BeginTxFunc(ctx, s.pool, opts, fn); !retryable(err) {
-			return err
+			break
 		}
 	}
-	return err
+	return MapError(ctx, "transaction", err)
 }
 
 func retryable(err error) bool {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
@@ -29,12 +30,13 @@ const (
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 type server struct {
+	bus   *bus.Bus
 	store *db.Store
 	login *Login
 }
 
 func New(s *db.Store, login *Login) http.Handler {
-	srv := &server{store: s, login: login}
+	srv := &server{bus: bus.New(s), store: s, login: login}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", srv.health)
 	mux.HandleFunc("GET /v1/auth/start", srv.authStart)
@@ -140,6 +142,7 @@ type pushedOp struct {
 }
 
 func (s *server) pushOps(w http.ResponseWriter, r *http.Request, c db.Caller) {
+	caller := bus.Caller(c)
 	var body struct {
 		Ops []pushedOp `json:"ops"`
 	}
@@ -150,15 +153,15 @@ func (s *server) pushOps(w http.ResponseWriter, r *http.Request, c db.Caller) {
 		writeError(w, http.StatusBadRequest, "too_many_ops")
 		return
 	}
-	ops := make([]db.NewOp, len(body.Ops))
+	ops := make([]bus.NewOp, len(body.Ops))
 	for i, op := range body.Ops {
 		if !uuidPattern.MatchString(op.ID) || len(op.Data) == 0 {
 			writeError(w, http.StatusBadRequest, "bad_request")
 			return
 		}
-		ops[i] = db.NewOp{ID: op.ID, Ciphertext: op.Data}
+		ops[i] = bus.NewOp{ID: op.ID, Ciphertext: op.Data}
 	}
-	if err := s.store.AppendOps(r.Context(), c, ops); err != nil {
+	if err := s.bus.PushOps(r.Context(), caller, ops); err != nil {
 		internalError(w, r, err)
 		return
 	}
@@ -189,7 +192,7 @@ func (s *server) pullOps(w http.ResponseWriter, r *http.Request, c db.Caller) {
 			return
 		}
 	}
-	stored, more, err := s.store.OpsAfter(r.Context(), c.UserID, after, limit)
+	stored, more, err := s.bus.PullOps(r.Context(), c.UserID, after, limit)
 	if errs.KindOf(err) == errs.Conflict {
 		writeError(w, http.StatusConflict, "snapshot_required")
 		return
