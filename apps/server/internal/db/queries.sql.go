@@ -102,6 +102,24 @@ func (q *Queries) DeleteOpsThrough(ctx context.Context, arg DeleteOpsThroughPara
 	return err
 }
 
+const deleteShare = `-- name: DeleteShare :execrows
+DELETE FROM shares WHERE id = $1::uuid AND user_id = $2::uuid AND expires_at > now()
+`
+
+type DeleteShareParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+// Deletes one of the user's unexpired shares.
+func (q *Queries) DeleteShare(ctx context.Context, arg DeleteShareParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteShare, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const devices = `-- name: Devices :many
 SELECT id, name, created_at
 FROM devices
@@ -303,6 +321,35 @@ func (q *Queries) InsertSessions(ctx context.Context, arg InsertSessionsParams) 
 		arg.RefreshTTLSeconds,
 	)
 	return err
+}
+
+const insertShare = `-- name: InsertShare :one
+WITH gone AS (DELETE FROM shares WHERE expires_at <= now())
+
+INSERT INTO shares (user_id, ciphertext, expires_at)
+VALUES ($1::uuid, $2::bytea, now() + make_interval(secs => $3::float8))
+RETURNING id, ciphertext, expires_at
+`
+
+type InsertShareParams struct {
+	UserID     uuid.UUID
+	Ciphertext []byte
+	TTLSeconds float64
+}
+
+type InsertShareRow struct {
+	ID         uuid.UUID
+	Ciphertext []byte
+	ExpiresAt  time.Time
+}
+
+// Stores a share of the user's. It also clears every user's expired shares, so none outlives
+// the next share made on the server.
+func (q *Queries) InsertShare(ctx context.Context, arg InsertShareParams) (InsertShareRow, error) {
+	row := q.db.QueryRow(ctx, insertShare, arg.UserID, arg.Ciphertext, arg.TTLSeconds)
+	var i InsertShareRow
+	err := row.Scan(&i.ID, &i.Ciphertext, &i.ExpiresAt)
+	return i, err
 }
 
 const insertUser = `-- name: InsertUser :one
@@ -612,6 +659,24 @@ type SetNextSeqParams struct {
 func (q *Queries) SetNextSeq(ctx context.Context, arg SetNextSeqParams) error {
 	_, err := q.db.Exec(ctx, setNextSeq, arg.NextSeq, arg.UserID)
 	return err
+}
+
+const share = `-- name: Share :one
+SELECT id, ciphertext, expires_at FROM shares WHERE id = $1::uuid AND expires_at > now()
+`
+
+type ShareRow struct {
+	ID         uuid.UUID
+	Ciphertext []byte
+	ExpiresAt  time.Time
+}
+
+// Any user's share, unless it expired.
+func (q *Queries) Share(ctx context.Context, id uuid.UUID) (ShareRow, error) {
+	row := q.db.QueryRow(ctx, share, id)
+	var i ShareRow
+	err := row.Scan(&i.ID, &i.Ciphertext, &i.ExpiresAt)
+	return i, err
 }
 
 const snapshot = `-- name: Snapshot :one

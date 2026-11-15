@@ -179,3 +179,20 @@ SELECT
 FROM pairings
 WHERE id = @id::uuid AND user_id = @user_id::uuid AND expires_at > now()
 FOR UPDATE;
+
+-- name: InsertShare :one
+-- Stores a share of the user's. It also clears every user's expired shares, so none outlives
+-- the next share made on the server.
+WITH gone AS (DELETE FROM shares WHERE expires_at <= now())
+
+INSERT INTO shares (user_id, ciphertext, expires_at)
+VALUES (@user_id::uuid, @ciphertext::bytea, now() + make_interval(secs => @ttl_seconds::float8))
+RETURNING id, ciphertext, expires_at;
+
+-- name: Share :one
+-- Any user's share, unless it expired.
+SELECT id, ciphertext, expires_at FROM shares WHERE id = @id::uuid AND expires_at > now();
+
+-- name: DeleteShare :execrows
+-- Deletes one of the user's unexpired shares.
+DELETE FROM shares WHERE id = @id::uuid AND user_id = @user_id::uuid AND expires_at > now();

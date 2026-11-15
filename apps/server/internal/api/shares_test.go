@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -83,7 +84,7 @@ func TestShareIsReadBackWithoutAToken(t *testing.T) {
 func TestExpiredShareAnswers404AndTheNextPostDeletesIt(t *testing.T) {
 	user := newUser(t)
 	owner := newDevice(t, user)
-	expired, err := store.Queries().InsertShare(context.Background(), uuid.MustParse(user.id), []byte("x"), -time.Second)
+	expired, err := store.Queries().InsertShare(context.Background(), db.InsertShareParams{UserID: uuid.MustParse(user.id), Ciphertext: []byte("x"), TTLSeconds: -1})
 	if err != nil {
 		t.Fatal(err)
 	}
