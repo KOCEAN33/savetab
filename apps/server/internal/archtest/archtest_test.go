@@ -29,9 +29,9 @@ var (
 	layers      = []string{"api", "job", "cli", "bus", "db"}
 	meaningless = []string{"util", "utils", "common", "misc", "helpers", "shared"}
 
-	// databaseCallFiles call the driver outside generated code. store.go runs the migrations
-	// until step 15, and testdb goes at step 18.
-	databaseCallFiles = []string{"internal/db/store.go", "internal/platform/testdb/testdb.go"}
+	// databaseCallFiles call the driver outside generated code. testdb goes at step 18 of
+	// docs/plans/server-practices.md.
+	databaseCallFiles = []string{"internal/platform/testdb/testdb.go"}
 
 	transactionFile = "internal/db/tx.go"
 
