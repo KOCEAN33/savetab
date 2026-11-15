@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 	"github.com/google/uuid"
 )
@@ -10,11 +11,11 @@ import (
 // PutKey stores the user's wrapped data key. A user's key is set once: a second device that
 // replaced it would cut every other device off from the log.
 func (b *Bus) PutKey(ctx context.Context, userID uuid.UUID, wrapped []byte) error {
-	inserted, err := b.store.Queries().InsertKey(ctx, userID, wrapped)
+	inserted, err := b.store.Queries().InsertKey(ctx, db.InsertKeyParams{UserID: userID, WrappedKey: wrapped})
 	if err != nil {
 		return err
 	}
-	if !inserted {
+	if inserted == 0 {
 		return errs.New(errs.Conflict, "put key", "the user already has a wrapped key")
 	}
 	return nil

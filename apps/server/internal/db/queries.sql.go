@@ -62,6 +62,25 @@ func (q *Queries) InsertDevice(ctx context.Context, arg InsertDeviceParams) (uui
 	return id, err
 }
 
+const insertKey = `-- name: InsertKey :execrows
+INSERT INTO key_wraps (user_id, wrapped_key) VALUES ($1::uuid, $2::bytea)
+ON CONFLICT (user_id) DO NOTHING
+`
+
+type InsertKeyParams struct {
+	UserID     uuid.UUID
+	WrappedKey []byte
+}
+
+// Stores the user's wrapped data key unless the user has one.
+func (q *Queries) InsertKey(ctx context.Context, arg InsertKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertKey, arg.UserID, arg.WrappedKey)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const insertOps = `-- name: InsertOps :execrows
 WITH fresh AS (
   SELECT i.op_id, c.ciphertext, row_number() OVER (ORDER BY i.ord) AS n
@@ -97,6 +116,17 @@ func (q *Queries) InsertOps(ctx context.Context, arg InsertOpsParams) (int64, er
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const key = `-- name: Key :one
+SELECT wrapped_key FROM key_wraps WHERE user_id = $1::uuid
+`
+
+func (q *Queries) Key(ctx context.Context, userID uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, key, userID)
+	var wrapped_key []byte
+	err := row.Scan(&wrapped_key)
+	return wrapped_key, err
 }
 
 const lockNextSeq = `-- name: LockNextSeq :one

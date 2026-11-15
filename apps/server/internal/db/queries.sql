@@ -45,3 +45,11 @@ ORDER BY created_at, id;
 -- Revokes one of the user's devices that is not revoked yet, which ends its sessions.
 UPDATE devices SET revoked_at = now()
 WHERE id = @device_id::uuid AND user_id = @user_id::uuid AND revoked_at IS NULL;
+
+-- name: InsertKey :execrows
+-- Stores the user's wrapped data key unless the user has one.
+INSERT INTO key_wraps (user_id, wrapped_key) VALUES (@user_id::uuid, @wrapped_key::bytea)
+ON CONFLICT (user_id) DO NOTHING;
+
+-- name: Key :one
+SELECT wrapped_key FROM key_wraps WHERE user_id = @user_id::uuid;
