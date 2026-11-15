@@ -8,12 +8,13 @@ Goal: `apps/server` meets the vault pages under `practices/backend/` and `practi
 - The server and the extension share one version. Every push to `main` runs python-semantic-release, which makes the tag `v<version>`, stamps `apps/extension/package.json`, publishes the extension assets, and pushes the image under that version.
 - The server keeps migrating at start, with its migrations embedded in the binary, so they stay under `internal/db/migrations/`. The layout page puts them in `db/migrations/` at the module root, which `go:embed` cannot reach from `internal/db`.
 - The server is in the small form: one package per layer.
+- `cmd/savetab-e2e` stays as a second main package: a thin caller that prepares the test database and the fake issuer, then calls `wire.Run`. The archtest allow-list names it.
+- `GET /v2/ops` keeps `after` as its cursor in place of `page_token`, since the device stores that seq. A repeated op id in `POST /v2/ops` is skipped, not answered 409, so a retried push succeeds. Both are recorded exceptions to the practice rules.
+- The `/v2` paths are the ones step 17 lists.
 
 ## Waiting on the owner
 
-- Whether `cmd/savetab-e2e` stays as a second main package. The layout page allows one. Step 12 makes it a thin caller of `wire` either way. Removing it needs the fake issuer to run from somewhere else.
-- The `/v2` choices in step 14 that depart from a practice rule.
-- The chart in `KOCEAN33/homelab-workloads` changes with steps 9, 11, and 18. Each of those steps names the change, and its form follows how the neighbouring charts in that repo already do the same thing. The deploy is the owner's.
+- The chart in `KOCEAN33/homelab-workloads` changes with steps 9, 11, and 19. Each of those steps names the change, and its form follows how the neighbouring charts in that repo already do the same thing. The deploy is the owner's.
 
 ## Target tree
 
@@ -51,7 +52,7 @@ Each step is one commit that leaves `pnpm test`, `pnpm check`, and `pnpm lint` g
 11. **Lifecycle.** `/livez` and `/readyz` per `practices/backend/service-lifecycle.md`, with its gate tests. `/healthz` stays until step 17. Chart change: probes on the new paths, `preStop` sleep, grace period.
 12. **Composition root.** Add `internal/wire` with `Run`, which owns start order and the shutdown sequence of `practices/backend/go/service-lifecycle.md`, with the slow-request shutdown test. `cmd/savetab-server/main.go` calls it and exits 1 on its error. `cmd/savetab-e2e` prepares the test database and the fake issuer, then calls the same `Run` with a listener on a free port. Add the Semgrep rule against `ListenAndServe`.
 13. **Canonical log line.** Add `internal/platform/logline`: the field set on the context, the key constants, and the attribute builders. One middleware, registered first, writes the request line from a `defer` that also recovers a panic. The handler is `slog.NewJSONHandler` on stdout, or `tint` by a config value. `version` and `commit` are link-time variables set on the root logger. The process writes a start line with the effective config and a stop line with the reason. A pgx tracer fills `db.query_count` and `db.duration_ms`. A `/v1` handler sets `http.route` from `r.Pattern`. The eight existing `slog` calls go: an error is a field on the line. Tests: every gate of `practices/backend/logging-design.md`. Add the Semgrep rules on literal log keys and on log-then-return.
-14. **Architecture gates.** Add `internal/archtest` and the depguard rules of `practices/backend/go/project-layout.md`, module path `github.com/KOCEAN33/savetab/apps/server`. The `api` rule and the Database calls check allow the `/v1` files by name until step 17. Done when `go test ./internal/archtest` and `golangci-lint run` pass.
+14. **Architecture gates.** Add `internal/archtest` and the depguard rules of `practices/backend/go/project-layout.md`, module path `github.com/KOCEAN33/savetab/apps/server`. The allow-list names `cmd/savetab-e2e` as the second main package. The `api` rule and the Database calls check allow the `/v1` files by name until step 17. Done when `go test ./internal/archtest` and `golangci-lint run` pass.
 
 ### Phase 2: data access
 
@@ -65,9 +66,9 @@ Each step is one commit that leaves `pnpm test`, `pnpm check`, and `pnpm lint` g
     - Move: `apps/extension/lib/sync.ts`, `account.ts`, `share.ts`, `apps/server/internal/api/viewer/share.js`, and the e2e helpers `e2e/sync-server.ts` and `e2e-firefox/sync-fixtures.ts` call `/v2`.
     - Remove: the `/v1` handlers, their tests, `/healthz`, and the allow-list entries of step 14, once the deployed chart probes `/readyz`. `docs/plans/onetab-parity.md` `### P4` points at `api/openapi.yaml` for the contract.
 
-    Proposed paths: `GET /v2/authorizations` and `GET /v2/authorizations/callback` for the login redirect pair, `POST /v2/tokens` with `grant_type` `authorization_code` or `refresh_token`, and the other resources under their `/v1` names. A snapshot ahead of the log answers 400, a stale one 409, so the client tells them apart by status.
+    Paths: `GET /v2/authorizations` and `GET /v2/authorizations/callback` for the login redirect pair, `POST /v2/tokens` with `grant_type` `authorization_code` or `refresh_token`, and the other resources under their `/v1` names. A snapshot ahead of the log answers 400, a stale one 409, so the client tells them apart by status.
 
-    Choices that depart from a rule, for the owner to confirm before the Add step: `GET /v2/ops` keeps `after` as its cursor, since the device stores that seq, in place of `page_token`. A repeated op id in `POST /v2/ops` is skipped, not answered 409, so a retried push succeeds.
+    Recorded exceptions to the practice rules: `GET /v2/ops` keeps `after` as its cursor, and a repeated op id in `POST /v2/ops` is skipped. The Decisions section gives the reasons.
 
 ### Phase 4: tests and release
 
