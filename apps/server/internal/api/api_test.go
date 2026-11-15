@@ -19,6 +19,7 @@ import (
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/testdb"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -318,7 +319,7 @@ func TestRequestsWithoutAValidAccessTokenGet401(t *testing.T) {
 	expired := expiredAccessToken(t, d.id)
 	refresh := signedIn.RefreshToken
 	revoked := newDevice(t, user)
-	if _, err := store.Queries().RevokeDevice(ctx, user.id, revoked.id); err != nil {
+	if _, err := store.Queries().RevokeDevice(ctx, uuid.MustParse(user.id), uuid.MustParse(revoked.id)); err != nil {
 		t.Fatal(err)
 	}
 

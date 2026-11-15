@@ -6,6 +6,7 @@ import (
 	"context"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/google/uuid"
 )
 
 type Bus struct {
@@ -18,6 +19,6 @@ func (b *Bus) Ping(ctx context.Context) error { return b.store.Ping(ctx) }
 
 // Caller is the device and user an access token stands for.
 type Caller struct {
-	DeviceID string
-	UserID   string
+	DeviceID uuid.UUID
+	UserID   uuid.UUID
 }

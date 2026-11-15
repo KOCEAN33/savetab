@@ -4,28 +4,29 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
 // StoredOp is an op as the log returns it.
 type StoredOp struct {
 	Seq        int64
-	ID         string
-	DeviceID   string
+	ID         uuid.UUID
+	DeviceID   uuid.UUID
 	Ciphertext []byte
 	ReceivedAt time.Time
 }
 
 // LockNextSeq returns the seq the user's next op gets and locks the user's row until the
 // transaction ends.
-func (q *Queries) LockNextSeq(ctx context.Context, userID string) (next int64, err error) {
+func (q *Queries) LockNextSeq(ctx context.Context, userID uuid.UUID) (next int64, err error) {
 	err = q.db.QueryRow(ctx, `SELECT next_seq FROM users WHERE id = $1 FOR UPDATE`, userID).Scan(&next)
 	return next, MapError(ctx, "lock next seq", err)
 }
 
 // InsertOps appends the ops in the given order from seq first on, skipping an op id the user
 // already pushed. It returns how many it inserted.
-func (q *Queries) InsertOps(ctx context.Context, userID, deviceID string, first int64, ids []string, ciphertexts [][]byte) (int64, error) {
+func (q *Queries) InsertOps(ctx context.Context, userID, deviceID uuid.UUID, first int64, ids []uuid.UUID, ciphertexts [][]byte) (int64, error) {
 	tag, err := q.db.Exec(ctx, `
 		INSERT INTO ops (user_id, seq, op_id, device_id, ciphertext)
 		SELECT $1, $2 + row_number() OVER (ORDER BY t.ord) - 1, t.op_id, $3, t.ciphertext
@@ -38,19 +39,19 @@ func (q *Queries) InsertOps(ctx context.Context, userID, deviceID string, first 
 	return tag.RowsAffected(), nil
 }
 
-func (q *Queries) SetNextSeq(ctx context.Context, userID string, next int64) error {
+func (q *Queries) SetNextSeq(ctx context.Context, userID uuid.UUID, next int64) error {
 	_, err := q.db.Exec(ctx, `UPDATE users SET next_seq = $2 WHERE id = $1`, userID, next)
 	return MapError(ctx, "set next seq", err)
 }
 
 // SnapshotAbove reports whether the user has a snapshot at a seq above seq.
-func (q *Queries) SnapshotAbove(ctx context.Context, userID string, seq int64) (above bool, err error) {
+func (q *Queries) SnapshotAbove(ctx context.Context, userID uuid.UUID, seq int64) (above bool, err error) {
 	err = q.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM snapshots WHERE user_id = $1 AND seq > $2)`, userID, seq).Scan(&above)
 	return above, MapError(ctx, "find snapshot above", err)
 }
 
 // OpsAfter returns up to limit of the user's ops with seq above after, in seq order.
-func (q *Queries) OpsAfter(ctx context.Context, userID string, after int64, limit int) ([]StoredOp, error) {
+func (q *Queries) OpsAfter(ctx context.Context, userID uuid.UUID, after int64, limit int) ([]StoredOp, error) {
 	rows, err := q.db.Query(ctx, `
 		SELECT seq, op_id, device_id, ciphertext, received_at
 		FROM ops WHERE user_id = $1 AND seq > $2 ORDER BY seq LIMIT $3`,

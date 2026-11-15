@@ -4,7 +4,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
+	"github.com/google/uuid"
 )
 
 const (
@@ -24,7 +24,14 @@ const (
 	smallBodyBytes  = 8 << 10
 )
 
-var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+// parseID reads an id in the 36-character form, the only one of uuid.Parse the API takes.
+func parseID(s string) (uuid.UUID, bool) {
+	if len(s) != 36 {
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(s)
+	return id, err == nil
+}
 
 type server struct {
 	bus   *bus.Bus
@@ -140,7 +147,7 @@ func (s *server) authed(next func(http.ResponseWriter, *http.Request, bus.Caller
 			internalError(w, r, err)
 			return
 		}
-		logline.SetUser(r.Context(), caller.UserID)
+		logline.SetUser(r.Context(), caller.UserID.String())
 		next(w, r, caller)
 	}
 }
@@ -163,11 +170,12 @@ func (s *server) pushOps(w http.ResponseWriter, r *http.Request, c bus.Caller) {
 	}
 	ops := make([]bus.NewOp, len(body.Ops))
 	for i, op := range body.Ops {
-		if !uuidPattern.MatchString(op.ID) || len(op.Data) == 0 {
+		id, ok := parseID(op.ID)
+		if !ok || len(op.Data) == 0 {
 			writeError(w, http.StatusBadRequest, "bad_request")
 			return
 		}
-		ops[i] = bus.NewOp{ID: op.ID, Ciphertext: op.Data}
+		ops[i] = bus.NewOp{ID: id, Ciphertext: op.Data}
 	}
 	if err := s.bus.PushOps(r.Context(), c, ops); err != nil {
 		internalError(w, r, err)
@@ -177,11 +185,11 @@ func (s *server) pushOps(w http.ResponseWriter, r *http.Request, c bus.Caller) {
 }
 
 type pulledOp struct {
-	Seq        int64  `json:"seq"`
-	ID         string `json:"id"`
-	DeviceID   string `json:"deviceId"`
-	Data       []byte `json:"data"`
-	ReceivedAt int64  `json:"receivedAt"`
+	Seq        int64     `json:"seq"`
+	ID         uuid.UUID `json:"id"`
+	DeviceID   uuid.UUID `json:"deviceId"`
+	Data       []byte    `json:"data"`
+	ReceivedAt int64     `json:"receivedAt"`
 }
 
 func (s *server) pullOps(w http.ResponseWriter, r *http.Request, c bus.Caller) {

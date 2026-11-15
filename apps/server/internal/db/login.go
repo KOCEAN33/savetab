@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Login is one OIDC login in flight. The client's values go back to it at the end, the
@@ -46,13 +48,13 @@ func (q *Queries) LockIdentity(ctx context.Context, issuer, subject string) erro
 
 // IdentityUser returns the user the identity belongs to. An unknown identity gives a NotFound
 // error.
-func (q *Queries) IdentityUser(ctx context.Context, issuer, subject string) (userID string, err error) {
+func (q *Queries) IdentityUser(ctx context.Context, issuer, subject string) (userID uuid.UUID, err error) {
 	err = q.db.QueryRow(ctx, `SELECT user_id FROM identities WHERE issuer = $1 AND subject = $2`, issuer, subject).Scan(&userID)
 	return userID, MapError(ctx, "get identity", err)
 }
 
 // InsertUser makes a user with the identity.
-func (q *Queries) InsertUser(ctx context.Context, issuer, subject string) (userID string, err error) {
+func (q *Queries) InsertUser(ctx context.Context, issuer, subject string) (userID uuid.UUID, err error) {
 	err = q.db.QueryRow(ctx, `
 		WITH u AS (INSERT INTO users DEFAULT VALUES RETURNING id)
 		INSERT INTO identities (issuer, subject, user_id) SELECT $1, $2, id FROM u RETURNING user_id`,
@@ -62,7 +64,7 @@ func (q *Queries) InsertUser(ctx context.Context, issuer, subject string) (userI
 
 // SetLoginCode records the code and the user of a pending login, and reports whether the login
 // was still pending.
-func (q *Queries) SetLoginCode(ctx context.Context, stateHash, codeHash []byte, userID string) (bool, error) {
+func (q *Queries) SetLoginCode(ctx context.Context, stateHash, codeHash []byte, userID uuid.UUID) (bool, error) {
 	tag, err := q.db.Exec(ctx, `
 		UPDATE logins SET code_hash = $2, user_id = $3
 		WHERE state_hash = $1 AND code_hash IS NULL AND expires_at > now()`,
@@ -75,7 +77,7 @@ func (q *Queries) SetLoginCode(ctx context.Context, stateHash, codeHash []byte, 
 
 // TakeLogin deletes the unexpired login the code hash belongs to and returns its user and
 // code challenge. An unknown code gives a NotFound error.
-func (q *Queries) TakeLogin(ctx context.Context, codeHash []byte) (userID, codeChallenge string, err error) {
+func (q *Queries) TakeLogin(ctx context.Context, codeHash []byte) (userID uuid.UUID, codeChallenge string, err error) {
 	err = q.db.QueryRow(ctx,
 		`DELETE FROM logins WHERE code_hash = $1 AND expires_at > now() RETURNING user_id, code_challenge`,
 		codeHash).Scan(&userID, &codeChallenge)

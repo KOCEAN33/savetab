@@ -9,6 +9,7 @@ import (
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -21,8 +22,8 @@ const (
 type Tokens struct {
 	Access   string
 	Refresh  string
-	DeviceID string
-	UserID   string
+	DeviceID uuid.UUID
+	UserID   uuid.UUID
 }
 
 // hashToken is what the database stores of a token, so a read of the database gives no
@@ -40,7 +41,7 @@ func randomToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
-func issueSession(ctx context.Context, q *db.Queries, deviceID string, kind db.SessionKind, ttl time.Duration) (string, error) {
+func issueSession(ctx context.Context, q *db.Queries, deviceID uuid.UUID, kind db.SessionKind, ttl time.Duration) (string, error) {
 	token, err := randomToken()
 	if err != nil {
 		return "", err
@@ -48,7 +49,7 @@ func issueSession(ctx context.Context, q *db.Queries, deviceID string, kind db.S
 	return token, q.InsertSession(ctx, hashToken(token), deviceID, kind, ttl)
 }
 
-func issueTokens(ctx context.Context, q *db.Queries, deviceID, userID string) (t Tokens, err error) {
+func issueTokens(ctx context.Context, q *db.Queries, deviceID, userID uuid.UUID) (t Tokens, err error) {
 	t.DeviceID, t.UserID = deviceID, userID
 	if t.Access, err = issueSession(ctx, q, deviceID, db.Access, AccessTTL); err != nil {
 		return Tokens{}, err

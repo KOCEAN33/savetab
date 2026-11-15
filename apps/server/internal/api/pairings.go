@@ -6,17 +6,18 @@ import (
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
+	"github.com/google/uuid"
 )
 
 type pairingBody struct {
-	ID            string `json:"id"`
-	NewDeviceID   string `json:"newDeviceId"`
-	NewDeviceName string `json:"newDeviceName"`
-	Commitment    []byte `json:"commitment"`
-	OldPublic     []byte `json:"oldPublic,omitempty"`
-	NewPublic     []byte `json:"newPublic,omitempty"`
-	WrappedKey    []byte `json:"wrappedKey,omitempty"`
-	ExpiresAt     int64  `json:"expiresAt"`
+	ID            uuid.UUID `json:"id"`
+	NewDeviceID   uuid.UUID `json:"newDeviceId"`
+	NewDeviceName string    `json:"newDeviceName"`
+	Commitment    []byte    `json:"commitment"`
+	OldPublic     []byte    `json:"oldPublic,omitempty"`
+	NewPublic     []byte    `json:"newPublic,omitempty"`
+	WrappedKey    []byte    `json:"wrappedKey,omitempty"`
+	ExpiresAt     int64     `json:"expiresAt"`
 }
 
 func pairingView(p bus.Pairing) pairingBody {
@@ -60,8 +61,8 @@ func (s *server) listPairings(w http.ResponseWriter, r *http.Request, c bus.Call
 }
 
 func (s *server) getPairing(w http.ResponseWriter, r *http.Request, c bus.Caller) {
-	id := r.PathValue("id")
-	if !uuidPattern.MatchString(id) {
+	id, ok := parseID(r.PathValue("id"))
+	if !ok {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}
@@ -78,8 +79,8 @@ func (s *server) getPairing(w http.ResponseWriter, r *http.Request, c bus.Caller
 }
 
 func (s *server) putPairing(w http.ResponseWriter, r *http.Request, c bus.Caller) {
-	id := r.PathValue("id")
-	if !uuidPattern.MatchString(id) {
+	id, ok := parseID(r.PathValue("id"))
+	if !ok {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}

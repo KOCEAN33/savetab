@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
@@ -161,11 +162,11 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 type tokensBody struct {
-	AccessToken  string `json:"accessToken"`
-	RefreshToken string `json:"refreshToken"`
-	ExpiresIn    int    `json:"expiresIn"`
-	UserID       string `json:"userId"`
-	DeviceID     string `json:"deviceId"`
+	AccessToken  string    `json:"accessToken"`
+	RefreshToken string    `json:"refreshToken"`
+	ExpiresIn    int       `json:"expiresIn"`
+	UserID       uuid.UUID `json:"userId"`
+	DeviceID     uuid.UUID `json:"deviceId"`
 }
 
 func tokensView(t bus.Tokens) tokensBody {

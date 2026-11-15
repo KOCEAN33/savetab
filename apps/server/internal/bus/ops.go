@@ -6,20 +6,21 @@ import (
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
 // NewOp is an encrypted op as a device pushes it.
 type NewOp struct {
-	ID         string
+	ID         uuid.UUID
 	Ciphertext []byte
 }
 
 // StoredOp is an op as the log returns it.
 type StoredOp struct {
 	Seq        int64
-	ID         string
-	DeviceID   string
+	ID         uuid.UUID
+	DeviceID   uuid.UUID
 	Ciphertext []byte
 	ReceivedAt time.Time
 }
@@ -27,9 +28,9 @@ type StoredOp struct {
 // PushOps adds the ops to the caller's log in the given order. An op id the user already
 // pushed is skipped, so a device can retry a push whose answer it lost.
 func (b *Bus) PushOps(ctx context.Context, c Caller, ops []NewOp) error {
-	ids := make([]string, 0, len(ops))
+	ids := make([]uuid.UUID, 0, len(ops))
 	ciphertexts := make([][]byte, 0, len(ops))
-	seen := make(map[string]bool, len(ops))
+	seen := make(map[uuid.UUID]bool, len(ops))
 	for _, op := range ops {
 		if seen[op.ID] {
 			continue
@@ -57,7 +58,7 @@ func (b *Bus) PushOps(ctx context.Context, c Caller, ops []NewOp) error {
 // PullOps returns up to limit of the user's ops with seq above after, in seq order, and
 // whether more remain. It gives a Conflict when after is below the snapshot's seq, since the
 // log no longer holds every op above it.
-func (b *Bus) PullOps(ctx context.Context, userID string, after int64, limit int) (ops []StoredOp, more bool, err error) {
+func (b *Bus) PullOps(ctx context.Context, userID uuid.UUID, after int64, limit int) (ops []StoredOp, more bool, err error) {
 	// One view for both reads, so a snapshot that lands between them cannot hide ops it deleted.
 	err = b.store.InSnapshot(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)

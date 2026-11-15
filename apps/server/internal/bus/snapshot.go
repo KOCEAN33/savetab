@@ -5,6 +5,7 @@ import (
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -16,7 +17,7 @@ type Snapshot struct {
 
 // PutSnapshot replaces the user's snapshot and deletes the ops it covers. A seq at or above the
 // log's next seq is Invalid, and one below the stored snapshot's seq is a Conflict.
-func (b *Bus) PutSnapshot(ctx context.Context, userID string, snap Snapshot) error {
+func (b *Bus) PutSnapshot(ctx context.Context, userID uuid.UUID, snap Snapshot) error {
 	return b.store.InTx(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		// The same row lock a push takes, so no op lands at or below snap.Seq after the check.
@@ -38,7 +39,7 @@ func (b *Bus) PutSnapshot(ctx context.Context, userID string, snap Snapshot) err
 	})
 }
 
-func (b *Bus) Snapshot(ctx context.Context, userID string) (Snapshot, error) {
+func (b *Bus) Snapshot(ctx context.Context, userID uuid.UUID) (Snapshot, error) {
 	row, err := b.store.Queries().Snapshot(ctx, userID)
 	return Snapshot(row), err
 }

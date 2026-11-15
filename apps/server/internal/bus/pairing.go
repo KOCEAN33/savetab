@@ -6,6 +6,7 @@ import (
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -14,8 +15,8 @@ const pairingTTL = 5 * time.Minute
 // Pairing is one key exchange between a new device and a signed-in device of the same user.
 // The server relays its messages and can read none of them.
 type Pairing struct {
-	ID            string
-	NewDeviceID   string
+	ID            uuid.UUID
+	NewDeviceID   uuid.UUID
 	NewDeviceName string
 	Commitment    []byte
 	OldPublic     []byte
@@ -41,7 +42,7 @@ func (b *Bus) StartPairing(ctx context.Context, c Caller, commitment []byte) (Pa
 }
 
 // Pairings returns the user's pairings that have not expired, oldest first.
-func (b *Bus) Pairings(ctx context.Context, userID string) ([]Pairing, error) {
+func (b *Bus) Pairings(ctx context.Context, userID uuid.UUID) ([]Pairing, error) {
 	rows, err := b.store.Queries().Pairings(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -54,7 +55,7 @@ func (b *Bus) Pairings(ctx context.Context, userID string) ([]Pairing, error) {
 }
 
 // Pairing returns one of the user's pairings. An expired pairing gives a NotFound error.
-func (b *Bus) Pairing(ctx context.Context, userID, id string) (Pairing, error) {
+func (b *Bus) Pairing(ctx context.Context, userID, id uuid.UUID) (Pairing, error) {
 	row, err := b.store.Queries().Pairing(ctx, userID, id)
 	return Pairing(row), err
 }
@@ -62,7 +63,7 @@ func (b *Bus) Pairing(ctx context.Context, userID, id string) (Pairing, error) {
 // SetPairingMessage stores one message of the exchange. The order is OldPublic from a signed-in
 // device, NewPublic from the new device, then WrappedKey from a signed-in device. Each is set
 // once, so a later request cannot swap a public key the other side has already read.
-func (b *Bus) SetPairingMessage(ctx context.Context, c Caller, id string, message PairingMessage, value []byte) error {
+func (b *Bus) SetPairingMessage(ctx context.Context, c Caller, id uuid.UUID, message PairingMessage, value []byte) error {
 	return b.store.InTx(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		state, err := q.LockPairing(ctx, c.UserID, id)

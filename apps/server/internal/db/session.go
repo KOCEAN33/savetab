@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type SessionKind string
@@ -12,7 +14,7 @@ const (
 	Refresh SessionKind = "refresh"
 )
 
-func (q *Queries) InsertSession(ctx context.Context, tokenHash []byte, deviceID string, kind SessionKind, ttl time.Duration) error {
+func (q *Queries) InsertSession(ctx context.Context, tokenHash []byte, deviceID uuid.UUID, kind SessionKind, ttl time.Duration) error {
 	_, err := q.db.Exec(ctx,
 		`INSERT INTO sessions (token_hash, device_id, kind, expires_at) VALUES ($1, $2, $3, now() + make_interval(secs => $4))`,
 		tokenHash, deviceID, string(kind), ttl.Seconds())
@@ -21,7 +23,7 @@ func (q *Queries) InsertSession(ctx context.Context, tokenHash []byte, deviceID 
 
 // AccessSession returns the device and user of an access token's session. An expired session,
 // a refresh session, and a session of a revoked device give a NotFound error.
-func (q *Queries) AccessSession(ctx context.Context, tokenHash []byte) (deviceID, userID string, err error) {
+func (q *Queries) AccessSession(ctx context.Context, tokenHash []byte) (deviceID, userID uuid.UUID, err error) {
 	err = q.db.QueryRow(ctx, `
 		SELECT d.id, d.user_id
 		FROM sessions s JOIN devices d ON d.id = s.device_id
@@ -32,7 +34,7 @@ func (q *Queries) AccessSession(ctx context.Context, tokenHash []byte) (deviceID
 
 // TakeRefreshSession deletes a refresh token's session and returns its device and user. An
 // expired session, an access session, and a session of a revoked device give a NotFound error.
-func (q *Queries) TakeRefreshSession(ctx context.Context, tokenHash []byte) (deviceID, userID string, err error) {
+func (q *Queries) TakeRefreshSession(ctx context.Context, tokenHash []byte) (deviceID, userID uuid.UUID, err error) {
 	err = q.db.QueryRow(ctx, `
 		DELETE FROM sessions s USING devices d
 		WHERE s.token_hash = $1 AND s.kind = 'refresh' AND s.expires_at > now()

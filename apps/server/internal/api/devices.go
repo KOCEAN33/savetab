@@ -5,13 +5,14 @@ import (
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
+	"github.com/google/uuid"
 )
 
 type deviceBody struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt int64  `json:"createdAt"`
-	Current   bool   `json:"current"`
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt int64     `json:"createdAt"`
+	Current   bool      `json:"current"`
 }
 
 func (s *server) listDevices(w http.ResponseWriter, r *http.Request, c bus.Caller) {
@@ -28,8 +29,8 @@ func (s *server) listDevices(w http.ResponseWriter, r *http.Request, c bus.Calle
 }
 
 func (s *server) revokeDevice(w http.ResponseWriter, r *http.Request, c bus.Caller) {
-	id := r.PathValue("id")
-	if !uuidPattern.MatchString(id) {
+	id, ok := parseID(r.PathValue("id"))
+	if !ok {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}

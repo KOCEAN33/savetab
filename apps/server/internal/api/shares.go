@@ -6,6 +6,7 @@ import (
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
+	"github.com/google/uuid"
 )
 
 // The viewer decrypts in the browser with the key from the URL fragment, which never reaches
@@ -22,9 +23,9 @@ var (
 )
 
 type shareBody struct {
-	ID        string `json:"id,omitempty"`
-	Data      []byte `json:"data,omitempty"`
-	ExpiresAt int64  `json:"expiresAt"`
+	ID        uuid.UUID `json:"id,omitzero"`
+	Data      []byte    `json:"data,omitempty"`
+	ExpiresAt int64     `json:"expiresAt"`
 }
 
 func (s *server) createShare(w http.ResponseWriter, r *http.Request, c bus.Caller) {
@@ -49,8 +50,8 @@ func (s *server) createShare(w http.ResponseWriter, r *http.Request, c bus.Calle
 // getShare takes no token: the share's URL is the only credential, and its key stays in the
 // fragment, so the server hands out ciphertext only.
 func (s *server) getShare(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if !uuidPattern.MatchString(id) {
+	id, ok := parseID(r.PathValue("id"))
+	if !ok {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}
@@ -67,8 +68,8 @@ func (s *server) getShare(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteShare(w http.ResponseWriter, r *http.Request, c bus.Caller) {
-	id := r.PathValue("id")
-	if !uuidPattern.MatchString(id) {
+	id, ok := parseID(r.PathValue("id"))
+	if !ok {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}

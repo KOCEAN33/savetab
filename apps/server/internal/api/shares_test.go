@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -82,18 +83,18 @@ func TestShareIsReadBackWithoutAToken(t *testing.T) {
 func TestExpiredShareAnswers404AndTheNextPostDeletesIt(t *testing.T) {
 	user := newUser(t)
 	owner := newDevice(t, user)
-	expired, err := store.Queries().InsertShare(context.Background(), user.id, []byte("x"), -time.Second)
+	expired, err := store.Queries().InsertShare(context.Background(), uuid.MustParse(user.id), []byte("x"), -time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	expect(t, "get", request(t, "GET", "/v1/shares/"+expired.ID, "", nil), http.StatusNotFound, "not_found")
-	expect(t, "delete", request(t, "DELETE", "/v1/shares/"+expired.ID, owner.token, nil), http.StatusNotFound, "not_found")
-	if !shareStored(t, expired.ID) {
+	expect(t, "get", request(t, "GET", "/v1/shares/"+expired.ID.String(), "", nil), http.StatusNotFound, "not_found")
+	expect(t, "delete", request(t, "DELETE", "/v1/shares/"+expired.ID.String(), owner.token, nil), http.StatusNotFound, "not_found")
+	if !shareStored(t, expired.ID.String()) {
 		t.Fatal("the expired share is gone before any post, want it kept until one")
 	}
 	postShare(t, newDevice(t, newUser(t)), []byte("y"))
-	if shareStored(t, expired.ID) {
+	if shareStored(t, expired.ID.String()) {
 		t.Error("the expired share is still stored after another user's post, want it deleted")
 	}
 }
