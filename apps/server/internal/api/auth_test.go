@@ -259,9 +259,10 @@ func TestCallbackRefusesAStateItDidNotIssue(t *testing.T) {
 
 	expired := "expired-" + randomString(t)
 	hash := sha256.Sum256([]byte(expired))
-	err := store.Queries().InsertLogin(context.Background(), hash[:], db.Login{
-		RedirectURI: extensionRedirect, ClientState: "s", CodeChallenge: s256("v"), Nonce: "n", IssuerVerifier: "iv",
-	}, -time.Second)
+	err := store.Queries().InsertLogin(context.Background(), db.InsertLoginParams{
+		StateHash: hash[:], RedirectURI: extensionRedirect, ClientState: "s", CodeChallenge: s256("v"), Nonce: "n", IssuerVerifier: "iv",
+		TTLSeconds: -1,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

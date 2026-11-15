@@ -66,3 +66,48 @@ DELETE FROM ops WHERE user_id = @user_id::uuid AND seq <= @seq::bigint;
 
 -- name: Snapshot :one
 SELECT seq, ciphertext FROM snapshots WHERE user_id = @user_id::uuid;
+
+-- name: InsertLogin :exec
+-- Stores the login under the hash of its state and clears expired logins.
+WITH gone AS (DELETE FROM logins WHERE expires_at <= now())
+
+INSERT INTO logins (state_hash, redirect_uri, client_state, code_challenge, nonce, issuer_verifier, expires_at)
+VALUES (
+  @state_hash::bytea,
+  @redirect_uri::text,
+  @client_state::text,
+  @code_challenge::text,
+  @nonce::text,
+  @issuer_verifier::text,
+  now() + make_interval(secs => @ttl_seconds::float8)
+);
+
+-- name: PendingLogin :one
+-- The login the state hash belongs to, unless it expired or the issuer already answered it.
+SELECT redirect_uri, client_state, code_challenge, nonce, issuer_verifier
+FROM logins
+WHERE state_hash = @state_hash::bytea AND code_hash IS NULL AND expires_at > now();
+
+-- name: LockIdentity :exec
+-- Locks the identity until the transaction ends, whether or not it exists yet.
+SELECT pg_advisory_xact_lock(hashtextextended(@issuer::text || ' ' || @subject::text, 0));
+
+-- name: IdentityUser :one
+SELECT user_id FROM identities WHERE issuer = @issuer::text AND subject = @subject::text;
+
+-- name: InsertUser :one
+INSERT INTO users DEFAULT VALUES RETURNING id;
+
+-- name: InsertIdentity :exec
+INSERT INTO identities (issuer, subject, user_id) VALUES (@issuer::text, @subject::text, @user_id::uuid);
+
+-- name: SetLoginCode :execrows
+-- Records the code and the user of a login that is still pending.
+UPDATE logins SET code_hash = @code_hash::bytea, user_id = @user_id::uuid
+WHERE state_hash = @state_hash::bytea AND code_hash IS NULL AND expires_at > now();
+
+-- name: TakeLogin :one
+-- Deletes the unexpired login the code hash belongs to. A login with a code has a user.
+DELETE FROM logins
+WHERE code_hash = @code_hash::bytea AND expires_at > now() AND user_id IS NOT NULL
+RETURNING user_id::uuid AS user_id, code_challenge;

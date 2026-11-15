@@ -61,6 +61,22 @@ func (q *Queries) Devices(ctx context.Context, userID uuid.UUID) ([]DevicesRow, 
 	return items, nil
 }
 
+const identityUser = `-- name: IdentityUser :one
+SELECT user_id FROM identities WHERE issuer = $1::text AND subject = $2::text
+`
+
+type IdentityUserParams struct {
+	Issuer  string
+	Subject string
+}
+
+func (q *Queries) IdentityUser(ctx context.Context, arg IdentityUserParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, identityUser, arg.Issuer, arg.Subject)
+	var user_id uuid.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const insertDevice = `-- name: InsertDevice :one
 INSERT INTO devices (user_id, name) VALUES ($1::uuid, $2::text) RETURNING id
 `
@@ -75,6 +91,21 @@ func (q *Queries) InsertDevice(ctx context.Context, arg InsertDeviceParams) (uui
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const insertIdentity = `-- name: InsertIdentity :exec
+INSERT INTO identities (issuer, subject, user_id) VALUES ($1::text, $2::text, $3::uuid)
+`
+
+type InsertIdentityParams struct {
+	Issuer  string
+	Subject string
+	UserID  uuid.UUID
+}
+
+func (q *Queries) InsertIdentity(ctx context.Context, arg InsertIdentityParams) error {
+	_, err := q.db.Exec(ctx, insertIdentity, arg.Issuer, arg.Subject, arg.UserID)
+	return err
 }
 
 const insertKey = `-- name: InsertKey :execrows
@@ -94,6 +125,45 @@ func (q *Queries) InsertKey(ctx context.Context, arg InsertKeyParams) (int64, er
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const insertLogin = `-- name: InsertLogin :exec
+WITH gone AS (DELETE FROM logins WHERE expires_at <= now())
+
+INSERT INTO logins (state_hash, redirect_uri, client_state, code_challenge, nonce, issuer_verifier, expires_at)
+VALUES (
+  $1::bytea,
+  $2::text,
+  $3::text,
+  $4::text,
+  $5::text,
+  $6::text,
+  now() + make_interval(secs => $7::float8)
+)
+`
+
+type InsertLoginParams struct {
+	StateHash      []byte
+	RedirectURI    string
+	ClientState    string
+	CodeChallenge  string
+	Nonce          string
+	IssuerVerifier string
+	TTLSeconds     float64
+}
+
+// Stores the login under the hash of its state and clears expired logins.
+func (q *Queries) InsertLogin(ctx context.Context, arg InsertLoginParams) error {
+	_, err := q.db.Exec(ctx, insertLogin,
+		arg.StateHash,
+		arg.RedirectURI,
+		arg.ClientState,
+		arg.CodeChallenge,
+		arg.Nonce,
+		arg.IssuerVerifier,
+		arg.TTLSeconds,
+	)
+	return err
 }
 
 const insertOps = `-- name: InsertOps :execrows
@@ -133,6 +203,17 @@ func (q *Queries) InsertOps(ctx context.Context, arg InsertOpsParams) (int64, er
 	return result.RowsAffected(), nil
 }
 
+const insertUser = `-- name: InsertUser :one
+INSERT INTO users DEFAULT VALUES RETURNING id
+`
+
+func (q *Queries) InsertUser(ctx context.Context) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertUser)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const key = `-- name: Key :one
 SELECT wrapped_key FROM key_wraps WHERE user_id = $1::uuid
 `
@@ -142,6 +223,21 @@ func (q *Queries) Key(ctx context.Context, userID uuid.UUID) ([]byte, error) {
 	var wrapped_key []byte
 	err := row.Scan(&wrapped_key)
 	return wrapped_key, err
+}
+
+const lockIdentity = `-- name: LockIdentity :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text || ' ' || $2::text, 0))
+`
+
+type LockIdentityParams struct {
+	Issuer  string
+	Subject string
+}
+
+// Locks the identity until the transaction ends, whether or not it exists yet.
+func (q *Queries) LockIdentity(ctx context.Context, arg LockIdentityParams) error {
+	_, err := q.db.Exec(ctx, lockIdentity, arg.Issuer, arg.Subject)
+	return err
 }
 
 const lockNextSeq = `-- name: LockNextSeq :one
@@ -205,6 +301,34 @@ func (q *Queries) OpsAfter(ctx context.Context, arg OpsAfterParams) ([]OpsAfterR
 	return items, nil
 }
 
+const pendingLogin = `-- name: PendingLogin :one
+SELECT redirect_uri, client_state, code_challenge, nonce, issuer_verifier
+FROM logins
+WHERE state_hash = $1::bytea AND code_hash IS NULL AND expires_at > now()
+`
+
+type PendingLoginRow struct {
+	RedirectURI    string
+	ClientState    string
+	CodeChallenge  string
+	Nonce          string
+	IssuerVerifier string
+}
+
+// The login the state hash belongs to, unless it expired or the issuer already answered it.
+func (q *Queries) PendingLogin(ctx context.Context, stateHash []byte) (PendingLoginRow, error) {
+	row := q.db.QueryRow(ctx, pendingLogin, stateHash)
+	var i PendingLoginRow
+	err := row.Scan(
+		&i.RedirectURI,
+		&i.ClientState,
+		&i.CodeChallenge,
+		&i.Nonce,
+		&i.IssuerVerifier,
+	)
+	return i, err
+}
+
 const revokeDevice = `-- name: RevokeDevice :execrows
 UPDATE devices SET revoked_at = now()
 WHERE id = $1::uuid AND user_id = $2::uuid AND revoked_at IS NULL
@@ -218,6 +342,26 @@ type RevokeDeviceParams struct {
 // Revokes one of the user's devices that is not revoked yet, which ends its sessions.
 func (q *Queries) RevokeDevice(ctx context.Context, arg RevokeDeviceParams) (int64, error) {
 	result, err := q.db.Exec(ctx, revokeDevice, arg.DeviceID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setLoginCode = `-- name: SetLoginCode :execrows
+UPDATE logins SET code_hash = $1::bytea, user_id = $2::uuid
+WHERE state_hash = $3::bytea AND code_hash IS NULL AND expires_at > now()
+`
+
+type SetLoginCodeParams struct {
+	CodeHash  []byte
+	UserID    uuid.UUID
+	StateHash []byte
+}
+
+// Records the code and the user of a login that is still pending.
+func (q *Queries) SetLoginCode(ctx context.Context, arg SetLoginCodeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setLoginCode, arg.CodeHash, arg.UserID, arg.StateHash)
 	if err != nil {
 		return 0, err
 	}
@@ -269,6 +413,25 @@ func (q *Queries) SnapshotAbove(ctx context.Context, arg SnapshotAboveParams) (b
 	var above bool
 	err := row.Scan(&above)
 	return above, err
+}
+
+const takeLogin = `-- name: TakeLogin :one
+DELETE FROM logins
+WHERE code_hash = $1::bytea AND expires_at > now() AND user_id IS NOT NULL
+RETURNING user_id::uuid AS user_id, code_challenge
+`
+
+type TakeLoginRow struct {
+	UserID        uuid.UUID
+	CodeChallenge string
+}
+
+// Deletes the unexpired login the code hash belongs to. A login with a code has a user.
+func (q *Queries) TakeLogin(ctx context.Context, codeHash []byte) (TakeLoginRow, error) {
+	row := q.db.QueryRow(ctx, takeLogin, codeHash)
+	var i TakeLoginRow
+	err := row.Scan(&i.UserID, &i.CodeChallenge)
+	return i, err
 }
 
 const upsertSnapshot = `-- name: UpsertSnapshot :execrows
