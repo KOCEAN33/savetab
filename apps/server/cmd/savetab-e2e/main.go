@@ -6,21 +6,16 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/api"
-	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
-	"github.com/KOCEAN33/savetab/apps/server/internal/db"
-	"github.com/KOCEAN33/savetab/apps/server/internal/httpserver"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/config"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/testdb"
+	"github.com/KOCEAN33/savetab/apps/server/internal/wire"
 )
 
 func main() {
@@ -31,22 +26,11 @@ func main() {
 }
 
 func run() error {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
 	dbURL, drop, err := testdb.Start()
 	if err != nil {
 		return err
 	}
 	defer drop()
-	store, err := db.Open(ctx, dbURL, 4)
-	if err != nil {
-		return err
-	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		return err
-	}
 
 	issuer := fakeoidc.New("savetab")
 	defer issuer.Close()
@@ -57,27 +41,21 @@ func run() error {
 		return err
 	}
 	url := "http://" + listener.Addr().String()
-	login, err := api.NewLogin(ctx, api.LoginConfig{
-		Issuer: issuer.URL, ClientID: "savetab", PublicURL: url, RedirectURIs: os.Args[1:],
-	})
-	if err != nil {
-		return err
+	cfg := config.Config{
+		DatabaseURL:      config.Secret(dbURL),
+		DBPoolMax:        4,
+		ListenAddr:       listener.Addr().String(),
+		PublicURL:        url,
+		OIDCIssuer:       issuer.URL,
+		OIDCClientID:     "savetab",
+		AuthRedirectURIs: os.Args[1:],
+		StartWait:        30 * time.Second,
+		RequestDeadline:  10 * time.Second,
+		ReadyPingTimeout: time.Second,
+		HTTPDrainTimeout: 15 * time.Second,
+		ShutdownBudget:   20 * time.Second,
 	}
-
-	b := bus.New(store)
-	srv := httpserver.New(httpserver.Config{RequestDeadline: 10 * time.Second, ReadyPingTimeout: time.Second}, b, api.New(b, login))
-	failed := make(chan error, 1)
-	go func() { failed <- srv.Serve(listener) }()
+	// A request sent before the database is migrated waits in the listener's queue.
 	fmt.Println(url)
-	select {
-	case err := <-failed:
-		return err
-	case <-ctx.Done():
-		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(shutdown); err != nil && !errors.Is(err, context.DeadlineExceeded) {
-			return err
-		}
-		return nil
-	}
+	return wire.Run(context.Background(), cfg, wire.Options{Listener: listener})
 }

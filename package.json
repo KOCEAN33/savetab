@@ -9,7 +9,7 @@
     "test:e2e": "pnpm --filter @savetab/extension test:e2e",
     "test:e2e:firefox": "pnpm --filter @savetab/extension test:e2e:firefox",
     "check": "pnpm -r check && scripts/check-chart.sh",
-    "lint": "oxlint packages apps scripts && node scripts/lint-conventions.mjs && pnpm --filter @savetab/extension lint:css",
+    "lint": "oxlint packages apps scripts && node scripts/lint-conventions.mjs && pnpm --filter @savetab/extension lint:css && apps/server/scripts/semgrep.sh",
     "fmt": "oxfmt packages apps",
     "fmt:check": "oxfmt --check packages apps"
   },

@@ -1,0 +1,22 @@
+rules:
+  - id: serve-through-wire
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Serve through the http.Server that internal/wire builds. ListenAndServe and gin's Run
+      forms serve without its timeouts and its stop sequence.
+    pattern-either:
+      - pattern: 'http.ListenAndServe(...)'
+      - pattern: 'http.ListenAndServeTLS(...)'
+      - pattern: '($S : *http.Server).ListenAndServe()'
+      - pattern: '($S : *http.Server).ListenAndServeTLS(...)'
+      - patterns:
+          - pattern-either:
+              - pattern: '($E : *gin.Engine).$M(...)'
+              - pattern-inside: |
+                  $E := gin.$NEW(...)
+                  ...
+          - pattern: '$E.$M(...)'
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^Run(TLS|Unix|Fd|Listener|QUIC)?$

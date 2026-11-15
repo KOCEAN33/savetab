@@ -3,20 +3,13 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"net"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/caarlos0/env/v11"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/api"
-	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
-	"github.com/KOCEAN33/savetab/apps/server/internal/db"
-	"github.com/KOCEAN33/savetab/apps/server/internal/httpserver"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/config"
+	"github.com/KOCEAN33/savetab/apps/server/internal/wire"
 )
 
 func main() {
@@ -31,42 +24,5 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	start, cancel := context.WithTimeout(ctx, cfg.StartWait)
-	defer cancel()
-	store, err := db.Open(start, cfg.DatabaseURL.Reveal(), cfg.DBPoolMax)
-	if err != nil {
-		return err
-	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		return err
-	}
-
-	login, err := api.NewLogin(ctx, api.LoginConfig{
-		Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, PublicURL: cfg.PublicURL, RedirectURIs: cfg.AuthRedirectURIs,
-	})
-	if err != nil {
-		return fmt.Errorf("OIDC issuer %s: %w", cfg.OIDCIssuer, err)
-	}
-
-	b := bus.New(store)
-	srv := httpserver.New(httpserver.Config{RequestDeadline: cfg.RequestDeadline, ReadyPingTimeout: cfg.ReadyPingTimeout}, b, api.New(b, login))
-	listener, err := net.Listen("tcp", cfg.ListenAddr)
-	if err != nil {
-		return err
-	}
-	failed := make(chan error, 1)
-	go func() { failed <- srv.Serve(listener) }()
-	slog.Info("listening", "addr", cfg.ListenAddr)
-	select {
-	case err := <-failed:
-		return err
-	case <-ctx.Done():
-		drain, cancel := context.WithTimeout(context.Background(), cfg.HTTPDrainTimeout)
-		defer cancel()
-		return srv.Shutdown(drain)
-	}
+	return wire.Run(context.Background(), cfg, wire.Options{})
 }
