@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
+
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
 )
 
 // Secret is a value that grants access. It shows as a redaction marker in every text form, so
@@ -40,6 +42,8 @@ type Config struct {
 	ReadyPingTimeout time.Duration `env:"READY_PING_TIMEOUT" envDefault:"1s"`
 	HTTPDrainTimeout time.Duration `env:"HTTP_DRAIN_TIMEOUT" envDefault:"15s"`
 	ShutdownBudget   time.Duration `env:"SHUTDOWN_BUDGET" envDefault:"20s"`
+	LogFormat        string        `env:"LOG_FORMAT" envDefault:"json"`
+	LogLevel         slog.Level    `env:"LOG_LEVEL" envDefault:"info"`
 }
 
 // Load reads the configuration from opts.Environment, or from the process environment when
@@ -107,6 +111,9 @@ func (c Config) validate(failed map[string]bool) error {
 		if !absoluteURL(uri) {
 			bad("AUTH_REDIRECT_URIS", "holds %q, want absolute URLs separated by one space", uri)
 		}
+	}
+	if c.LogFormat != logline.FormatJSON && c.LogFormat != logline.FormatConsole {
+		bad("LOG_FORMAT", "is %q, want %q or %q", c.LogFormat, logline.FormatJSON, logline.FormatConsole)
 	}
 	for name, d := range map[string]time.Duration{
 		"START_WAIT": c.StartWait, "REQUEST_DEADLINE": c.RequestDeadline, "READY_PING_TIMEOUT": c.ReadyPingTimeout,

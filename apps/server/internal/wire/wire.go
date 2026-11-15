@@ -6,8 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -17,17 +20,50 @@ import (
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/httpserver"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/config"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
 )
+
+const service = "savetab-server"
 
 // Options changes how Run starts.
 type Options struct {
 	// Listener, when set, is served in place of a listener on cfg.ListenAddr.
 	Listener net.Listener
+	// Log, when set, takes the log lines in place of stdout.
+	Log io.Writer
+	// Version and Commit name the build on every log line.
+	Version string
+	Commit  string
 }
 
 // Run starts the server and serves until ctx ends or SIGINT or SIGTERM arrives, then stops
-// it. It opens no listener before the database is reached and migrated.
+// it. It opens no listener before the database is reached and migrated. It writes a start line
+// once the listener is open and a stop line with the reason, which holds the error it returns.
 func Run(ctx context.Context, cfg config.Config, opts Options) error {
+	out := opts.Log
+	if out == nil {
+		out = os.Stdout
+	}
+	// A host without a name still logs, with an empty instance.
+	instance, _ := os.Hostname()
+	logger := logline.NewLogger(out, cfg.LogFormat, cfg.LogLevel, logline.Process{
+		Service: service, Version: opts.Version, Commit: opts.Commit, Instance: instance,
+	})
+	traceID := logline.NewTraceID()
+
+	err := run(ctx, cfg, opts, logger, traceID)
+	reason, level := logline.ReasonSignal, slog.LevelInfo
+	switch {
+	case err != nil:
+		reason, level = logline.ReasonError, slog.LevelError
+	case ctx.Err() != nil:
+		reason = logline.ReasonContext
+	}
+	logger.LogAttrs(context.WithoutCancel(ctx), level, logline.EventStop, logline.StopAttrs(traceID, reason, err)...)
+	return err
+}
+
+func run(ctx context.Context, cfg config.Config, opts Options, logger *slog.Logger, traceID string) error {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -49,13 +85,19 @@ func Run(ctx context.Context, cfg config.Config, opts Options) error {
 	}
 
 	b := bus.New(store)
-	srv := httpserver.New(httpserver.Config{RequestDeadline: cfg.RequestDeadline, ReadyPingTimeout: cfg.ReadyPingTimeout}, b, api.New(b, login))
+	srv := httpserver.New(httpserver.Config{RequestDeadline: cfg.RequestDeadline, ReadyPingTimeout: cfg.ReadyPingTimeout}, logger, b, api.New(b, login))
 	l := opts.Listener
 	if l == nil {
 		if l, err = net.Listen("tcp", cfg.ListenAddr); err != nil {
 			return err
 		}
 	}
+	logger.LogAttrs(ctx, slog.LevelInfo, logline.EventStart, logline.StartAttrs(traceID, logline.Settings{
+		ListenAddr: l.Addr().String(), PublicURL: cfg.PublicURL, OIDCIssuer: cfg.OIDCIssuer, OIDCClientID: cfg.OIDCClientID,
+		AuthRedirectURIs: cfg.AuthRedirectURIs, DBPoolMax: cfg.DBPoolMax, StartWait: cfg.StartWait,
+		RequestDeadline: cfg.RequestDeadline, ReadyPingTimeout: cfg.ReadyPingTimeout, HTTPDrainTimeout: cfg.HTTPDrainTimeout,
+		ShutdownBudget: cfg.ShutdownBudget, LogFormat: cfg.LogFormat, LogLevel: cfg.LogLevel,
+	})...)
 	return serve(ctx, stop, srv, l, cfg.HTTPDrainTimeout)
 }
 

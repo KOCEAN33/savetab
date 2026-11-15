@@ -29,6 +29,7 @@ func Open(ctx context.Context, url string, maxConns int32) (*Store, error) {
 		return nil, MapError(ctx, "open database", err)
 	}
 	cfg.MaxConns = maxConns
+	cfg.ConnConfig.Tracer = tracer{}
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, MapError(ctx, "open database", err)

@@ -3,7 +3,6 @@ package api
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
 )
 
 const (
@@ -57,7 +57,20 @@ func New(b *bus.Bus, login *Login) http.Handler {
 	mux.HandleFunc("GET /s/{id}", viewerFile("text/html; charset=utf-8", viewerHTML))
 	mux.HandleFunc("GET /s/assets/share.js", viewerFile("text/javascript; charset=utf-8", viewerJS))
 	mux.HandleFunc("GET /s/assets/share.css", viewerFile("text/css; charset=utf-8", viewerCSS))
-	return cors(mux)
+	return cors(routed(mux))
+}
+
+// routed records the route mux matched, since the engine in front knows only the mount path.
+func routed(mux *http.ServeMux) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Deferred, so the route of a handler that panics is recorded too.
+		defer func() {
+			if _, route, ok := strings.Cut(r.Pattern, " "); ok {
+				logline.SetRoute(r.Context(), route)
+			}
+		}()
+		mux.ServeHTTP(w, r)
+	})
 }
 
 // cors lets a browser extension call the API from its own origin. A request carries a bearer
@@ -80,9 +93,8 @@ func cors(next http.Handler) http.Handler {
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(body); err != nil {
-		slog.Warn("write response", "err", err)
-	}
+	// A write fails when the caller is gone, which its request line shows as cancelled.
+	_ = json.NewEncoder(w).Encode(body)
 }
 
 func writeError(w http.ResponseWriter, status int, code string) {
@@ -100,7 +112,7 @@ func readJSON(w http.ResponseWriter, r *http.Request, limit int64, v any) bool {
 }
 
 func internalError(w http.ResponseWriter, r *http.Request, err error) {
-	slog.Error("request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+	logline.SetError(r.Context(), err)
 	writeError(w, http.StatusInternalServerError, "internal")
 }
 
@@ -128,6 +140,7 @@ func (s *server) authed(next func(http.ResponseWriter, *http.Request, bus.Caller
 			internalError(w, r, err)
 			return
 		}
+		logline.SetUser(r.Context(), caller.UserID)
 		next(w, r, caller)
 	}
 }

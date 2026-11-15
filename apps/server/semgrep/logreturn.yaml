@@ -1,0 +1,30 @@
+rules:
+  - id: log-an-error-or-return-it
+    languages: [go]
+    severity: ERROR
+    message: >-
+      An error is recorded once, on the line of the unit of work it ends. Return it to the caller
+      that ends the unit, or record it and go on, never both.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $LOG.$CALL(..., $ERR, ...)
+              return $ERR
+          - pattern: |
+              $LOG.$CALL(..., $ERR, ...)
+              return ..., $ERR
+          - pattern: |
+              $LOG.$CALL(..., $ERR, ...)
+              return ..., $WRAP(..., $ERR, ...)
+          - pattern: |
+              $LOG.$CALL(..., slog.$ATTR(..., $ERR), ...)
+              return ..., $ERR
+          - pattern: |
+              $LOG.$CALL(..., slog.$ATTR(..., $ERR), ...)
+              return $ERR
+      - metavariable-regex:
+          metavariable: $CALL
+          regex: ^((Debug|Info|Warn|Error|Log|LogAttrs)(Context)?|SetError)$
+      - metavariable-regex:
+          metavariable: $ERR
+          regex: (?i)^\w*err\w*$

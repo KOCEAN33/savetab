@@ -4,6 +4,7 @@ package httpserver
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"net/http"
 	"sync/atomic"
@@ -42,12 +43,13 @@ type Server struct {
 	listening atomic.Bool
 }
 
-// New returns the server. Every request's context ends after cfg.RequestDeadline. v1 serves
+// New returns the server. Every request writes one line to logger, and its context ends after
+// cfg.RequestDeadline. v1 serves
 // /v1, the share viewer under /s/, and /healthz, as it routes them itself.
-func New(cfg Config, db Pinger, v1 http.Handler) *Server {
+func New(cfg Config, logger *slog.Logger, db Pinger, v1 http.Handler) *Server {
 	s := &Server{}
 	engine := gin.New()
-	engine.Use(requestDeadline(cfg.RequestDeadline))
+	engine.Use(requestLine(logger), requestDeadline(cfg.RequestDeadline))
 	engine.GET("/livez", func(c *gin.Context) { c.Status(http.StatusOK) })
 	engine.GET("/readyz", s.ready(db, cfg.ReadyPingTimeout))
 	mounted := gin.WrapH(v1)

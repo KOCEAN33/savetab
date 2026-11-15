@@ -1,0 +1,33 @@
+rules:
+  - id: log-through-logline
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Build log attributes with internal/platform/logline, which holds every log key, and add
+      them to the line of the unit of work. A key written here drifts from the schema, and a
+      call on the default logger writes a second line.
+    paths:
+      exclude:
+        - internal/platform/logline
+        # A test writes no line, and t.Error has the shape of a logger call.
+        - "*_test.go"
+    pattern-either:
+      - patterns:
+          - pattern: 'slog.$ATTR("...", ...)'
+          - metavariable-regex:
+              metavariable: $ATTR
+              regex: ^(String|Int|Int64|Uint64|Float64|Bool|Time|Duration|Any|Group)$
+      - patterns:
+          - pattern: 'slog.$LEVEL(...)'
+          - metavariable-regex:
+              metavariable: $LEVEL
+              regex: ^(Debug|Info|Warn|Error|Log|LogAttrs)(Context)?$
+      - patterns:
+          - pattern-either:
+              - pattern: '$L.$LEVEL($MSG, ..., "...", $VALUE, ...)'
+              - pattern: '$L.$LEVEL($CTX, $MSG, ..., "...", $VALUE, ...)'
+          - pattern-not: 'http.Error(...)'
+          - metavariable-regex:
+              metavariable: $LEVEL
+              regex: ^(Debug|Info|Warn|Error|Log)(Context)?$
+      - pattern: '$L.With(..., "...", $VALUE, ...)'

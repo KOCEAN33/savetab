@@ -63,6 +63,8 @@ func TestLoadReadsTheEnvironmentAndFillsDefaults(t *testing.T) {
 		ReadyPingTimeout: time.Second,
 		HTTPDrainTimeout: 15 * time.Second,
 		ShutdownBudget:   20 * time.Second,
+		LogFormat:        "json",
+		LogLevel:         slog.LevelInfo,
 	}
 	if !reflect.DeepEqual(cfg, want) {
 		t.Errorf("Load = %v, want %v", cfg, want)
@@ -101,11 +103,26 @@ func TestLoadNamesEveryMalformedAndOutOfRangeValueAtOnce(t *testing.T) {
 		"HTTP_DRAIN_TIMEOUT": "15",
 		"SHUTDOWN_BUDGET":    "-",
 		"PUBLIC_URL":         "savetab.example",
+		"LOG_LEVEL":          "loud",
 	} {
 		environ[name] = value
 	}
 	_, err := load(environ)
-	assertNamesAll(t, err, "DB_POOL_MAX", "START_WAIT", "REQUEST_DEADLINE", "READY_PING_TIMEOUT", "HTTP_DRAIN_TIMEOUT", "SHUTDOWN_BUDGET", "PUBLIC_URL")
+	assertNamesAll(t, err, "DB_POOL_MAX", "START_WAIT", "REQUEST_DEADLINE", "READY_PING_TIMEOUT", "HTTP_DRAIN_TIMEOUT", "SHUTDOWN_BUDGET", "PUBLIC_URL", "LOG_LEVEL")
+}
+
+func TestLoadReadsTheLogSettings(t *testing.T) {
+	t.Parallel()
+	environ := validEnvironment(t)
+	environ["LOG_FORMAT"] = "console"
+	environ["LOG_LEVEL"] = "debug"
+	cfg, err := load(environ)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LogFormat != "console" || cfg.LogLevel != slog.LevelDebug {
+		t.Errorf("LogFormat %q, LogLevel %v, want console and DEBUG", cfg.LogFormat, cfg.LogLevel)
+	}
 }
 
 func TestLoadRejectsOutOfRangeValues(t *testing.T) {
@@ -120,6 +137,7 @@ func TestLoadRejectsOutOfRangeValues(t *testing.T) {
 		{"blank secret file", nil, "\n", []string{"DATABASE_URL_FILE"}},
 		{"no pool connection", map[string]string{"DB_POOL_MAX": "0"}, "", []string{"DB_POOL_MAX"}},
 		{"no start wait", map[string]string{"START_WAIT": "0s"}, "", []string{"START_WAIT"}},
+		{"unknown log format", map[string]string{"LOG_FORMAT": "xml"}, "", []string{"LOG_FORMAT"}},
 		{"redirect uri without a scheme", map[string]string{"AUTH_REDIRECT_URIS": "https://a.example/ b.example"}, "", []string{"AUTH_REDIRECT_URIS"}},
 		{"deadline not shorter than the drain", map[string]string{"REQUEST_DEADLINE": "15s"}, "", []string{"REQUEST_DEADLINE", "HTTP_DRAIN_TIMEOUT"}},
 		{"drain not shorter than the budget", map[string]string{"HTTP_DRAIN_TIMEOUT": "20s"}, "", []string{"HTTP_DRAIN_TIMEOUT", "SHUTDOWN_BUDGET"}},

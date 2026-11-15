@@ -2,7 +2,6 @@ package api
 
 import (
 	_ "embed"
-	"log/slog"
 	"net/http"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
@@ -92,8 +91,7 @@ func viewerFile(contentType string, body []byte) http.HandlerFunc {
 		h.Set("Content-Security-Policy", viewerCSP)
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("X-Robots-Tag", "noindex")
-		if _, err := w.Write(body); err != nil {
-			slog.Warn("write response", "err", err)
-		}
+		// A write fails when the caller is gone, which its request line shows as cancelled.
+		_, _ = w.Write(body)
 	}
 }

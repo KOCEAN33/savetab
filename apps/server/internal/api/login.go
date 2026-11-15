@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
 )
 
 const (
@@ -40,12 +40,14 @@ type LoginConfig struct {
 type Login struct {
 	oauth        oauth2.Config
 	verifier     *oidc.IDTokenVerifier
+	issuer       *http.Client
 	redirectURIs []string
 }
 
 // NewLogin reads the issuer's discovery document, so the issuer must be reachable.
 func NewLogin(ctx context.Context, cfg LoginConfig) (*Login, error) {
-	provider, err := oidc.NewProvider(ctx, cfg.Issuer)
+	issuer := &http.Client{Transport: logline.Transport(http.DefaultTransport, "oidc")}
+	provider, err := oidc.NewProvider(oidc.ClientContext(ctx, issuer), cfg.Issuer)
 	if err != nil {
 		return nil, err
 	}
@@ -57,6 +59,7 @@ func NewLogin(ctx context.Context, cfg LoginConfig) (*Login, error) {
 			Scopes:      []string{oidc.ScopeOpenID},
 		},
 		verifier:     provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}),
+		issuer:       issuer,
 		redirectURIs: cfg.RedirectURIs,
 	}, nil
 }
@@ -104,7 +107,7 @@ func (s *server) authStart(w http.ResponseWriter, r *http.Request) {
 
 // identify trades the issuer's code for an ID token and returns who it names.
 func (s *server) identify(ctx context.Context, login bus.Login, code string) (issuer, subject string, err error) {
-	token, err := s.login.oauth.Exchange(ctx, code, oauth2.VerifierOption(login.IssuerVerifier))
+	token, err := s.login.oauth.Exchange(context.WithValue(ctx, oauth2.HTTPClient, s.login.issuer), code, oauth2.VerifierOption(login.IssuerVerifier))
 	if err != nil {
 		return "", "", err
 	}
@@ -144,13 +147,13 @@ func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	issuer, subject, err := s.identify(r.Context(), login, q.Get("code"))
 	if err != nil {
-		slog.Warn("login failed", "err", err)
+		logline.SetError(r.Context(), err)
 		fail("login_failed")
 		return
 	}
 	code, err := s.bus.CompleteLogin(r.Context(), state, issuer, subject)
 	if err != nil {
-		slog.Error("login failed", "err", err)
+		logline.SetError(r.Context(), err)
 		fail("login_failed")
 		return
 	}

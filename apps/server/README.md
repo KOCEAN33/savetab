@@ -20,6 +20,8 @@ The server applies its migrations at start, and reads the issuer's discovery doc
 | `READY_PING_TIMEOUT` | Timeout of the readiness database ping. Default `1s`. |
 | `HTTP_DRAIN_TIMEOUT` | How long a stop waits for running requests. Default `15s`. Shorter than `SHUTDOWN_BUDGET`. |
 | `SHUTDOWN_BUDGET` | The Pod's `terminationGracePeriodSeconds` minus its `preStop` sleep. Default `20s`. |
+| `LOG_FORMAT` | `json`, one object per line, or `console`, colored text for a terminal. Default `json`. |
+| `LOG_LEVEL` | Lowest level written: `debug`, `info`, `warn`, or `error`. Default `info`. |
 
 ```bash
 DATABASE_URL_FILE=/path/to/url LISTEN_ADDR=:8080 OIDC_ISSUER=https://... go run ./cmd/savetab-server

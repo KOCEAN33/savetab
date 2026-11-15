@@ -3,7 +3,7 @@ package main
 
 import (
 	"context"
-	"log/slog"
+	"fmt"
 	"os"
 
 	"github.com/caarlos0/env/v11"
@@ -12,17 +12,21 @@ import (
 	"github.com/KOCEAN33/savetab/apps/server/internal/wire"
 )
 
-func main() {
-	if err := run(); err != nil {
-		slog.Error("server stopped", "err", err)
-		os.Exit(1)
-	}
-}
+// Set at link time by the Dockerfile.
+var (
+	version = "dev"
+	commit  = "unknown"
+)
 
-func run() error {
+func main() {
 	cfg, err := config.Load(env.Options{})
 	if err != nil {
-		return err
+		// The log format is itself configuration, so a bad configuration has no logger yet.
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-	return wire.Run(context.Background(), cfg, wire.Options{})
+	// Run's stop line holds its error.
+	if wire.Run(context.Background(), cfg, wire.Options{Version: version, Commit: commit}) != nil {
+		os.Exit(1)
+	}
 }

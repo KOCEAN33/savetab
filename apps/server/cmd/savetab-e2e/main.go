@@ -14,13 +14,14 @@ import (
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/config"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/testdb"
 	"github.com/KOCEAN33/savetab/apps/server/internal/wire"
 )
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("server stopped", "err", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -54,8 +55,12 @@ func run() error {
 		ReadyPingTimeout: time.Second,
 		HTTPDrainTimeout: 15 * time.Second,
 		ShutdownBudget:   20 * time.Second,
+		LogFormat:        logline.FormatConsole,
+		// A test run shows only the requests the server failed.
+		LogLevel: slog.LevelWarn,
 	}
 	// A request sent before the database is migrated waits in the listener's queue.
 	fmt.Println(url)
-	return wire.Run(context.Background(), cfg, wire.Options{Listener: listener})
+	// Stdout holds only the URL line, so the log goes to stderr.
+	return wire.Run(context.Background(), cfg, wire.Options{Listener: listener, Log: os.Stderr, Version: "e2e", Commit: "e2e"})
 }
