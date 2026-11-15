@@ -1,4 +1,4 @@
-import { expect, onetabPage, openPages, openUrls, sendWindow, test } from './fixtures';
+import { dragOver, drop, expect, onetabPage, openPages, openUrls, sendWindow, test } from './fixtures';
 
 test('right-click on a tick selects all, and the bar moves the selection to trash', async ({
   context,
@@ -90,4 +90,37 @@ test('the delete button on a ticked row deletes every ticked row', async ({ cont
   await row.getByRole('button', { name: 'Delete Page d2' }).click();
 
   await expect(list.locator('.tab-link')).toHaveText(['Page d3']);
+});
+
+test('dragging a ticked row carries the other ticked rows with it while the pointer is down', async ({
+  context,
+  worker,
+  extensionId,
+}) => {
+  await openPages(context, ['d1', 'd2', 'd3']);
+  await sendWindow(worker);
+  const list = await onetabPage(context, extensionId);
+  await openPages(context, ['d4']);
+  await sendWindow(worker);
+  await list.bringToFront();
+
+  const groups = list.locator('main section.group');
+  const groupB = groups.nth(0);
+  const groupA = groups.nth(1);
+  await expect(groupA.locator('.tab-link')).toHaveText(['Page d1', 'Page d2', 'Page d3']);
+  await expect(groupB.locator('.tab-link')).toHaveText(['Page d4']);
+
+  await groupA.locator('.tab').filter({ hasText: 'Page d1' }).hover();
+  await list.getByRole('checkbox', { name: 'Select Page d1' }).check();
+  await groupA.locator('.tab').filter({ hasText: 'Page d3' }).hover();
+  await list.getByRole('checkbox', { name: 'Select Page d3' }).check();
+
+  await dragOver(list, groupA.getByRole('link', { name: 'Page d1' }), groupB.getByRole('link', { name: 'Page d4' }));
+  await expect(groupA.locator('.tab').filter({ hasText: 'Page d3' })).toHaveCount(0);
+  await expect(groupA.locator('.tab').filter({ hasText: 'Page d2' })).toBeVisible();
+  await expect(list.locator('#dnd-action-dragged-el')).toHaveAttribute('data-drag-count', '2');
+
+  await drop(list);
+  await expect(groupB.locator('.tab-link')).toHaveText(['Page d1', 'Page d3', 'Page d4']);
+  await expect(groupA.locator('.tab-link')).toHaveText(['Page d2']);
 });

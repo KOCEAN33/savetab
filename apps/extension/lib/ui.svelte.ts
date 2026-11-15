@@ -63,6 +63,14 @@ export async function dedupe(scopes: (Id | null)[]): Promise<void> {
   if (n === 0) alert(t('noDuplicates'));
 }
 
+/** Ticked items that ride with the dragged row. They leave the list until the drop lands. */
+export const carried = new SvelteSet<Id>();
+
+/** For a zone's `consider` on a drag start: the dragged row's other targets leave the list. */
+export function carry(view: ListView, id: Id): void {
+  for (const item of targets(view, id)) if (item.id !== id) carried.add(item.id);
+}
+
 /** svelte-dnd-action's `transformDraggedElement`: the dragged row shows how many items the drop moves. */
 export function dragCount(view: ListView): TransformDraggedElementFunction {
   return (el, data) => {

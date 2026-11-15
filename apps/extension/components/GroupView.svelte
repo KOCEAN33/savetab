@@ -12,7 +12,7 @@
   import { clickIntent, restoreGroup, restoreTab } from '@/lib/restore';
   import { clickSelect } from '@/lib/row-select';
   import { activeShare } from '@/lib/share';
-  import { act, dragCount, editing, keys, menu, nextStill, oneShelf, spend, toggleMenu, trashTargets } from '@/lib/ui.svelte';
+  import { act, carried, carry, dragCount, editing, keys, menu, nextStill, oneShelf, spend, toggleMenu, trashTargets } from '@/lib/ui.svelte';
   import { shortDate, t, tn } from '@/lib/i18n';
   import Icon from './Icon.svelte';
   import NotesField from './NotesField.svelte';
@@ -36,7 +36,7 @@
   const tabs = $derived(shown ?? view.tabs(group.id));
   const settings = $derived(view.settings);
 
-  let items = $derived(tabs);
+  let items = $derived(tabs.filter((t) => !carried.has(t.id)));
 
   const count = $derived(view.tabs(group.id).length);
   const label = $derived(group.title || tn('tabCount', count));
@@ -65,17 +65,22 @@
   }
 
   function consider(e: CustomEvent<DndEvent<Tab>>) {
-    items = e.detail.items;
-    if (e.detail.info.trigger === TRIGGERS.DRAG_STARTED) ondragging(true);
+    if (e.detail.info.trigger === TRIGGERS.DRAG_STARTED) {
+      carry(view, e.detail.info.id);
+      ondragging(true);
+    }
+    items = e.detail.items.filter((t) => !carried.has(t.id));
   }
 
   function finalize(e: CustomEvent<DndEvent<Tab>>) {
+    carried.clear();
     items = e.detail.items;
     ondragging(false);
     const { id, trigger } = e.detail.info;
     const copy = keys.copy;
     // A copy leaves the source in place, which the group's own data never stopped showing.
-    if (copy) items = tabs;
+    // A drop outside every zone moves nothing, so the carried rows come back too.
+    if (copy || trigger === TRIGGERS.DROPPED_OUTSIDE_OF_ANY) items = tabs;
     if (trigger !== TRIGGERS.DROPPED_INTO_ZONE) return;
     const at = e.detail.items.findIndex((t) => t.id === id);
     if (at === -1) return;

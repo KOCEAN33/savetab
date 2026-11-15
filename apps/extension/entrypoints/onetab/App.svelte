@@ -30,7 +30,7 @@
   import { marquee } from '@/lib/row-select';
   import { linksFromData } from '@/lib/links-in';
   import { restoredItem } from '@/lib/backup';
-  import { dedupe, dragCount, editing, keys, menu, nextStill, oneShelf, spend } from '@/lib/ui.svelte';
+  import { carried, carry, dedupe, dragCount, editing, keys, menu, nextStill, oneShelf, spend } from '@/lib/ui.svelte';
   import { t, tn } from '@/lib/i18n';
   import { deviceSettingsItem, getDeviceSettings, setDeviceSettings } from '@/lib/settings';
   import type { Theme } from '@/lib/theme';
@@ -100,7 +100,7 @@
   const afterShown = $derived(groups[pageStart + Math.min(limit, PAGE_SIZE)]?.id ?? null);
   const nextCount = $derived(Math.min(PAGE_SIZE, groups.length - pageStart - PAGE_SIZE));
 
-  let items = $derived(shown());
+  let items = $derived(shown().filter((g) => !carried.has(g.id)));
   /** Groups and tabs of the open folder, top to bottom, for the tick menu's range commands. */
   const order = $derived(groups.flatMap((g) => [g.id, ...view.tabs(g.id).map((t) => t.id)]));
   const menuItem = $derived(menu.id ? view.get(menu.id) : undefined);
@@ -164,7 +164,13 @@
     if (id) editing.title = id;
   }
 
+  function considerItems(e: CustomEvent<DndEvent<Group>>) {
+    if (e.detail.info.trigger === TRIGGERS.DRAG_STARTED) carry(view, e.detail.info.id);
+    items = e.detail.items.filter((g) => !carried.has(g.id));
+  }
+
   function finalizeItems(e: CustomEvent<DndEvent<Group>>) {
+    carried.clear();
     items = e.detail.items;
     const { id, trigger } = e.detail.info;
     const copy = keys.copy;
@@ -307,7 +313,7 @@
     <div
       class="groups"
       use:dragHandleZone={{ items, type: 'group', flipDurationMs: FLIP_MS, transformDraggedElement: dragCount(view), useCursorForDetection: true, zoneTabIndex: -1, zoneItemTabIndex: -1, ...DROP_TARGET }}
-      onconsider={(e) => (items = e.detail.items)}
+      onconsider={considerItems}
       onfinalize={finalizeItems}
     >
       {#each items as item (item.id)}

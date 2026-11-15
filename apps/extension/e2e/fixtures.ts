@@ -91,10 +91,11 @@ export function openUrls(context: BrowserContext): string[] {
 }
 
 /**
- * Drag `from` to just below the middle of `to`. svelte-dnd-action samples the pointer on a
- * timer, so the pointer moves at human speed and rests on the target before the drop.
+ * Press on `from` and move to just below the middle of `to`, keeping the button down.
+ * svelte-dnd-action samples the pointer on a timer, so the pointer moves at human speed and
+ * rests on the target.
  */
-export async function drag(page: Page, from: Locator, to: Locator, grabX = 20): Promise<void> {
+export async function dragOver(page: Page, from: Locator, to: Locator, grabX = 20): Promise<void> {
   const a = (await from.boundingBox())!;
   const b = (await to.boundingBox())!;
   const start = { x: a.x + Math.min(grabX, a.width / 2), y: a.y + a.height / 2 };
@@ -109,5 +110,14 @@ export async function drag(page: Page, from: Locator, to: Locator, grabX = 20): 
     await page.mouse.move(end.x, end.y + (i % 2));
     await page.waitForTimeout(30);
   }
+}
+
+export async function drop(page: Page): Promise<void> {
   await page.mouse.up();
+}
+
+/** Drag `from` to just below the middle of `to` and drop it there. */
+export async function drag(page: Page, from: Locator, to: Locator, grabX = 20): Promise<void> {
+  await dragOver(page, from, to, grabX);
+  await drop(page);
 }
