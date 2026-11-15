@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
+	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/testdb"
@@ -63,7 +64,7 @@ func run(m *testing.M) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	handler = api.New(store, login)
+	handler = api.New(bus.New(store), login)
 	return m.Run()
 }
 

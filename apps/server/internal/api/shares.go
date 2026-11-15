@@ -39,7 +39,7 @@ func (s *server) createShare(w http.ResponseWriter, r *http.Request, c bus.Calle
 		writeError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	sh, err := s.store.CreateShare(r.Context(), c.UserID, body.Data, shareTTL)
+	sh, err := s.bus.CreateShare(r.Context(), c.UserID, body.Data)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -55,7 +55,7 @@ func (s *server) getShare(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}
-	sh, err := s.store.Share(r.Context(), id)
+	sh, err := s.bus.Share(r.Context(), id)
 	if errs.KindOf(err) == errs.NotFound {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
@@ -73,7 +73,7 @@ func (s *server) deleteShare(w http.ResponseWriter, r *http.Request, c bus.Calle
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	}
-	err := s.store.DeleteShare(r.Context(), c.UserID, id)
+	err := s.bus.DeleteShare(r.Context(), c.UserID, id)
 	switch {
 	case errs.KindOf(err) == errs.NotFound:
 		writeError(w, http.StatusNotFound, "not_found")

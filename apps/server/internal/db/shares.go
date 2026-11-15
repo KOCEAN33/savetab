@@ -3,8 +3,6 @@ package db
 import (
 	"context"
 	"time"
-
-	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
 // Share is a copy of a folder or group that anyone holding its URL can read until it expires.
@@ -14,11 +12,11 @@ type Share struct {
 	ExpiresAt  time.Time
 }
 
-// CreateShare stores a share of the user's that expires after ttl. It also clears every user's
+// InsertShare stores a share of the user's that expires after ttl. It also clears every user's
 // expired shares, so none outlives the next share made on the server.
-func (s *Store) CreateShare(ctx context.Context, userID string, ciphertext []byte, ttl time.Duration) (Share, error) {
+func (q *Queries) InsertShare(ctx context.Context, userID string, ciphertext []byte, ttl time.Duration) (Share, error) {
 	sh := Share{Ciphertext: ciphertext}
-	err := s.pool.QueryRow(ctx, `
+	err := q.db.QueryRow(ctx, `
 		WITH gone AS (
 			DELETE FROM shares WHERE expires_at <= now()
 		)
@@ -30,9 +28,9 @@ func (s *Store) CreateShare(ctx context.Context, userID string, ciphertext []byt
 }
 
 // Share returns any user's share. An expired share gives a NotFound error.
-func (s *Store) Share(ctx context.Context, id string) (Share, error) {
+func (q *Queries) Share(ctx context.Context, id string) (Share, error) {
 	sh := Share{ID: id}
-	err := s.pool.QueryRow(ctx, `SELECT ciphertext, expires_at FROM shares WHERE id = $1 AND expires_at > now()`,
+	err := q.db.QueryRow(ctx, `SELECT ciphertext, expires_at FROM shares WHERE id = $1 AND expires_at > now()`,
 		id).Scan(&sh.Ciphertext, &sh.ExpiresAt)
 	if err != nil {
 		return Share{}, MapError(ctx, "get share", err)
@@ -40,14 +38,11 @@ func (s *Store) Share(ctx context.Context, id string) (Share, error) {
 	return sh, nil
 }
 
-// DeleteShare deletes one of the user's shares. An expired share gives a NotFound error.
-func (s *Store) DeleteShare(ctx context.Context, userID, id string) error {
-	tag, err := s.pool.Exec(ctx, `DELETE FROM shares WHERE id = $1 AND user_id = $2 AND expires_at > now()`, id, userID)
+// DeleteShare deletes one of the user's unexpired shares and reports whether it found one.
+func (q *Queries) DeleteShare(ctx context.Context, userID, id string) (bool, error) {
+	tag, err := q.db.Exec(ctx, `DELETE FROM shares WHERE id = $1 AND user_id = $2 AND expires_at > now()`, id, userID)
 	if err != nil {
-		return MapError(ctx, "delete share", err)
+		return false, MapError(ctx, "delete share", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return errs.New(errs.NotFound, "delete share", "not found")
-	}
-	return nil
+	return tag.RowsAffected() == 1, nil
 }

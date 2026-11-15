@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
+	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/testdb"
@@ -65,7 +66,7 @@ func run() error {
 		return err
 	}
 
-	srv := &http.Server{Handler: api.New(store, login), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: api.New(bus.New(store), login), ReadHeaderTimeout: 10 * time.Second}
 	failed := make(chan error, 1)
 	go func() { failed <- srv.Serve(listener) }()
 	fmt.Println(url)

@@ -2,13 +2,19 @@
 // calls db for SQL and row conversion.
 package bus
 
-import "github.com/KOCEAN33/savetab/apps/server/internal/db"
+import (
+	"context"
+
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+)
 
 type Bus struct {
 	store *db.Store
 }
 
 func New(store *db.Store) *Bus { return &Bus{store: store} }
+
+func (b *Bus) Ping(ctx context.Context) error { return b.store.Ping(ctx) }
 
 // Caller is the device and user an access token stands for.
 type Caller struct {

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
+	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 )
 
@@ -61,7 +62,7 @@ func run() error {
 		return fmt.Errorf("OIDC issuer %s: %w", cfg.Issuer, err)
 	}
 
-	srv := &http.Server{Addr: addr, Handler: api.New(store, login), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Addr: addr, Handler: api.New(bus.New(store), login), ReadHeaderTimeout: 10 * time.Second}
 	failed := make(chan error, 1)
 	go func() { failed <- srv.ListenAndServe() }()
 	slog.Info("listening", "addr", addr)

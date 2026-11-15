@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
-	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
@@ -23,19 +22,17 @@ const (
 	// A wrapped key or a pairing message is under 100 bytes in the v1 formats.
 	maxMessageBytes = 1024
 	smallBodyBytes  = 8 << 10
-	shareTTL        = 30 * 24 * time.Hour
 )
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 type server struct {
 	bus   *bus.Bus
-	store *db.Store
 	login *Login
 }
 
-func New(s *db.Store, login *Login) http.Handler {
-	srv := &server{bus: bus.New(s), store: s, login: login}
+func New(b *bus.Bus, login *Login) http.Handler {
+	srv := &server{bus: b, login: login}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", srv.health)
 	mux.HandleFunc("GET /v1/auth/start", srv.authStart)
@@ -108,7 +105,7 @@ func internalError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func (s *server) health(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.Ping(r.Context()); err != nil {
+	if err := s.bus.Ping(r.Context()); err != nil {
 		internalError(w, r, err)
 		return
 	}
