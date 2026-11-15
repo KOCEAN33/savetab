@@ -35,25 +35,33 @@ const (
 )
 
 // StartPairing opens a pairing for the calling device, which is the new one. It replaces a
-// pairing the device still has open and clears the user's expired ones.
-func (b *Bus) StartPairing(ctx context.Context, c Caller, commitment []byte) (Pairing, error) {
+// pairing the device still has open and clears the user's expired ones. id is the caller's
+// choice, and an id a pairing already has gives a Conflict.
+func (b *Bus) StartPairing(ctx context.Context, c Caller, id uuid.UUID, commitment []byte) (Pairing, error) {
 	row, err := b.store.Queries().CreatePairing(ctx, db.CreatePairingParams{
-		UserID: c.UserID, NewDeviceID: c.DeviceID, Commitment: commitment, TTLSeconds: pairingTTL.Seconds(),
+		ID: id, UserID: c.UserID, NewDeviceID: c.DeviceID, Commitment: commitment, TTLSeconds: pairingTTL.Seconds(),
 	})
 	return Pairing(row), err
 }
 
-// Pairings returns the user's pairings that have not expired, oldest first.
-func (b *Bus) Pairings(ctx context.Context, userID uuid.UUID) ([]Pairing, error) {
-	rows, err := b.store.Queries().Pairings(ctx, userID)
+// Pairings returns up to limit of the user's pairings that have not expired, oldest first, from
+// the position after. next is where the page ended, nil when no pairing remains.
+func (b *Bus) Pairings(ctx context.Context, userID uuid.UUID, after Cursor, limit int) (ps []Pairing, next *Cursor, err error) {
+	rows, err := b.store.Queries().Pairings(ctx, db.PairingsParams{
+		UserID: userID, AfterExpiresAt: after.Time, AfterID: after.ID, MaxRows: int32(limit + 1),
+	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	ps := make([]Pairing, len(rows))
+	ps = make([]Pairing, len(rows))
 	for i, row := range rows {
 		ps[i] = Pairing(row)
 	}
-	return ps, nil
+	if len(ps) > limit {
+		last := ps[limit-1]
+		return ps[:limit], &Cursor{Time: last.ExpiresAt, ID: last.ID}, nil
+	}
+	return ps, nil, nil
 }
 
 // Pairing returns one of the user's pairings. An expired pairing gives a NotFound error.

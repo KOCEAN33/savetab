@@ -7,26 +7,16 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
 )
-
-const (
-	maxStateBytes    = 512
-	maxDeviceNameLen = 100
-)
-
-// An S256 code challenge is 32 bytes as unpadded base64url.
-var challengePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
 
 type LoginConfig struct {
 	Issuer   string
@@ -39,7 +29,9 @@ type LoginConfig struct {
 
 // Login runs the OIDC login against one issuer.
 type Login struct {
-	oauth        oauth2.Config
+	oauth oauth2.Config
+	// oauthV1 differs in the callback the issuer redirects to.
+	oauthV1      oauth2.Config
 	verifier     *oidc.IDTokenVerifier
 	issuer       *http.Client
 	redirectURIs []string
@@ -52,13 +44,17 @@ func NewLogin(ctx context.Context, cfg LoginConfig) (*Login, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Login{
-		oauth: oauth2.Config{
+	oauth := func(callback string) oauth2.Config {
+		return oauth2.Config{
 			ClientID:    cfg.ClientID,
 			Endpoint:    provider.Endpoint(),
-			RedirectURL: strings.TrimSuffix(cfg.PublicURL, "/") + "/v1/auth/callback",
+			RedirectURL: strings.TrimSuffix(cfg.PublicURL, "/") + callback,
 			Scopes:      []string{oidc.ScopeOpenID},
-		},
+		}
+	}
+	return &Login{
+		oauth:        oauth("/v2/authorizations/callback"),
+		oauthV1:      oauth("/v1/auth/callback"),
 		verifier:     provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}),
 		issuer:       issuer,
 		redirectURIs: cfg.RedirectURIs,
@@ -78,37 +74,26 @@ func withQuery(base string, params map[string]string) string {
 	return u.String()
 }
 
-func (s *server) authStart(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	redirectURI, challenge, state := q.Get("redirect_uri"), q.Get("code_challenge"), q.Get("state")
-	if !slices.Contains(s.login.redirectURIs, redirectURI) {
-		writeError(w, http.StatusBadRequest, "invalid_redirect_uri")
-		return
-	}
-	if !challengePattern.MatchString(challenge) || state == "" || len(state) > maxStateBytes {
-		writeError(w, http.StatusBadRequest, "bad_request")
-		return
-	}
+// newLogin makes the login of one start request, with the nonce and the verifier that bind the
+// issuer's answer to it.
+func newLogin(redirectURI, state, challenge string) bus.Login {
 	nonce := make([]byte, 16)
-	if _, err := rand.Read(nonce); err != nil {
-		internalError(w, r, err)
-		return
-	}
-	login := bus.Login{
+	// crypto/rand.Read never fails.
+	_, _ = rand.Read(nonce)
+	return bus.Login{
 		RedirectURI: redirectURI, ClientState: state, CodeChallenge: challenge,
 		Nonce: base64.RawURLEncoding.EncodeToString(nonce), IssuerVerifier: oauth2.GenerateVerifier(),
 	}
-	issuerState, err := s.bus.StartLogin(r.Context(), login)
-	if err != nil {
-		internalError(w, r, err)
-		return
-	}
-	http.Redirect(w, r, s.login.oauth.AuthCodeURL(issuerState, oidc.Nonce(login.Nonce), oauth2.S256ChallengeOption(login.IssuerVerifier)), http.StatusFound)
+}
+
+// authURL is where the issuer takes the login, with the state StartLogin gave it.
+func authURL(oauth *oauth2.Config, login bus.Login, issuerState string) string {
+	return oauth.AuthCodeURL(issuerState, oidc.Nonce(login.Nonce), oauth2.S256ChallengeOption(login.IssuerVerifier))
 }
 
 // identify trades the issuer's code for an ID token and returns who it names.
-func (s *server) identify(ctx context.Context, login bus.Login, code string) (issuer, subject string, err error) {
-	token, err := s.login.oauth.Exchange(context.WithValue(ctx, oauth2.HTTPClient, s.login.issuer), code, oauth2.VerifierOption(login.IssuerVerifier))
+func (l *Login) identify(ctx context.Context, oauth *oauth2.Config, login bus.Login, code string) (issuer, subject string, err error) {
+	token, err := oauth.Exchange(context.WithValue(ctx, oauth2.HTTPClient, l.issuer), code, oauth2.VerifierOption(login.IssuerVerifier))
 	if err != nil {
 		return "", "", err
 	}
@@ -116,7 +101,7 @@ func (s *server) identify(ctx context.Context, login bus.Login, code string) (is
 	if !ok {
 		return "", "", errors.New("the issuer sent no id_token")
 	}
-	idToken, err := s.login.verifier.Verify(ctx, raw)
+	idToken, err := l.verifier.Verify(ctx, raw)
 	if err != nil {
 		return "", "", err
 	}
@@ -126,96 +111,83 @@ func (s *server) identify(ctx context.Context, login bus.Login, code string) (is
 	return idToken.Issuer, idToken.Subject, nil
 }
 
-func (s *server) authCallback(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	state := q.Get("state")
-	login, err := s.bus.PendingLogin(r.Context(), state)
+// StartAuthorization sends the browser to the issuer.
+func (h *Handlers) StartAuthorization(ctx context.Context, req StartAuthorizationRequestObject) (StartAuthorizationResponseObject, error) {
+	if !slices.Contains(h.login.redirectURIs, req.Params.RedirectUri) {
+		return nil, errs.New(errs.Invalid, "start authorization", "redirect_uri is not one the server is configured with")
+	}
+	login := newLogin(req.Params.RedirectUri, req.Params.State, req.Params.CodeChallenge)
+	issuerState, err := h.bus.StartLogin(ctx, login)
+	if err != nil {
+		return nil, err
+	}
+	return StartAuthorization302Response{Headers: StartAuthorization302ResponseHeaders{
+		Location: authURL(&h.login.oauth, login, issuerState),
+	}}, nil
+}
+
+// FinishAuthorization takes the issuer's answer. Once the state names a login, the client is
+// known, so a failure goes back to it and closes its login window.
+func (h *Handlers) FinishAuthorization(ctx context.Context, req FinishAuthorizationRequestObject) (FinishAuthorizationResponseObject, error) {
+	login, err := h.bus.PendingLogin(ctx, req.Params.State)
 	if errs.KindOf(err) == errs.NotFound {
-		writeError(w, http.StatusBadRequest, "invalid_state")
-		return
+		return nil, errs.Wrap(errs.Invalid, "finish authorization", "state names no login in flight", err)
 	}
 	if err != nil {
-		internalError(w, r, err)
-		return
+		return nil, err
 	}
-	// From here the client is known, so a failure goes back to it and closes its login window.
-	fail := func(code string) {
-		http.Redirect(w, r, withQuery(login.RedirectURI, map[string]string{"error": code, "state": login.ClientState}), http.StatusFound)
+	back := func(key, value string) (FinishAuthorizationResponseObject, error) {
+		return FinishAuthorization302Response{Headers: FinishAuthorization302ResponseHeaders{
+			Location: withQuery(login.RedirectURI, map[string]string{key: value, "state": login.ClientState}),
+		}}, nil
 	}
-	if q.Get("error") == "access_denied" {
-		fail("access_denied")
-		return
+	if req.Params.Error != nil && *req.Params.Error == "access_denied" {
+		return back("error", "access_denied")
 	}
-	issuer, subject, err := s.identify(r.Context(), login, q.Get("code"))
+	var issuerCode string
+	if req.Params.Code != nil {
+		issuerCode = *req.Params.Code
+	}
+	issuer, subject, err := h.login.identify(ctx, &h.login.oauth, login, issuerCode)
 	if err != nil {
-		logline.SetError(r.Context(), err)
-		fail("login_failed")
-		return
+		logline.SetError(ctx, err)
+		return back("error", "login_failed")
 	}
-	code, err := s.bus.CompleteLogin(r.Context(), state, issuer, subject)
+	code, err := h.bus.CompleteLogin(ctx, req.Params.State, issuer, subject)
 	if err != nil {
-		logline.SetError(r.Context(), err)
-		fail("login_failed")
-		return
+		logline.SetError(ctx, err)
+		return back("error", "login_failed")
 	}
-	http.Redirect(w, r, withQuery(login.RedirectURI, map[string]string{"code": code, "state": login.ClientState}), http.StatusFound)
+	return back("code", code)
 }
 
-type tokensBody struct {
-	AccessToken  string    `json:"accessToken"`
-	RefreshToken string    `json:"refreshToken"`
-	ExpiresIn    int       `json:"expiresIn"`
-	UserID       uuid.UUID `json:"userId"`
-	DeviceID     uuid.UUID `json:"deviceId"`
-}
-
-func tokensView(t bus.Tokens) tokensBody {
-	return tokensBody{
-		AccessToken: t.Access, RefreshToken: t.Refresh, ExpiresIn: int(bus.AccessTTL.Seconds()),
-		UserID: t.UserID, DeviceID: t.DeviceID,
-	}
-}
-
-func (s *server) authToken(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Code         string `json:"code"`
-		CodeVerifier string `json:"codeVerifier"`
-		DeviceName   string `json:"deviceName"`
-	}
-	if !readJSON(w, r, smallBodyBytes, &body) {
-		return
-	}
-	if body.Code == "" || body.CodeVerifier == "" || body.DeviceName == "" || len(body.DeviceName) > maxDeviceNameLen {
-		writeError(w, http.StatusBadRequest, "bad_request")
-		return
-	}
-	tokens, err := s.bus.RedeemLogin(r.Context(), body.Code, body.CodeVerifier, body.DeviceName)
-	if errs.KindOf(err) == errs.NotFound {
-		writeError(w, http.StatusBadRequest, "invalid_grant")
-		return
+// CreateTokens trades a login code or a refresh token for a token pair.
+func (h *Handlers) CreateTokens(ctx context.Context, req CreateTokensRequestObject) (CreateTokensResponseObject, error) {
+	body := req.Body
+	var tokens bus.Tokens
+	var err error
+	switch body.GrantType {
+	case AuthorizationCode:
+		if body.Code == nil || body.CodeVerifier == nil || body.DeviceName == nil {
+			return nil, errs.New(errs.Invalid, "create tokens", "authorization_code takes code, code_verifier, and device_name")
+		}
+		tokens, err = h.bus.RedeemLogin(ctx, *body.Code, *body.CodeVerifier, *body.DeviceName)
+		if errs.KindOf(err) == errs.NotFound {
+			err = errs.Wrap(errs.Invalid, "create tokens", "the code is spent, expired, or not this verifier's", err)
+		}
+	case RefreshToken:
+		if body.RefreshToken == nil {
+			return nil, errs.New(errs.Invalid, "create tokens", "refresh_token takes refresh_token")
+		}
+		tokens, err = h.bus.RefreshSession(ctx, *body.RefreshToken)
+	default:
+		return nil, errs.New(errs.Invalid, "create tokens", "unknown grant_type")
 	}
 	if err != nil {
-		internalError(w, r, err)
-		return
+		return nil, err
 	}
-	writeJSON(w, http.StatusOK, tokensView(tokens))
-}
-
-func (s *server) authRefresh(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		RefreshToken string `json:"refreshToken"`
-	}
-	if !readJSON(w, r, smallBodyBytes, &body) {
-		return
-	}
-	tokens, err := s.bus.RefreshSession(r.Context(), body.RefreshToken)
-	if errs.KindOf(err) == errs.Unauthenticated {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-	if err != nil {
-		internalError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, tokensView(tokens))
+	return CreateTokens200JSONResponse{
+		AccessToken: tokens.Access, RefreshToken: tokens.Refresh, ExpiresIn: int32(bus.AccessTTL.Seconds()),
+		UserId: tokens.UserID, DeviceId: tokens.DeviceID,
+	}, nil
 }

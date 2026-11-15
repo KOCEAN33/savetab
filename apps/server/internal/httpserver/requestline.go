@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
 )
 
@@ -29,7 +30,7 @@ func requestLine(logger *slog.Logger) gin.HandlerFunc {
 				stack = debug.Stack()
 				fields.SetPanic(v)
 				if !c.Writer.Written() {
-					c.AbortWithStatus(http.StatusInternalServerError)
+					writeProblem(c, http.StatusInternalServerError, problemTypeOf(errs.Internal), "", nil)
 				}
 			}
 			// A failure to write the line leaves the answer as it is.

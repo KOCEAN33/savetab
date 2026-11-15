@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "test": "./scripts/test.sh",
-    "check": "go vet ./... && golangci-lint run ./... && ./scripts/check-sql.sh"
+    "check": "go vet ./... && golangci-lint run ./... && ./scripts/check-sql.sh && ./scripts/check-api.sh"
+  },
+  "devDependencies": {
+    "@stoplight/spectral-cli": "6.17.1"
   }
 }

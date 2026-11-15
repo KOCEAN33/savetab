@@ -1,48 +1,23 @@
 package api
 
 import (
-	"net/http"
+	"context"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
-	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
-type snapshotBody struct {
-	Seq  int64  `json:"seq"`
-	Data []byte `json:"data"`
-}
-
-func (s *server) getSnapshot(w http.ResponseWriter, r *http.Request, c bus.Caller) {
-	snap, err := s.bus.Snapshot(r.Context(), c.UserID)
-	if errs.KindOf(err) == errs.NotFound {
-		writeError(w, http.StatusNotFound, "no_snapshot")
-		return
-	}
+func (h *Handlers) GetSnapshot(ctx context.Context, _ GetSnapshotRequestObject) (GetSnapshotResponseObject, error) {
+	snap, err := h.bus.Snapshot(ctx, callerOf(ctx).UserID)
 	if err != nil {
-		internalError(w, r, err)
-		return
+		return nil, err
 	}
-	writeJSON(w, http.StatusOK, snapshotBody{Seq: snap.Seq, Data: snap.Ciphertext})
+	return GetSnapshot200JSONResponse{Seq: snap.Seq, Data: snap.Ciphertext}, nil
 }
 
-func (s *server) putSnapshot(w http.ResponseWriter, r *http.Request, c bus.Caller) {
-	var body snapshotBody
-	if !readJSON(w, r, maxSnapshotBytes, &body) {
-		return
+func (h *Handlers) PutSnapshot(ctx context.Context, req PutSnapshotRequestObject) (PutSnapshotResponseObject, error) {
+	err := h.bus.PutSnapshot(ctx, callerOf(ctx).UserID, bus.Snapshot{Seq: req.Body.Seq, Ciphertext: req.Body.Data})
+	if err != nil {
+		return nil, err
 	}
-	if body.Seq < 1 || len(body.Data) == 0 {
-		writeError(w, http.StatusBadRequest, "bad_request")
-		return
-	}
-	err := s.bus.PutSnapshot(r.Context(), c.UserID, bus.Snapshot{Seq: body.Seq, Ciphertext: body.Data})
-	switch {
-	case errs.KindOf(err) == errs.Invalid:
-		writeError(w, http.StatusConflict, "snapshot_ahead")
-	case errs.KindOf(err) == errs.Conflict:
-		writeError(w, http.StatusConflict, "stale_snapshot")
-	case err != nil:
-		internalError(w, r, err)
-	default:
-		w.WriteHeader(http.StatusNoContent)
-	}
+	return PutSnapshot204Response{}, nil
 }

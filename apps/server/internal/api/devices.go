@@ -1,46 +1,27 @@
 package api
 
-import (
-	"net/http"
+import "context"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
-	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
-	"github.com/google/uuid"
-)
-
-type deviceBody struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt int64     `json:"createdAt"`
-	Current   bool      `json:"current"`
-}
-
-func (s *server) listDevices(w http.ResponseWriter, r *http.Request, c bus.Caller) {
-	stored, err := s.bus.Devices(r.Context(), c.UserID)
+func (h *Handlers) ListDevices(ctx context.Context, req ListDevicesRequestObject) (ListDevicesResponseObject, error) {
+	c := callerOf(ctx)
+	after, err := cursorOf(req.Params.PageToken, "devices", c.UserID)
 	if err != nil {
-		internalError(w, r, err)
-		return
+		return nil, err
 	}
-	devices := make([]deviceBody, len(stored))
+	stored, next, err := h.bus.Devices(ctx, c.UserID, after, h.devicesPage.of(req.Params.PageSize))
+	if err != nil {
+		return nil, err
+	}
+	devices := make([]Device, len(stored))
 	for i, d := range stored {
-		devices[i] = deviceBody{ID: d.ID, Name: d.Name, CreatedAt: d.CreatedAt.UnixMilli(), Current: d.ID == c.DeviceID}
+		devices[i] = Device{Id: d.ID, Name: d.Name, CreatedAt: d.CreatedAt.UTC(), Current: d.ID == c.DeviceID}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"devices": devices})
+	return ListDevices200JSONResponse{Devices: devices, NextPageToken: nextToken(next, "devices", c.UserID)}, nil
 }
 
-func (s *server) revokeDevice(w http.ResponseWriter, r *http.Request, c bus.Caller) {
-	id, ok := parseID(r.PathValue("id"))
-	if !ok {
-		writeError(w, http.StatusNotFound, "not_found")
-		return
+func (h *Handlers) DeleteDevice(ctx context.Context, req DeleteDeviceRequestObject) (DeleteDeviceResponseObject, error) {
+	if err := h.bus.RevokeDevice(ctx, callerOf(ctx).UserID, req.DeviceId); err != nil {
+		return nil, err
 	}
-	err := s.bus.RevokeDevice(r.Context(), c.UserID, id)
-	switch {
-	case errs.KindOf(err) == errs.NotFound:
-		writeError(w, http.StatusNotFound, "not_found")
-	case err != nil:
-		internalError(w, r, err)
-	default:
-		w.WriteHeader(http.StatusNoContent)
-	}
+	return DeleteDevice204Response{}, nil
 }

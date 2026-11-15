@@ -35,11 +35,14 @@ LIMIT @max_ops::int;
 INSERT INTO devices (user_id, name) VALUES (@user_id::uuid, @name::text) RETURNING id;
 
 -- name: Devices :many
--- The user's devices that are not revoked, oldest first.
+-- One page of the user's devices that are not revoked, oldest first, after the given position.
 SELECT id, name, created_at
 FROM devices
-WHERE user_id = @user_id::uuid AND revoked_at IS NULL
-ORDER BY created_at, id;
+WHERE
+  user_id = @user_id::uuid AND revoked_at IS NULL
+  AND (created_at, id) > (@after_created_at::timestamptz, @after_id::uuid)
+ORDER BY created_at, id
+LIMIT @max_rows::int;
 
 -- name: RevokeDevice :execrows
 -- Revokes one of the user's devices that is not revoked yet, which ends its sessions.
@@ -55,10 +58,10 @@ ON CONFLICT (user_id) DO NOTHING;
 SELECT wrapped_key FROM key_wraps WHERE user_id = @user_id::uuid;
 
 -- name: UpsertSnapshot :execrows
--- Replaces the user's snapshot unless the stored one has a higher seq.
+-- Replaces the user's snapshot with one of a higher seq.
 INSERT INTO snapshots (user_id, seq, ciphertext) VALUES (@user_id::uuid, @seq::bigint, @ciphertext::bytea)
 ON CONFLICT (user_id) DO UPDATE SET seq = excluded.seq, ciphertext = excluded.ciphertext, created_at = now()
-WHERE snapshots.seq <= excluded.seq;
+WHERE snapshots.seq < excluded.seq;
 
 -- name: DeleteOpsThrough :exec
 -- Deletes the user's ops at or below the seq.
@@ -136,28 +139,37 @@ RETURNING s.device_id, (SELECT d.user_id FROM devices AS d WHERE d.id = s.device
 
 -- name: CreatePairing :one
 -- Opens a pairing for the device, which is the new one. It replaces a pairing the device still
--- has open and clears the user's expired ones.
+-- has open and clears the user's expired ones. A pairing that holds the id stays, so the insert
+-- is a unique violation.
 WITH gone AS (
   DELETE FROM pairings
-  WHERE user_id = @user_id::uuid AND (expires_at <= now() OR new_device_id = @new_device_id::uuid)
+  WHERE
+    user_id = @user_id::uuid AND id <> @id::uuid
+    AND (expires_at <= now() OR new_device_id = @new_device_id::uuid)
 )
 
-INSERT INTO pairings (user_id, new_device_id, commitment, expires_at)
-VALUES (@user_id::uuid, @new_device_id::uuid, @commitment::bytea, now() + make_interval(secs => @ttl_seconds::float8))
+INSERT INTO pairings (id, user_id, new_device_id, commitment, expires_at)
+VALUES (
+  @id::uuid, @user_id::uuid, @new_device_id::uuid, @commitment::bytea,
+  now() + make_interval(secs => @ttl_seconds::float8)
+)
 RETURNING
   id, new_device_id,
   (SELECT d.name FROM devices AS d WHERE d.id = @new_device_id::uuid)::text AS new_device_name,
   commitment, old_public, new_public, wrapped_key, expires_at;
 
 -- name: Pairings :many
--- The user's pairings that have not expired, oldest first.
+-- One page of the user's pairings that have not expired, oldest first, after the given position.
 SELECT
   p.id, p.new_device_id, d.name AS new_device_name,
   p.commitment, p.old_public, p.new_public, p.wrapped_key, p.expires_at
 FROM pairings AS p
 INNER JOIN devices AS d ON p.new_device_id = d.id
-WHERE p.user_id = @user_id::uuid AND p.expires_at > now()
-ORDER BY p.expires_at, p.id;
+WHERE
+  p.user_id = @user_id::uuid AND p.expires_at > now()
+  AND (p.expires_at, p.id) > (@after_expires_at::timestamptz, @after_id::uuid)
+ORDER BY p.expires_at, p.id
+LIMIT @max_rows::int;
 
 -- name: Pairing :one
 -- One of the user's pairings, unless it expired.
@@ -182,11 +194,12 @@ FOR UPDATE;
 
 -- name: InsertShare :one
 -- Stores a share of the user's. It also clears every user's expired shares, so none outlives
--- the next share made on the server.
-WITH gone AS (DELETE FROM shares WHERE expires_at <= now())
+-- the next share made on the server. A share that holds the id stays, so the insert is a
+-- unique violation.
+WITH gone AS (DELETE FROM shares WHERE expires_at <= now() AND id <> @id::uuid)
 
-INSERT INTO shares (user_id, ciphertext, expires_at)
-VALUES (@user_id::uuid, @ciphertext::bytea, now() + make_interval(secs => @ttl_seconds::float8))
+INSERT INTO shares (id, user_id, ciphertext, expires_at)
+VALUES (@id::uuid, @user_id::uuid, @ciphertext::bytea, now() + make_interval(secs => @ttl_seconds::float8))
 RETURNING id, ciphertext, expires_at;
 
 -- name: Share :one

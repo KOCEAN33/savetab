@@ -15,17 +15,24 @@ type Device struct {
 	CreatedAt time.Time
 }
 
-// Devices returns the user's devices that are not revoked, oldest first.
-func (b *Bus) Devices(ctx context.Context, userID uuid.UUID) ([]Device, error) {
-	rows, err := b.store.Queries().Devices(ctx, userID)
+// Devices returns up to limit of the user's devices that are not revoked, oldest first, from
+// the position after. next is where the page ended, nil when no device remains.
+func (b *Bus) Devices(ctx context.Context, userID uuid.UUID, after Cursor, limit int) (devices []Device, next *Cursor, err error) {
+	rows, err := b.store.Queries().Devices(ctx, db.DevicesParams{
+		UserID: userID, AfterCreatedAt: after.Time, AfterID: after.ID, MaxRows: int32(limit + 1),
+	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	devices := make([]Device, len(rows))
+	devices = make([]Device, len(rows))
 	for i, row := range rows {
 		devices[i] = Device(row)
 	}
-	return devices, nil
+	if len(devices) > limit {
+		last := devices[limit-1]
+		return devices[:limit], &Cursor{Time: last.CreatedAt, ID: last.ID}, nil
+	}
+	return devices, nil, nil
 }
 
 // RevokeDevice revokes one of the user's devices, which ends its sessions. A device of another

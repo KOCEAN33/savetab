@@ -1,97 +1,146 @@
 package api_test
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/KOCEAN33/savetab/apps/server/internal/api"
 )
 
-type listedDevice struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	CreatedAt int64  `json:"createdAt"`
-	Current   bool   `json:"current"`
-}
-
-type deviceList struct {
-	Devices []listedDevice `json:"devices"`
-}
-
-func listDevices(t *testing.T, d device) []listedDevice {
+func listDevicePage(t *testing.T, m member, query string) api.DeviceList {
 	t.Helper()
-	res := request(t, "GET", "/v1/devices", d.token, nil)
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("list devices: status %d, want 200", res.StatusCode)
+	return readJSON[api.DeviceList](t, must(t, "list devices"+query, call(t, "GET", "/v2/devices"+query, m.access, nil), http.StatusOK))
+}
+
+// deviceFixture is a user signed in on n devices, in the order they signed in.
+func deviceFixture(t *testing.T, n int) []member {
+	t.Helper()
+	devices := []member{newMember(t)}
+	for i := 1; i < n; i++ {
+		devices = append(devices, devices[0].another(t, fmt.Sprintf("device %d", i)))
 	}
-	return decode[deviceList](t, res).Devices
+	return devices
 }
 
-func revokeDevice(t *testing.T, d device, id string) *http.Response {
-	t.Helper()
-	return request(t, "DELETE", "/v1/devices/"+id, d.token, nil)
-}
-
-func TestDevicesListsTheUsersDevicesOldestFirst(t *testing.T) {
-	subject := "gina-" + randomString(t)
+func TestDevicesListsTheUsersDevicesOldestFirstMarkingTheCaller(t *testing.T) {
 	before := time.Now()
-	desktop := logIn(t, subject, "desktop")
-	phone := logIn(t, subject, "phone")
-	after := time.Now()
-	logIn(t, "hank-"+randomString(t), "stranger's laptop")
+	first := newMember(t)
+	second := first.another(t, "phone")
+	newMember(t)
 
-	got := listDevices(t, phone.device())
-	want := []listedDevice{
-		{ID: desktop.DeviceID, Name: "desktop", Current: false},
-		{ID: phone.DeviceID, Name: "phone", Current: true},
+	got := listDevicePage(t, second, "").Devices
+	if len(got) != 2 {
+		t.Fatalf("listed %+v, want the user's 2 devices", got)
 	}
-	if len(got) != len(want) {
-		t.Fatalf("devices = %+v, want %+v", got, want)
-	}
-	// The database stamps the time, so allow for its clock differing from this machine's.
-	low, high := before.Add(-5*time.Second).UnixMilli(), after.Add(5*time.Second).UnixMilli()
-	for i, d := range got {
-		if d.ID != want[i].ID || d.Name != want[i].Name || d.Current != want[i].Current {
-			t.Errorf("device %d = %+v, want %+v", i, d, want[i])
+	want := []struct {
+		id, name string
+		current  bool
+	}{{first.device, "first device", false}, {second.device, "phone", true}}
+	for i, w := range want {
+		g := got[i]
+		if g.Id.String() != w.id || g.Name != w.name || g.Current != w.current {
+			t.Errorf("device %d = %+v, want id %s name %q current %v", i, g, w.id, w.name, w.current)
 		}
-		if d.CreatedAt < low || d.CreatedAt > high {
-			t.Errorf("device %d createdAt %d, want within [%d, %d]", i, d.CreatedAt, low, high)
+		if g.CreatedAt.Before(before.Add(-5*time.Second)) || g.CreatedAt.After(time.Now().Add(5*time.Second)) {
+			t.Errorf("device %d created_at %v is not within 5 s of the sign-in", i, g.CreatedAt)
 		}
 	}
-	if current := listDevices(t, desktop.device()); len(current) != 2 || !current[0].Current || current[1].Current {
-		t.Errorf("listed by the desktop: %+v, want only the desktop current", current)
+}
+
+func TestDeletingADeviceRevokesItsTokens(t *testing.T) {
+	keeper := newMember(t)
+	gone := keeper.another(t, "lost phone")
+
+	wantStatus(t, "delete", call(t, "DELETE", "/v2/devices/"+gone.device, keeper.access, nil), http.StatusNoContent)
+	wantProblem(t, "the deleted device's access token", call(t, "GET", "/v2/devices", gone.access, nil), http.StatusUnauthorized)
+	wantProblem(t, "the deleted device's refresh token", createTokens(t, refreshGrant(gone.refresh)), http.StatusUnauthorized)
+	wantStatus(t, "the deleting device's access token", call(t, "GET", "/v2/devices", keeper.access, nil), http.StatusOK)
+}
+
+func TestADeviceDeletesItselfToSignOut(t *testing.T) {
+	m := newMember(t)
+	wantStatus(t, "delete itself", call(t, "DELETE", "/v2/devices/"+m.device, m.access, nil), http.StatusNoContent)
+	wantProblem(t, "its access token after", call(t, "GET", "/v2/devices", m.access, nil), http.StatusUnauthorized)
+}
+
+func TestDeletingADeviceOutsideTheUsersIsNotFound(t *testing.T) {
+	owner, other := newMember(t), newMember(t)
+	wantProblem(t, "another user's device", call(t, "DELETE", "/v2/devices/"+owner.device, other.access, nil), http.StatusNotFound)
+	wantStatus(t, "the owner's token after", call(t, "GET", "/v2/devices", owner.access, nil), http.StatusOK)
+	wantProblem(t, "an unknown device", call(t, "DELETE", "/v2/devices/"+uuid.NewString(), other.access, nil), http.StatusNotFound)
+	wantProblem(t, "device id is not a uuid", call(t, "DELETE", "/v2/devices/nope", other.access, nil), http.StatusBadRequest)
+}
+
+func TestDevicePagesHoldEveryDeviceOnceOldestFirst(t *testing.T) {
+	devices := deviceFixture(t, 7)
+	var want, got []string
+	for _, d := range devices {
+		want = append(want, d.device)
+	}
+	query := url.Values{"page_size": {"3"}}
+	for pages := 1; ; pages++ {
+		if pages > len(want) {
+			t.Fatal("the pages do not end")
+		}
+		page := listDevicePage(t, devices[0], "?"+query.Encode())
+		if len(page.Devices) > 3 {
+			t.Errorf("page %d holds %d devices, more than page_size 3", pages, len(page.Devices))
+		}
+		for _, d := range page.Devices {
+			got = append(got, d.Id.String())
+		}
+		holdsLast := len(got) >= len(want)
+		if (page.NextPageToken == nil) != holdsLast {
+			t.Fatalf("page %d: next_page_token %v with %d of %d devices read, want it absent only on the last page", pages, page.NextPageToken, len(got), len(want))
+		}
+		if page.NextPageToken == nil {
+			break
+		}
+		query.Set("page_token", *page.NextPageToken)
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("the pages hold %v, want %v", got, want)
 	}
 }
 
-func TestRevokingAnotherDeviceEndsItsTokens(t *testing.T) {
-	subject := "ivy-" + randomString(t)
-	desktop, phone := logIn(t, subject, "desktop"), logIn(t, subject, "phone")
-
-	expect(t, "revoke the phone", revokeDevice(t, desktop.device(), phone.DeviceID), http.StatusNoContent, "")
-	expect(t, "the phone's access token", request(t, "GET", "/v1/ops", phone.AccessToken, nil), http.StatusUnauthorized, "unauthorized")
-	expect(t, "the phone's refresh token", refresh(t, phone.RefreshToken), http.StatusUnauthorized, "unauthorized")
-	if got := listDevices(t, desktop.device()); len(got) != 1 || got[0].ID != desktop.DeviceID {
-		t.Errorf("devices after the revoke = %+v, want only the desktop %s", got, desktop.DeviceID)
+func TestDevicePageSizeDefaultsTo50AndIsLoweredTo100(t *testing.T) {
+	devices := deviceFixture(t, 101)
+	for query, want := range map[string]int{"": 50, "?page_size=0": 50, "?page_size=101": 100, "?page_size=2147483647": 100} {
+		page := listDevicePage(t, devices[0], query)
+		if len(page.Devices) != want || page.NextPageToken == nil {
+			t.Errorf("%q: %d devices, next_page_token %v, want %d and a token", query, len(page.Devices), page.NextPageToken, want)
+			continue
+		}
+		for i, d := range page.Devices {
+			if d.Id.String() != devices[i].device {
+				t.Errorf("%q: device %d is %s, want %s", query, i, d.Id, devices[i].device)
+				break
+			}
+		}
 	}
-	expect(t, "the desktop's access token", request(t, "GET", "/v1/ops", desktop.AccessToken, nil), http.StatusOK, "")
 }
 
-func TestADeviceRevokesItselfToSignOut(t *testing.T) {
-	got := logIn(t, "jack-"+randomString(t), "desktop")
-
-	expect(t, "revoke itself", revokeDevice(t, got.device(), got.DeviceID), http.StatusNoContent, "")
-	expect(t, "the same access token", request(t, "GET", "/v1/devices", got.AccessToken, nil), http.StatusUnauthorized, "unauthorized")
-	expect(t, "its refresh token", refresh(t, got.RefreshToken), http.StatusUnauthorized, "unauthorized")
-}
-
-func TestRevokingADeviceOutsideTheUsersLiveDevicesGets404(t *testing.T) {
-	subject := "kate-" + randomString(t)
-	desktop, phone := logIn(t, subject, "desktop"), logIn(t, subject, "phone")
-	stranger := logIn(t, "leo-"+randomString(t), "desktop")
-
-	expect(t, "another user's device", revokeDevice(t, desktop.device(), stranger.DeviceID), http.StatusNotFound, "not_found")
-	expect(t, "the other user's device still works", request(t, "GET", "/v1/ops", stranger.AccessToken, nil), http.StatusOK, "")
-	expect(t, "an unknown uuid", revokeDevice(t, desktop.device(), opID(1)), http.StatusNotFound, "not_found")
-	expect(t, "not a uuid", revokeDevice(t, desktop.device(), "nope"), http.StatusNotFound, "not_found")
-	expect(t, "first revoke", revokeDevice(t, desktop.device(), phone.DeviceID), http.StatusNoContent, "")
-	expect(t, "second revoke", revokeDevice(t, desktop.device(), phone.DeviceID), http.StatusNotFound, "not_found")
+func TestDevicePageRequestsThatDoNotHoldAreInvalid(t *testing.T) {
+	mine := deviceFixture(t, 2)
+	page := listDevicePage(t, mine[0], "?page_size=1")
+	if page.NextPageToken == nil {
+		t.Fatal("the first of two pages has no next_page_token")
+	}
+	theirs := deviceFixture(t, 2)
+	for name, c := range map[string]struct {
+		query string
+		as    member
+	}{
+		"negative page_size":        {"?page_size=-1", mine[0]},
+		"page_size not a number":    {"?page_size=x", mine[0]},
+		"garbage page_token":        {"?page_token=garbage", mine[0]},
+		"another user's page_token": {"?" + url.Values{"page_token": {*page.NextPageToken}}.Encode(), theirs[0]},
+	} {
+		wantProblem(t, name, call(t, "GET", "/v2/devices"+c.query, c.as.access, nil), http.StatusBadRequest)
+	}
 }

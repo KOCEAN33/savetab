@@ -7,67 +7,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/api"
-	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
-	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
-	"github.com/KOCEAN33/savetab/apps/server/internal/platform/testdb"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
-
-var (
-	store *db.Store
-	srv   *httptest.Server
-	dbURL string
-)
-
-func TestMain(m *testing.M) {
-	os.Exit(run(m))
-}
-
-func run(m *testing.M) int {
-	url, stop, err := testdb.Start()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	defer stop()
-	dbURL = url
-	ctx := context.Background()
-	if store, err = db.Open(ctx, url, db.Options{MaxConns: 4, StatementTimeout: 5 * time.Second, IdleInTxTimeout: 10 * time.Second}); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	issuer = fakeoidc.New(clientID)
-	defer issuer.Close()
-	// The login needs the server's URL, which exists only once the server listens.
-	var handler http.Handler
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r) }))
-	defer srv.Close()
-	login, err := api.NewLogin(ctx, api.LoginConfig{
-		Issuer: issuer.URL, ClientID: clientID,
-		PublicURL: srv.URL, RedirectURIs: []string{extensionRedirect},
-	})
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	handler = api.New(bus.New(store), login)
-	return m.Run()
-}
 
 type device struct {
 	id    string

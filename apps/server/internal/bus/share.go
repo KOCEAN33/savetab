@@ -19,9 +19,10 @@ type Share struct {
 }
 
 // CreateShare stores a share of the user's. It also clears every user's expired shares, so
-// none outlives the next share made on the server.
-func (b *Bus) CreateShare(ctx context.Context, userID uuid.UUID, ciphertext []byte) (Share, error) {
-	row, err := b.store.Queries().InsertShare(ctx, db.InsertShareParams{UserID: userID, Ciphertext: ciphertext, TTLSeconds: shareTTL.Seconds()})
+// none outlives the next share made on the server. id is the caller's choice, and an id a share
+// already has gives a Conflict.
+func (b *Bus) CreateShare(ctx context.Context, userID, id uuid.UUID, ciphertext []byte) (Share, error) {
+	row, err := b.store.Queries().InsertShare(ctx, db.InsertShareParams{ID: id, UserID: userID, Ciphertext: ciphertext, TTLSeconds: shareTTL.Seconds()})
 	return Share(row), err
 }
 

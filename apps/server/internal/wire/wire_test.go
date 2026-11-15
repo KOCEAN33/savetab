@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/KOCEAN33/savetab/apps/server/internal/httpserver"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/config"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
@@ -33,7 +35,7 @@ func start(t *testing.T, drain time.Duration, v1 http.Handler) (addr string, tri
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	srv := httpserver.New(httpserver.Config{RequestDeadline: 10 * time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pingOK{}, v1)
+	srv := httpserver.New(httpserver.Config{RequestDeadline: 10 * time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pingOK{}, v1, func(gin.IRouter) {})
 	result := make(chan error, 1)
 	go func() { result <- serve(ctx, func() {}, srv, l, drain) }()
 	t.Cleanup(cancel)

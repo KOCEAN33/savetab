@@ -127,6 +127,14 @@ func from(ctx context.Context) *Fields {
 	return f
 }
 
+// TraceID returns the trace id of the unit in ctx, empty outside a unit.
+func TraceID(ctx context.Context) string {
+	if f := from(ctx); f != nil {
+		return f.traceID
+	}
+	return ""
+}
+
 // SetRoute records the matched route template of the unit in ctx.
 func SetRoute(ctx context.Context, route string) {
 	if f := from(ctx); f != nil {

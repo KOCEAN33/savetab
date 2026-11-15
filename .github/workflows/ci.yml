@@ -27,6 +27,7 @@ jobs:
           --health-retries 10
     env:
       TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+      OPENAPI_BASE: ${{ github.workspace }}/.openapi-base/apps/server/api/openapi.yaml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -58,6 +59,18 @@ jobs:
           curl -sSfLo /tmp/squawk https://github.com/sbdchd/squawk/releases/download/v2.72.0/squawk-linux-x64
           echo "a61661808119a82515565503111099b070c869f73698f61cb1785de5d0c8b11a  /tmp/squawk" | sha256sum -c
           sudo install -m 755 /tmp/squawk /usr/local/bin/squawk
+      - name: Install oasdiff
+        run: |
+          curl -sSfLo /tmp/oasdiff.tgz https://github.com/oasdiff/oasdiff/releases/download/v1.37.0/oasdiff_1.37.0_linux_amd64.tar.gz
+          echo "eac87307d31d08c36800c58a409c247f1c5db37fbb72e2544402f22a87cbca3c  /tmp/oasdiff.tgz" | sha256sum -c
+          sudo tar -xzf /tmp/oasdiff.tgz -C /usr/local/bin oasdiff
+      # The contract oasdiff compares api/openapi.yaml with.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: .openapi-base
+          sparse-checkout: apps/server/api
+          persist-credentials: false
       - run: pnpm --filter @savetab/extension exec playwright install --with-deps chromium
       - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
         with:

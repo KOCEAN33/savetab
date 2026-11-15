@@ -1,0 +1,68 @@
+# The gates of the vault page practices/backend/http-api-design.md on api/openapi.yaml.
+extends: ["spectral:oas"]
+rules:
+  # The practice asks for neither.
+  info-contact: off
+  operation-description: off
+  path-form:
+    description: A path is /v<N> then lowercase kebab-case segments or parameters.
+    severity: error
+    given: $.paths[*]~
+    then:
+      function: pattern
+      functionOptions:
+        match: "^/v[1-9][0-9]*(/([a-z][a-z0-9-]*|\\{[a-z][a-z0-9_]*\\}))+$"
+  path-no-verb:
+    description: No path segment is a verb. An action is a POST to a noun collection.
+    severity: error
+    given: $.paths[*]~
+    then:
+      function: pattern
+      functionOptions:
+        notMatch: "/(get|list|fetch|read|create|add|make|new|update|set|edit|patch|delete|remove|start|stop|cancel|run|do|send|push|pull|login|logout|refresh|revoke|search|find)(-[a-z0-9-]*)?(/|$)"
+  property-snake-case:
+    description: Every property name is snake_case.
+    severity: error
+    given: $..properties[*]~
+    then:
+      function: pattern
+      functionOptions:
+        match: "^[a-z][a-z0-9_]*$"
+  response-is-object:
+    description: Every response body is a JSON object at its top level.
+    severity: error
+    given: $.paths[*][*].responses[*].content[*].schema
+    then:
+      field: type
+      function: pattern
+      functionOptions:
+        match: "^object$"
+  id-is-string:
+    description: id and every <name>_id is a string.
+    severity: error
+    given: $..properties[?(@property === 'id' || @property.match(/_id$/))]
+    then:
+      field: type
+      function: pattern
+      functionOptions:
+        match: "^string$"
+  error-is-problem:
+    description: Every 4xx and 5xx response is application/problem+json.
+    severity: error
+    given: $.paths[*][*].responses[?(@property.match(/^[45]/))]
+    then:
+      - field: content.application/problem+json
+        function: truthy
+      - field: content.application/json
+        function: falsy
+  page-size-bounds:
+    description: Each page_size documents its default and its maximum.
+    severity: error
+    given: $..parameters[?(@ && @.name === 'page_size')].schema
+    then:
+      - field: default
+        function: defined
+      - field: maximum
+        function: defined
+      - field: x-page-size-maximum
+        function: defined

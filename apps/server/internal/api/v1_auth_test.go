@@ -17,13 +17,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const (
-	clientID          = "savetab"
-	extensionRedirect = "https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/"
-)
-
-var issuer *fakeoidc.Issuer
-
 func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 
 func s256(verifier string) string {

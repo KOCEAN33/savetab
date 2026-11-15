@@ -60,7 +60,7 @@ func TestRequestDeadlineCancelsTheContext(t *testing.T) {
 }
 
 func TestNewSetsConnectionTimeouts(t *testing.T) {
-	srv := New(Config{RequestDeadline: time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{}, http.NotFoundHandler())
+	srv := New(Config{RequestDeadline: time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{}, http.NotFoundHandler(), func(gin.IRouter) {})
 	if srv.ReadHeaderTimeout <= 0 || srv.IdleTimeout <= 0 {
 		t.Fatalf("ReadHeaderTimeout %v, IdleTimeout %v, want both positive", srv.ReadHeaderTimeout, srv.IdleTimeout)
 	}
@@ -72,7 +72,7 @@ func TestNewMountsTheV1Handler(t *testing.T) {
 	mux.HandleFunc("DELETE /v1/devices/{id}", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "device "+r.PathValue("id")) })
 	mux.HandleFunc("GET /s/{id}", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "share "+r.PathValue("id")) })
 	mux.HandleFunc("OPTIONS /v1/ops", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	handler := New(Config{RequestDeadline: time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{}, mux).Handler
+	handler := New(Config{RequestDeadline: time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{}, mux, func(gin.IRouter) {}).Handler
 
 	cases := []struct {
 		method, path string
@@ -84,7 +84,6 @@ func TestNewMountsTheV1Handler(t *testing.T) {
 		{http.MethodGet, "/s/abc", 200, "share abc"},
 		{http.MethodOptions, "/v1/ops", 204, ""},
 		{http.MethodPost, "/healthz", 405, "Method Not Allowed\n"},
-		{http.MethodGet, "/elsewhere", 404, "404 page not found"},
 	}
 	for _, tc := range cases {
 		w := httptest.NewRecorder()
@@ -131,7 +130,7 @@ func get(t *testing.T, url string) int {
 }
 
 func TestHealthWithTheDatabaseDown(t *testing.T) {
-	url := serve(t, New(Config{RequestDeadline: time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{err: errors.New("connection refused")}, http.NotFoundHandler()))
+	url := serve(t, New(Config{RequestDeadline: time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{err: errors.New("connection refused")}, http.NotFoundHandler(), func(gin.IRouter) {}))
 	if got := get(t, url+"/livez"); got != 200 {
 		t.Errorf("/livez = %d, want 200", got)
 	}
@@ -141,14 +140,14 @@ func TestHealthWithTheDatabaseDown(t *testing.T) {
 }
 
 func TestReadyzWithTheDatabaseUp(t *testing.T) {
-	url := serve(t, New(Config{RequestDeadline: time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{}, http.NotFoundHandler()))
+	url := serve(t, New(Config{RequestDeadline: time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{}, http.NotFoundHandler(), func(gin.IRouter) {}))
 	if got := get(t, url+"/readyz"); got != 200 {
 		t.Errorf("/readyz = %d, want 200", got)
 	}
 }
 
 func TestReadyzBeforeTheListenerOpens(t *testing.T) {
-	srv := New(Config{RequestDeadline: time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{}, http.NotFoundHandler())
+	srv := New(Config{RequestDeadline: time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{}, http.NotFoundHandler(), func(gin.IRouter) {})
 	w := httptest.NewRecorder()
 	srv.Handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if w.Code != 503 {
@@ -157,7 +156,7 @@ func TestReadyzBeforeTheListenerOpens(t *testing.T) {
 }
 
 func TestReadyzWhenThePingOutlastsItsTimeout(t *testing.T) {
-	url := serve(t, New(Config{RequestDeadline: 5 * time.Second, ReadyPingTimeout: 50 * time.Millisecond}, slog.New(slog.DiscardHandler), pinger{block: true}, http.NotFoundHandler()))
+	url := serve(t, New(Config{RequestDeadline: 5 * time.Second, ReadyPingTimeout: 50 * time.Millisecond}, slog.New(slog.DiscardHandler), pinger{block: true}, http.NotFoundHandler(), func(gin.IRouter) {}))
 	start := time.Now()
 	if got := get(t, url+"/readyz"); got != 503 {
 		t.Errorf("/readyz = %d, want 503", got)

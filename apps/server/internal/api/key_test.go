@@ -2,81 +2,60 @@ package api_test
 
 import (
 	"bytes"
-	"fmt"
 	"net/http"
-	"sync"
 	"testing"
+
+	"github.com/KOCEAN33/savetab/apps/server/internal/api"
 )
 
-type blob struct {
-	Data []byte `json:"data"`
+func readKey(t *testing.T, m member) []byte {
+	t.Helper()
+	return readJSON[api.Key](t, must(t, "read the key", call(t, "GET", "/v2/key", m.access, nil), http.StatusOK)).Data
 }
 
-func TestKeyIsSetOnceAndReadByAnotherDevice(t *testing.T) {
-	user := newUser(t)
-	a, b := newDevice(t, user), newDevice(t, user)
-	other := newDevice(t, newUser(t))
+func TestKeyIsStoredOnceAndReadByAnotherDevice(t *testing.T) {
+	first := newMember(t)
+	wantProblem(t, "read before any key", call(t, "GET", "/v2/key", first.access, nil), http.StatusNotFound)
 
-	expect(t, "get before any put", request(t, "GET", "/v1/key", a.token, nil), http.StatusNotFound, "no_key")
-	expect(t, "first put", request(t, "PUT", "/v1/key", a.token, blob{[]byte("wrapped")}), http.StatusNoContent, "")
-	expect(t, "second put", request(t, "PUT", "/v1/key", b.token, blob{[]byte("replaced")}), http.StatusConflict, "key_exists")
-
-	res := request(t, "GET", "/v1/key", b.token, nil)
-	expect(t, "get", res, http.StatusOK, "")
-	if got := decode[blob](t, res); string(got.Data) != "wrapped" {
-		t.Errorf("key = %q, want the first put %q", got.Data, "wrapped")
+	wrapped := sealedBytes(48, 'k')
+	wantStatus(t, "store", call(t, "PUT", "/v2/key", first.access, api.Key{Data: wrapped}), http.StatusNoContent)
+	if got := readKey(t, first.another(t, "second")); !bytes.Equal(got, wrapped) {
+		t.Errorf("another device read %q, want %q", got, wrapped)
 	}
-	expect(t, "get by another user", request(t, "GET", "/v1/key", other.token, nil), http.StatusNotFound, "no_key")
-}
-
-func TestConcurrentKeyPutsStoreOne(t *testing.T) {
-	user := newUser(t)
-	const devices = 8
-	stored := make([]bool, devices)
-	var wg sync.WaitGroup
-	for i := range devices {
-		d := newDevice(t, user)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			res := request(t, "PUT", "/v1/key", d.token, blob{fmt.Appendf(nil, "key-%d", i)})
-			switch res.StatusCode {
-			case http.StatusNoContent:
-				stored[i] = true
-			case http.StatusConflict:
-			default:
-				t.Errorf("put %d: status %d, want 204 or 409", i, res.StatusCode)
-			}
-		}()
-	}
-	wg.Wait()
-
-	winner := -1
-	for i, ok := range stored {
-		if !ok {
-			continue
-		}
-		if winner >= 0 {
-			t.Fatalf("puts %d and %d both answered 204", winner, i)
-		}
-		winner = i
-	}
-	if winner < 0 {
-		t.Fatal("no put answered 204")
-	}
-	got := decode[blob](t, request(t, "GET", "/v1/key", newDevice(t, user).token, nil))
-	if want := fmt.Sprintf("key-%d", winner); string(got.Data) != want {
-		t.Errorf("key = %q, want %q from the put that answered 204", got.Data, want)
+	wantProblem(t, "store again", call(t, "PUT", "/v2/key", first.access, api.Key{Data: sealedBytes(48, 'x')}), http.StatusConflict)
+	if got := readKey(t, first); !bytes.Equal(got, wrapped) {
+		t.Errorf("after a refused second store the key is %q, want %q", got, wrapped)
 	}
 }
 
-func TestMalformedKeyGets400(t *testing.T) {
-	d := newDevice(t, newUser(t))
-	for name, data := range map[string][]byte{
-		"empty data":       nil,
-		"over 1,024 bytes": bytes.Repeat([]byte("x"), 1025),
+func TestKeyOfOneUserIsHiddenFromAnother(t *testing.T) {
+	owner, other := newMember(t), newMember(t)
+	must(t, "owner stores", call(t, "PUT", "/v2/key", owner.access, api.Key{Data: []byte("owner's")}), http.StatusNoContent)
+
+	wantProblem(t, "another user reads", call(t, "GET", "/v2/key", other.access, nil), http.StatusNotFound)
+	wantStatus(t, "another user stores their own", call(t, "PUT", "/v2/key", other.access, api.Key{Data: []byte("other's")}), http.StatusNoContent)
+	if got := readKey(t, owner); string(got) != "owner's" {
+		t.Errorf("the owner reads %q, want %q", got, "owner's")
+	}
+	if got := readKey(t, other); string(got) != "other's" {
+		t.Errorf("the other user reads %q, want %q", got, "other's")
+	}
+}
+
+func TestKeyHoldsAtMost1024Bytes(t *testing.T) {
+	m := newMember(t)
+	for name, body := range map[string]any{
+		"1025 bytes":     api.Key{Data: sealedBytes(1025, 'k')},
+		"empty data":     map[string]string{"data": ""},
+		"no data":        map[string]string{},
+		"data in base64": map[string]string{"data": "not base64!"},
 	} {
-		expect(t, name, request(t, "PUT", "/v1/key", d.token, blob{data}), http.StatusBadRequest, "bad_request")
+		wantProblem(t, name, call(t, "PUT", "/v2/key", m.access, body), http.StatusBadRequest)
 	}
-	expect(t, "get after rejected puts", request(t, "GET", "/v1/key", d.token, nil), http.StatusNotFound, "no_key")
+	wantProblem(t, "read after refused stores", call(t, "GET", "/v2/key", m.access, nil), http.StatusNotFound)
+
+	wantStatus(t, "1024 bytes", call(t, "PUT", "/v2/key", m.access, api.Key{Data: sealedBytes(1024, 'k')}), http.StatusNoContent)
+	if got := readKey(t, m); !bytes.Equal(got, sealedBytes(1024, 'k')) {
+		t.Errorf("read %d bytes, want the 1024 stored", len(got))
+	}
 }

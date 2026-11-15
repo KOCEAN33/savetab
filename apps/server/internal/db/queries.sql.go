@@ -35,18 +35,24 @@ func (q *Queries) AccessSession(ctx context.Context, tokenHash []byte) (AccessSe
 const createPairing = `-- name: CreatePairing :one
 WITH gone AS (
   DELETE FROM pairings
-  WHERE user_id = $1::uuid AND (expires_at <= now() OR new_device_id = $2::uuid)
+  WHERE
+    user_id = $2::uuid AND id <> $1::uuid
+    AND (expires_at <= now() OR new_device_id = $3::uuid)
 )
 
-INSERT INTO pairings (user_id, new_device_id, commitment, expires_at)
-VALUES ($1::uuid, $2::uuid, $3::bytea, now() + make_interval(secs => $4::float8))
+INSERT INTO pairings (id, user_id, new_device_id, commitment, expires_at)
+VALUES (
+  $1::uuid, $2::uuid, $3::uuid, $4::bytea,
+  now() + make_interval(secs => $5::float8)
+)
 RETURNING
   id, new_device_id,
-  (SELECT d.name FROM devices AS d WHERE d.id = $2::uuid)::text AS new_device_name,
+  (SELECT d.name FROM devices AS d WHERE d.id = $3::uuid)::text AS new_device_name,
   commitment, old_public, new_public, wrapped_key, expires_at
 `
 
 type CreatePairingParams struct {
+	ID          uuid.UUID
 	UserID      uuid.UUID
 	NewDeviceID uuid.UUID
 	Commitment  []byte
@@ -65,9 +71,11 @@ type CreatePairingRow struct {
 }
 
 // Opens a pairing for the device, which is the new one. It replaces a pairing the device still
-// has open and clears the user's expired ones.
+// has open and clears the user's expired ones. A pairing that holds the id stays, so the insert
+// is a unique violation.
 func (q *Queries) CreatePairing(ctx context.Context, arg CreatePairingParams) (CreatePairingRow, error) {
 	row := q.db.QueryRow(ctx, createPairing,
+		arg.ID,
 		arg.UserID,
 		arg.NewDeviceID,
 		arg.Commitment,
@@ -123,9 +131,19 @@ func (q *Queries) DeleteShare(ctx context.Context, arg DeleteShareParams) (int64
 const devices = `-- name: Devices :many
 SELECT id, name, created_at
 FROM devices
-WHERE user_id = $1::uuid AND revoked_at IS NULL
+WHERE
+  user_id = $1::uuid AND revoked_at IS NULL
+  AND (created_at, id) > ($2::timestamptz, $3::uuid)
 ORDER BY created_at, id
+LIMIT $4::int
 `
+
+type DevicesParams struct {
+	UserID         uuid.UUID
+	AfterCreatedAt time.Time
+	AfterID        uuid.UUID
+	MaxRows        int32
+}
 
 type DevicesRow struct {
 	ID        uuid.UUID
@@ -133,9 +151,14 @@ type DevicesRow struct {
 	CreatedAt time.Time
 }
 
-// The user's devices that are not revoked, oldest first.
-func (q *Queries) Devices(ctx context.Context, userID uuid.UUID) ([]DevicesRow, error) {
-	rows, err := q.db.Query(ctx, devices, userID)
+// One page of the user's devices that are not revoked, oldest first, after the given position.
+func (q *Queries) Devices(ctx context.Context, arg DevicesParams) ([]DevicesRow, error) {
+	rows, err := q.db.Query(ctx, devices,
+		arg.UserID,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -324,14 +347,15 @@ func (q *Queries) InsertSessions(ctx context.Context, arg InsertSessionsParams) 
 }
 
 const insertShare = `-- name: InsertShare :one
-WITH gone AS (DELETE FROM shares WHERE expires_at <= now())
+WITH gone AS (DELETE FROM shares WHERE expires_at <= now() AND id <> $1::uuid)
 
-INSERT INTO shares (user_id, ciphertext, expires_at)
-VALUES ($1::uuid, $2::bytea, now() + make_interval(secs => $3::float8))
+INSERT INTO shares (id, user_id, ciphertext, expires_at)
+VALUES ($1::uuid, $2::uuid, $3::bytea, now() + make_interval(secs => $4::float8))
 RETURNING id, ciphertext, expires_at
 `
 
 type InsertShareParams struct {
+	ID         uuid.UUID
 	UserID     uuid.UUID
 	Ciphertext []byte
 	TTLSeconds float64
@@ -344,9 +368,15 @@ type InsertShareRow struct {
 }
 
 // Stores a share of the user's. It also clears every user's expired shares, so none outlives
-// the next share made on the server.
+// the next share made on the server. A share that holds the id stays, so the insert is a
+// unique violation.
 func (q *Queries) InsertShare(ctx context.Context, arg InsertShareParams) (InsertShareRow, error) {
-	row := q.db.QueryRow(ctx, insertShare, arg.UserID, arg.Ciphertext, arg.TTLSeconds)
+	row := q.db.QueryRow(ctx, insertShare,
+		arg.ID,
+		arg.UserID,
+		arg.Ciphertext,
+		arg.TTLSeconds,
+	)
 	var i InsertShareRow
 	err := row.Scan(&i.ID, &i.Ciphertext, &i.ExpiresAt)
 	return i, err
@@ -535,9 +565,19 @@ SELECT
   p.commitment, p.old_public, p.new_public, p.wrapped_key, p.expires_at
 FROM pairings AS p
 INNER JOIN devices AS d ON p.new_device_id = d.id
-WHERE p.user_id = $1::uuid AND p.expires_at > now()
+WHERE
+  p.user_id = $1::uuid AND p.expires_at > now()
+  AND (p.expires_at, p.id) > ($2::timestamptz, $3::uuid)
 ORDER BY p.expires_at, p.id
+LIMIT $4::int
 `
+
+type PairingsParams struct {
+	UserID         uuid.UUID
+	AfterExpiresAt time.Time
+	AfterID        uuid.UUID
+	MaxRows        int32
+}
 
 type PairingsRow struct {
 	ID            uuid.UUID
@@ -550,9 +590,14 @@ type PairingsRow struct {
 	ExpiresAt     time.Time
 }
 
-// The user's pairings that have not expired, oldest first.
-func (q *Queries) Pairings(ctx context.Context, userID uuid.UUID) ([]PairingsRow, error) {
-	rows, err := q.db.Query(ctx, pairings, userID)
+// One page of the user's pairings that have not expired, oldest first, after the given position.
+func (q *Queries) Pairings(ctx context.Context, arg PairingsParams) ([]PairingsRow, error) {
+	rows, err := q.db.Query(ctx, pairings,
+		arg.UserID,
+		arg.AfterExpiresAt,
+		arg.AfterID,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -755,7 +800,7 @@ func (q *Queries) TakeRefreshSession(ctx context.Context, tokenHash []byte) (Tak
 const upsertSnapshot = `-- name: UpsertSnapshot :execrows
 INSERT INTO snapshots (user_id, seq, ciphertext) VALUES ($1::uuid, $2::bigint, $3::bytea)
 ON CONFLICT (user_id) DO UPDATE SET seq = excluded.seq, ciphertext = excluded.ciphertext, created_at = now()
-WHERE snapshots.seq <= excluded.seq
+WHERE snapshots.seq < excluded.seq
 `
 
 type UpsertSnapshotParams struct {
@@ -764,7 +809,7 @@ type UpsertSnapshotParams struct {
 	Ciphertext []byte
 }
 
-// Replaces the user's snapshot unless the stored one has a higher seq.
+// Replaces the user's snapshot with one of a higher seq.
 func (q *Queries) UpsertSnapshot(ctx context.Context, arg UpsertSnapshotParams) (int64, error) {
 	result, err := q.db.Exec(ctx, upsertSnapshot, arg.UserID, arg.Seq, arg.Ciphertext)
 	if err != nil {

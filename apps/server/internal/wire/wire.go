@@ -16,6 +16,9 @@ import (
 	"time"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/getkin/kin-openapi/openapi3filter"
+	"github.com/gin-gonic/gin"
+	ginmiddleware "github.com/oapi-codegen/gin-middleware"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
@@ -104,8 +107,10 @@ func run(ctx context.Context, cfg config.Config, opts Options, logger *slog.Logg
 		return fmt.Errorf("OIDC issuer %s: %w", cfg.OIDCIssuer, err)
 	}
 
-	b := bus.New(store)
-	srv := httpserver.New(httpserver.Config{RequestDeadline: cfg.RequestDeadline, ReadyPingTimeout: cfg.ReadyPingTimeout}, logger, b, api.New(b, login))
+	srv, err := NewServer(httpserver.Config{RequestDeadline: cfg.RequestDeadline, ReadyPingTimeout: cfg.ReadyPingTimeout}, logger, bus.New(store), login)
+	if err != nil {
+		return err
+	}
 	l := opts.Listener
 	if l == nil {
 		if l, err = net.Listen("tcp", cfg.ListenAddr); err != nil {
@@ -120,6 +125,37 @@ func run(ctx context.Context, cfg config.Config, opts Options, logger *slog.Logg
 		ShutdownBudget: cfg.ShutdownBudget, LogFormat: cfg.LogFormat, LogLevel: cfg.LogLevel,
 	})...)
 	return serve(ctx, stop, srv, l, cfg.HTTPDrainTimeout)
+}
+
+// NewServer builds the HTTP server over the use cases: /v1 as it routes itself, and /v2 as
+// api/openapi.yaml declares it. A /v2 request passes the token check, the body limit, and the
+// contract's validator, in that order, before its handler.
+func NewServer(cfg httpserver.Config, logger *slog.Logger, b *bus.Bus, login *api.Login) (*httpserver.Server, error) {
+	spec, err := api.GetSpec()
+	if err != nil {
+		return nil, fmt.Errorf("read the embedded contract: %w", err)
+	}
+	// The validator would otherwise hold each request's Host to the contract's servers.
+	spec.Servers = nil
+	validate := ginmiddleware.OapiRequestValidatorWithOptions(spec, &ginmiddleware.Options{
+		ErrorHandler: func(c *gin.Context, message string, _ int) { httpserver.InvalidProblem(c, errors.New(message)) },
+		Options:      openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc},
+	})
+	strict := api.NewStrictHandlerWithOptions(api.NewHandlers(b, login, spec), nil, api.StrictGinServerOptions{
+		RequestErrorHandlerFunc:  httpserver.InvalidProblem,
+		HandlerErrorFunc:         httpserver.Problem,
+		ResponseErrorHandlerFunc: httpserver.Problem,
+	})
+	return httpserver.New(cfg, logger, b, api.New(b, login), func(r gin.IRouter) {
+		api.RegisterHandlersWithOptions(r, strict, api.GinServerOptions{
+			Middlewares: []api.MiddlewareFunc{
+				api.Authenticate(b, spec, httpserver.Problem),
+				api.MiddlewareFunc(httpserver.BodyLimit(api.BodyLimits(spec))),
+				api.MiddlewareFunc(validate),
+			},
+			ErrorHandler: func(c *gin.Context, err error, _ int) { httpserver.InvalidProblem(c, err) },
+		})
+	}), nil
 }
 
 // serve serves on l until ctx ends, then calls stop, so a second signal ends the process, and

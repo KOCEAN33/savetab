@@ -1,98 +1,28 @@
 package api
 
-import (
-	_ "embed"
-	"net/http"
+import "context"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
-	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
-	"github.com/google/uuid"
-)
-
-// The viewer decrypts in the browser with the key from the URL fragment, which never reaches
-// the server. The policy keeps any script but its own off the page that holds that key.
-const viewerCSP = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
-
-var (
-	//go:embed viewer/share.html
-	viewerHTML []byte
-	//go:embed viewer/share.js
-	viewerJS []byte
-	//go:embed viewer/share.css
-	viewerCSS []byte
-)
-
-type shareBody struct {
-	ID        uuid.UUID `json:"id,omitzero"`
-	Data      []byte    `json:"data,omitempty"`
-	ExpiresAt int64     `json:"expiresAt"`
-}
-
-func (s *server) createShare(w http.ResponseWriter, r *http.Request, c bus.Caller) {
-	var body struct {
-		Data []byte `json:"data"`
-	}
-	if !readJSON(w, r, maxBodyBytes, &body) {
-		return
-	}
-	if len(body.Data) == 0 {
-		writeError(w, http.StatusBadRequest, "bad_request")
-		return
-	}
-	sh, err := s.bus.CreateShare(r.Context(), c.UserID, body.Data)
+func (h *Handlers) CreateShare(ctx context.Context, req CreateShareRequestObject) (CreateShareResponseObject, error) {
+	sh, err := h.bus.CreateShare(ctx, callerOf(ctx).UserID, req.Body.Id, req.Body.Data)
 	if err != nil {
-		internalError(w, r, err)
-		return
+		return nil, err
 	}
-	writeJSON(w, http.StatusCreated, shareBody{ID: sh.ID, ExpiresAt: sh.ExpiresAt.UnixMilli()})
+	return CreateShare201JSONResponse{Id: sh.ID, ExpiresAt: sh.ExpiresAt.UTC()}, nil
 }
 
-// getShare takes no token: the share's URL is the only credential, and its key stays in the
+// GetShare takes no token: the share's URL is the only credential, and its key stays in the
 // fragment, so the server hands out ciphertext only.
-func (s *server) getShare(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseID(r.PathValue("id"))
-	if !ok {
-		writeError(w, http.StatusNotFound, "not_found")
-		return
-	}
-	sh, err := s.bus.Share(r.Context(), id)
-	if errs.KindOf(err) == errs.NotFound {
-		writeError(w, http.StatusNotFound, "not_found")
-		return
-	}
+func (h *Handlers) GetShare(ctx context.Context, req GetShareRequestObject) (GetShareResponseObject, error) {
+	sh, err := h.bus.Share(ctx, req.ShareId)
 	if err != nil {
-		internalError(w, r, err)
-		return
+		return nil, err
 	}
-	writeJSON(w, http.StatusOK, shareBody{Data: sh.Ciphertext, ExpiresAt: sh.ExpiresAt.UnixMilli()})
+	return GetShare200JSONResponse{Data: sh.Ciphertext, ExpiresAt: sh.ExpiresAt.UTC()}, nil
 }
 
-func (s *server) deleteShare(w http.ResponseWriter, r *http.Request, c bus.Caller) {
-	id, ok := parseID(r.PathValue("id"))
-	if !ok {
-		writeError(w, http.StatusNotFound, "not_found")
-		return
+func (h *Handlers) DeleteShare(ctx context.Context, req DeleteShareRequestObject) (DeleteShareResponseObject, error) {
+	if err := h.bus.DeleteShare(ctx, callerOf(ctx).UserID, req.ShareId); err != nil {
+		return nil, err
 	}
-	err := s.bus.DeleteShare(r.Context(), c.UserID, id)
-	switch {
-	case errs.KindOf(err) == errs.NotFound:
-		writeError(w, http.StatusNotFound, "not_found")
-	case err != nil:
-		internalError(w, r, err)
-	default:
-		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
-// viewerFile answers one file of the viewer, the same bytes for every share.
-func viewerFile(contentType string, body []byte) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		h := w.Header()
-		h.Set("Content-Type", contentType)
-		h.Set("Content-Security-Policy", viewerCSP)
-		h.Set("Referrer-Policy", "no-referrer")
-		h.Set("X-Robots-Tag", "noindex")
-		// A write fails when the caller is gone, which its request line shows as cancelled.
-		_, _ = w.Write(body)
-	}
+	return DeleteShare204Response{}, nil
 }

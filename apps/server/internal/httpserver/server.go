@@ -44,18 +44,24 @@ type Server struct {
 }
 
 // New returns the server. Every request writes one line to logger, and its context ends after
-// cfg.RequestDeadline. v1 serves
-// /v1, the share viewer under /s/, and /healthz, as it routes them itself.
-func New(cfg Config, logger *slog.Logger, db Pinger, v1 http.Handler) *Server {
+// cfg.RequestDeadline. v1 serves /v1, the share viewer under /s/, and /healthz, as it routes
+// them itself. register adds the /v2 routes.
+func New(cfg Config, logger *slog.Logger, db Pinger, v1 http.Handler, register func(gin.IRouter)) *Server {
 	s := &Server{}
 	engine := gin.New()
-	engine.Use(requestLine(logger), requestDeadline(cfg.RequestDeadline))
+	// A generated handler passes the gin context down as the request's context.
+	engine.ContextWithFallback = true
+	engine.HandleMethodNotAllowed = true
+	engine.NoRoute(noRoute)
+	engine.NoMethod(noMethod)
+	engine.Use(requestLine(logger), requestDeadline(cfg.RequestDeadline), cors)
 	engine.GET("/livez", func(c *gin.Context) { c.Status(http.StatusOK) })
 	engine.GET("/readyz", s.ready(db, cfg.ReadyPingTimeout))
 	mounted := gin.WrapH(v1)
 	engine.Any("/v1/*path", mounted)
 	engine.Any("/s/*path", mounted)
 	engine.Any("/healthz", mounted)
+	register(engine)
 	s.Server = &http.Server{Handler: engine, ReadHeaderTimeout: readHeaderTimeout, IdleTimeout: idleTimeout}
 	return s
 }

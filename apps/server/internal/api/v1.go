@@ -1,4 +1,5 @@
-// Package api is the server's HTTP surface. The plan's "HTTP API" section is its contract.
+// Package api is the server's HTTP surface: /v2 as api/openapi.yaml declares it, and /v1, which
+// the v1 files route themselves until the extension has moved.
 package api
 
 import (
@@ -22,6 +23,7 @@ const (
 	// A wrapped key or a pairing message is under 100 bytes in the v1 formats.
 	maxMessageBytes = 1024
 	smallBodyBytes  = 8 << 10
+	v1PageRows      = 500
 )
 
 // parseID reads an id in the 36-character form, the only one of uuid.Parse the API takes.

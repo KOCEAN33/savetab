@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/httpserver"
+	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
+	"github.com/KOCEAN33/savetab/apps/server/internal/wire"
 )
 
 type lockedBuffer struct {
@@ -31,9 +32,11 @@ func requestLine(t *testing.T, method, path, token string) map[string]any {
 	t.Helper()
 	var out lockedBuffer
 	logger := logline.NewLogger(&out, logline.FormatJSON, slog.LevelInfo, logline.Process{})
-	whole := httptest.NewServer(httpserver.New(
-		httpserver.Config{RequestDeadline: 10 * time.Second, ReadyPingTimeout: time.Second}, logger, store, srv.Config.Handler,
-	).Handler)
+	logged, err := wire.NewServer(serverConfig, logger, bus.New(store), login)
+	if err != nil {
+		t.Fatal(err)
+	}
+	whole := httptest.NewServer(logged.Handler)
 	defer whole.Close()
 	req, err := http.NewRequest(method, whole.URL+path, nil)
 	if err != nil {

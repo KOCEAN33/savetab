@@ -12,7 +12,7 @@ The server applies its migrations at start, and reads the issuer's discovery doc
 | `LISTEN_ADDR` | Listen address, such as `:8080`. Required. |
 | `OIDC_ISSUER` | Issuer URL of the OIDC provider. Required. |
 | `OIDC_CLIENT_ID` | Client id registered at the issuer. Required. |
-| `PUBLIC_URL` | The server's base URL as browsers reach it. Required. The issuer's redirect URI is `<PUBLIC_URL>/v1/auth/callback`. |
+| `PUBLIC_URL` | The server's base URL as browsers reach it. Required. The issuer's redirect URIs are `<PUBLIC_URL>/v2/authorizations/callback` and, while `/v1` serves, `<PUBLIC_URL>/v1/auth/callback`. |
 | `AUTH_REDIRECT_URIS` | Redirect URIs a login may end at, separated by one space. Required. Each extension's is the value of `browser.identity.getRedirectURL()`. |
 | `DB_POOL_MAX` | Most connections the pool opens. Default `10`. |
 | `DB_STATEMENT_TIMEOUT` | `statement_timeout` of every pool connection. Default `5s`. |
@@ -35,7 +35,7 @@ Tests run against a real Postgres. Each run creates a database `savetab_test_<ra
 
 `pnpm test` calls `scripts/test.sh`. Without `TEST_DATABASE_URL`, the script uses the homelab dev cluster `pg-dev.lab.hiriri.com` as role `agent` acting as `savetab`, which needs the tailnet and the `proxmox-talos-lab-op` keychain token. CI sets `TEST_DATABASE_URL` to its Postgres service container.
 
-`pnpm check` runs `go vet`, then `golangci-lint` with `.golangci.yml`, so it needs golangci-lint v2 on the PATH (`brew install golangci-lint`). It then runs `scripts/check-sql.sh`, which needs sqlc and SQLFluff (`brew install sqlc`, `uv tool install sqlfluff`): `sqlc diff` fails when `internal/db/queries.sql` and the generated files disagree, so run `sqlc generate` after a query change. Last it runs Squawk with `.squawk.toml` on `internal/db/migrations/`, so it needs `squawk` on the PATH, a binary from the releases of `sbdchd/squawk`. A migration file after `0004` that holds DDL starts with `SET LOCAL lock_timeout` and `SET LOCAL statement_timeout`, the lock timeout the lower. The runner applies the pending files in one transaction, so `CREATE INDEX CONCURRENTLY` cannot run in one. CI installs the version `.github/workflows/ci.yml` pins.
+`pnpm check` runs `go vet`, then `golangci-lint` with `.golangci.yml`, so it needs golangci-lint v2 on the PATH (`brew install golangci-lint`). It then runs `scripts/check-sql.sh`, which needs sqlc and SQLFluff (`brew install sqlc`, `uv tool install sqlfluff`): `sqlc diff` fails when `internal/db/queries.sql` and the generated files disagree, so run `sqlc generate` after a query change. Last it runs Squawk with `.squawk.toml` on `internal/db/migrations/`, so it needs `squawk` on the PATH, a binary from the releases of `sbdchd/squawk`. A migration file after `0004` that holds DDL starts with `SET LOCAL lock_timeout` and `SET LOCAL statement_timeout`, the lock timeout the lower. The runner applies the pending files in one transaction, so `CREATE INDEX CONCURRENTLY` cannot run in one. Then it runs `scripts/check-api.sh` on the `/v2` contract `api/openapi.yaml`: `go generate` must leave `internal/api/api.gen.go` as it is, so run `go generate ./...` after a contract change. Spectral lints the contract with `api/.spectral.yaml`, and `oasdiff breaking` compares it with the contract on `origin/main`, so it needs `oasdiff` on the PATH (`brew install oasdiff`). CI installs the version `.github/workflows/ci.yml` pins.
 
 ## Server for the extension's e2e tests
 

@@ -1,46 +1,26 @@
 package api
 
 import (
-	"net/http"
+	"context"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
-type keyBody struct {
-	Data []byte `json:"data"`
+func (h *Handlers) GetKey(ctx context.Context, _ GetKeyRequestObject) (GetKeyResponseObject, error) {
+	wrapped, err := h.bus.Key(ctx, callerOf(ctx).UserID)
+	if err != nil {
+		return nil, err
+	}
+	return GetKey200JSONResponse{Data: wrapped}, nil
 }
 
-func (s *server) getKey(w http.ResponseWriter, r *http.Request, c bus.Caller) {
-	wrapped, err := s.bus.Key(r.Context(), c.UserID)
-	if errs.KindOf(err) == errs.NotFound {
-		writeError(w, http.StatusNotFound, "no_key")
-		return
+func (h *Handlers) PutKey(ctx context.Context, req PutKeyRequestObject) (PutKeyResponseObject, error) {
+	// The contract bounds the base64 text, which can hold two bytes more.
+	if len(req.Body.Data) > maxMessageBytes {
+		return nil, errs.New(errs.Invalid, "put key", "data is over 1024 bytes")
 	}
-	if err != nil {
-		internalError(w, r, err)
-		return
+	if err := h.bus.PutKey(ctx, callerOf(ctx).UserID, req.Body.Data); err != nil {
+		return nil, err
 	}
-	writeJSON(w, http.StatusOK, keyBody{Data: wrapped})
-}
-
-func (s *server) putKey(w http.ResponseWriter, r *http.Request, c bus.Caller) {
-	var body keyBody
-	if !readJSON(w, r, smallBodyBytes, &body) {
-		return
-	}
-	if len(body.Data) == 0 || len(body.Data) > maxMessageBytes {
-		writeError(w, http.StatusBadRequest, "bad_request")
-		return
-	}
-	err := s.bus.PutKey(r.Context(), c.UserID, body.Data)
-	if errs.KindOf(err) == errs.Conflict {
-		writeError(w, http.StatusConflict, "key_exists")
-		return
-	}
-	if err != nil {
-		internalError(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+	return PutKey204Response{}, nil
 }

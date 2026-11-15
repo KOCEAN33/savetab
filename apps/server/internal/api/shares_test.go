@@ -1,172 +1,85 @@
 package api_test
 
 import (
-	"bytes"
-	"context"
-	"io"
-	"mime"
 	"net/http"
-	"regexp"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+
+	"github.com/KOCEAN33/savetab/apps/server/internal/api"
 )
 
-type shareCreated struct {
-	ID        string `json:"id"`
-	ExpiresAt int64  `json:"expiresAt"`
-}
-
-type shareRead struct {
-	Data      []byte `json:"data"`
-	ExpiresAt int64  `json:"expiresAt"`
-}
-
-var uuidText = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-
-func postShare(t *testing.T, d device, data []byte) shareCreated {
+func createShare(t *testing.T, m member, id string, data []byte) reply {
 	t.Helper()
-	res := request(t, "POST", "/v1/shares", d.token, map[string][]byte{"data": data})
-	if res.StatusCode != http.StatusCreated {
-		t.Fatalf("post share: status %d, want 201", res.StatusCode)
-	}
-	return decode[shareCreated](t, res)
+	return call(t, "POST", "/v2/shares", m.access, map[string]any{"id": id, "data": data})
 }
 
-// shareStored tells whether the share's row exists. An expired share answers 404 either way,
-// so only the table tells a deleted share from a hidden one.
-func shareStored(t *testing.T, id string) bool {
-	t.Helper()
-	ctx := context.Background()
-	conn, err := pgx.Connect(ctx, dbURL)
-	if err != nil {
-		t.Fatal(err)
+func TestCreatedShareIsReadWithoutAToken(t *testing.T) {
+	m := newMember(t)
+	id := uuid.NewString()
+	r := createShare(t, m, id, []byte("sealed group"))
+	if !wantStatus(t, "create", r, http.StatusCreated) {
+		return
 	}
-	defer conn.Close(ctx)
-	var n int
-	if err := conn.QueryRow(ctx, `SELECT count(*) FROM shares WHERE id = $1`, id).Scan(&n); err != nil {
-		t.Fatal(err)
+	created := readJSON[api.ShareCreated](t, r)
+	if created.Id.String() != id || !created.ExpiresAt.After(time.Now()) {
+		t.Errorf("created %+v, want id %s and expires_at in the future", created, id)
 	}
-	return n == 1
-}
-
-func TestShareIsReadBackWithoutAToken(t *testing.T) {
-	d := newDevice(t, newUser(t))
-	blob := []byte{0x01, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0xfe, 0xff}
-
-	before := time.Now()
-	created := postShare(t, d, blob)
-	after := time.Now()
-	if !uuidText.MatchString(created.ID) {
-		t.Errorf("id %q is not a UUID", created.ID)
-	}
-	// The database stamps the time, so allow for its clock differing from this machine's.
-	ttl := 30 * 24 * time.Hour
-	low, high := before.Add(ttl-5*time.Second).UnixMilli(), after.Add(ttl+5*time.Second).UnixMilli()
-	if created.ExpiresAt < low || created.ExpiresAt > high {
-		t.Errorf("expiresAt %d is not 30 days ahead, want within [%d, %d]", created.ExpiresAt, low, high)
-	}
-
-	res := request(t, "GET", "/v1/shares/"+created.ID, "", nil)
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("get share: status %d, want 200", res.StatusCode)
-	}
-	got := decode[shareRead](t, res)
-	if !bytes.Equal(got.Data, blob) || got.ExpiresAt != created.ExpiresAt {
-		t.Errorf("share = %x expiring %d, want %x expiring %d", got.Data, got.ExpiresAt, blob, created.ExpiresAt)
+	got := readJSON[api.Share](t, must(t, "read", call(t, "GET", "/v2/shares/"+id, "", nil), http.StatusOK))
+	if string(got.Data) != "sealed group" || !got.ExpiresAt.Equal(created.ExpiresAt) {
+		t.Errorf("read %q expiring %v, want %q expiring %v", got.Data, got.ExpiresAt, "sealed group", created.ExpiresAt)
 	}
 }
 
-func TestExpiredShareAnswers404AndTheNextPostDeletesIt(t *testing.T) {
-	user := newUser(t)
-	owner := newDevice(t, user)
-	expired, err := store.Queries().InsertShare(context.Background(), db.InsertShareParams{UserID: uuid.MustParse(user.id), Ciphertext: []byte("x"), TTLSeconds: -1})
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestShareIDInUseIsAConflictAndStoresNoSecondShare(t *testing.T) {
+	m := newMember(t)
+	stranger := newMember(t)
+	id := uuid.NewString()
+	must(t, "create", createShare(t, m, id, []byte("first")), http.StatusCreated)
 
-	expect(t, "get", request(t, "GET", "/v1/shares/"+expired.ID.String(), "", nil), http.StatusNotFound, "not_found")
-	expect(t, "delete", request(t, "DELETE", "/v1/shares/"+expired.ID.String(), owner.token, nil), http.StatusNotFound, "not_found")
-	if !shareStored(t, expired.ID.String()) {
-		t.Fatal("the expired share is gone before any post, want it kept until one")
+	wantProblem(t, "the same id again", createShare(t, m, id, []byte("second")), http.StatusConflict)
+	wantProblem(t, "the same id by another user", createShare(t, stranger, id, []byte("stranger's")), http.StatusConflict)
+	if got := readJSON[api.Share](t, must(t, "read", call(t, "GET", "/v2/shares/"+id, "", nil), http.StatusOK)); string(got.Data) != "first" {
+		t.Errorf("read %q, want the first share's %q", got.Data, "first")
 	}
-	postShare(t, newDevice(t, newUser(t)), []byte("y"))
-	if shareStored(t, expired.ID.String()) {
-		t.Error("the expired share is still stored after another user's post, want it deleted")
-	}
+	wantProblem(t, "another user deletes it", call(t, "DELETE", "/v2/shares/"+id, stranger.access, nil), http.StatusNotFound)
+	wantStatus(t, "the owner deletes it", call(t, "DELETE", "/v2/shares/"+id, m.access, nil), http.StatusNoContent)
 }
 
-func TestShareIsDeletedOnlyByItsOwner(t *testing.T) {
-	owner := newDevice(t, newUser(t))
-	stranger := newDevice(t, newUser(t))
-	id := postShare(t, owner, []byte("blob")).ID
-	path := "/v1/shares/" + id
+func TestShareIsDeletedOnlyByItsOwnersDevices(t *testing.T) {
+	owner, other := newMember(t), newMember(t)
+	id := uuid.NewString()
+	must(t, "create", createShare(t, owner, id, []byte("x")), http.StatusCreated)
 
-	expect(t, "delete by another user", request(t, "DELETE", path, stranger.token, nil), http.StatusNotFound, "not_found")
-	expect(t, "get after the other user's delete", request(t, "GET", path, "", nil), http.StatusOK, "")
-
-	expect(t, "delete by the owner", request(t, "DELETE", path, owner.token, nil), http.StatusNoContent, "")
-	expect(t, "get after the owner's delete", request(t, "GET", path, "", nil), http.StatusNotFound, "not_found")
-	expect(t, "delete again", request(t, "DELETE", path, owner.token, nil), http.StatusNotFound, "not_found")
+	wantProblem(t, "another user deletes", call(t, "DELETE", "/v2/shares/"+id, other.access, nil), http.StatusNotFound)
+	wantStatus(t, "read after", call(t, "GET", "/v2/shares/"+id, "", nil), http.StatusOK)
+	wantStatus(t, "another device of the owner deletes", call(t, "DELETE", "/v2/shares/"+id, owner.another(t, "second").access, nil), http.StatusNoContent)
+	wantProblem(t, "read after delete", call(t, "GET", "/v2/shares/"+id, "", nil), http.StatusNotFound)
 }
 
-func TestMalformedShareRequests(t *testing.T) {
-	d := newDevice(t, newUser(t))
-
-	expect(t, "get a malformed id", request(t, "GET", "/v1/shares/not-a-uuid", "", nil), http.StatusNotFound, "not_found")
-	expect(t, "delete a malformed id", request(t, "DELETE", "/v1/shares/not-a-uuid", d.token, nil), http.StatusNotFound, "not_found")
-	expect(t, "get an unknown id", request(t, "GET", "/v1/shares/01900000-0000-7000-8000-000000000000", "", nil), http.StatusNotFound, "not_found")
-	expect(t, "post empty data", request(t, "POST", "/v1/shares", d.token, map[string][]byte{"data": {}}), http.StatusBadRequest, "bad_request")
-	expect(t, "post no data", request(t, "POST", "/v1/shares", d.token, map[string]any{}), http.StatusBadRequest, "bad_request")
-	expect(t, "post without a token", request(t, "POST", "/v1/shares", "", map[string][]byte{"data": []byte("x")}), http.StatusUnauthorized, "unauthorized")
+func TestExpiredShareIsNotFound(t *testing.T) {
+	m := newMember(t)
+	id := uuid.NewString()
+	must(t, "create", createShare(t, m, id, []byte("x")), http.StatusCreated)
+	if n := execSQL(t, `UPDATE shares SET expires_at = now() - interval '1 minute' WHERE id = $1`, id); n != 1 {
+		t.Fatalf("expired %d shares, want 1", n)
+	}
+	wantProblem(t, "read", call(t, "GET", "/v2/shares/"+id, "", nil), http.StatusNotFound)
 }
 
-func TestShareViewerAnswersCarryThePageHeaders(t *testing.T) {
-	cases := []struct {
-		path, mediaType string
-	}{
-		{"/s/01900000-0000-7000-8000-000000000001", "text/html"},
-		{"/s/assets/share.js", "text/javascript"},
-		{"/s/assets/share.css", "text/css"},
+func TestMalformedShareRequestsAreInvalid(t *testing.T) {
+	m := newMember(t)
+	for name, body := range map[string]any{
+		"no id":            map[string]any{"data": []byte("x")},
+		"id is not a uuid": map[string]any{"id": "nope", "data": []byte("x")},
+		"no data":          map[string]any{"id": uuid.NewString()},
+		"empty data":       map[string]any{"id": uuid.NewString(), "data": ""},
+	} {
+		wantProblem(t, name, call(t, "POST", "/v2/shares", m.access, body), http.StatusBadRequest)
 	}
-	headers := map[string]string{
-		"Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-		"Referrer-Policy":         "no-referrer",
-		"X-Robots-Tag":            "noindex",
-	}
-	for _, c := range cases {
-		res := request(t, "GET", c.path, "", nil)
-		if res.StatusCode != http.StatusOK {
-			t.Errorf("%s: status %d, want 200", c.path, res.StatusCode)
-			continue
-		}
-		if got, _, err := mime.ParseMediaType(res.Header.Get("Content-Type")); err != nil || got != c.mediaType {
-			t.Errorf("%s: Content-Type %q, want %s", c.path, res.Header.Get("Content-Type"), c.mediaType)
-		}
-		for name, want := range headers {
-			if got := res.Header.Get(name); got != want {
-				t.Errorf("%s: %s %q, want %q", c.path, name, got, want)
-			}
-		}
-	}
-}
-
-func TestShareViewerPageIsTheSameForEveryID(t *testing.T) {
-	page := func(id string) string {
-		t.Helper()
-		res := request(t, "GET", "/s/"+id, "", nil)
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(body)
-	}
-	a, b := page("01900000-0000-7000-8000-000000000001"), page("01900000-0000-7000-8000-000000000002")
-	if a != b || !strings.Contains(a, "share.js") || !strings.Contains(a, "share.css") {
-		t.Errorf("page for two ids:\n%s\n---\n%s\nwant one page that loads share.js and share.css", a, b)
-	}
+	wantProblem(t, "read an id that is not a uuid", call(t, "GET", "/v2/shares/nope", "", nil), http.StatusBadRequest)
+	wantProblem(t, "delete an id that is not a uuid", call(t, "DELETE", "/v2/shares/nope", m.access, nil), http.StatusBadRequest)
+	wantProblem(t, "read an unknown share", call(t, "GET", "/v2/shares/"+uuid.NewString(), "", nil), http.StatusNotFound)
+	wantProblem(t, "delete an unknown share", call(t, "DELETE", "/v2/shares/"+uuid.NewString(), m.access, nil), http.StatusNotFound)
 }
