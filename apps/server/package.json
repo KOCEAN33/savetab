@@ -4,6 +4,6 @@
   "private": true,
   "scripts": {
     "test": "./scripts/test.sh",
-    "check": "go vet ./..."
+    "check": "go vet ./... && golangci-lint run ./..."
   }
 }

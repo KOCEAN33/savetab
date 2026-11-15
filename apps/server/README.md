@@ -26,6 +26,8 @@ Tests run against a real Postgres. Each run creates a database `savetab_test_<ra
 
 `pnpm test` calls `scripts/test.sh`. Without `TEST_DATABASE_URL`, the script uses the homelab dev cluster `pg-dev.lab.hiriri.com` as role `agent` acting as `savetab`, which needs the tailnet and the `proxmox-talos-lab-op` keychain token. CI sets `TEST_DATABASE_URL` to its Postgres service container.
 
+`pnpm check` runs `go vet`, then `golangci-lint` with `.golangci.yml`, so it needs golangci-lint v2 on the PATH (`brew install golangci-lint`). CI installs the version `.github/workflows/ci.yml` pins.
+
 ## Server for the extension's e2e tests
 
 `scripts/e2e-server.sh` builds and runs `cmd/savetab-e2e`: the API on a free local port, on a `savetab_test_<random>` database of its own, with an OIDC issuer it runs itself (`internal/fakeoidc`) that logs every visitor in as one user. It prints its URL as the first line of stdout and drops the database on SIGTERM. `AUTH_REDIRECT_URIS` sets the redirect URIs a login may end at. It finds the database the way `scripts/test.sh` does, through `scripts/test-db.sh`.
