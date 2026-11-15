@@ -8,7 +8,7 @@
     "test": "pnpm -r test",
     "test:e2e": "pnpm --filter @savetab/extension test:e2e",
     "test:e2e:firefox": "pnpm --filter @savetab/extension test:e2e:firefox",
-    "check": "pnpm -r check",
+    "check": "pnpm -r check && helm lint --strict charts/savetab -f charts/savetab/ci/lint-values.yaml",
     "lint": "oxlint packages apps scripts && node scripts/lint-conventions.mjs && pnpm --filter @savetab/extension lint:css",
     "fmt": "oxfmt packages apps",
     "fmt:check": "oxfmt --check packages apps"

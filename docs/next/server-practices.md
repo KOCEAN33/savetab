@@ -15,7 +15,7 @@ The layers the remaining steps build on, with `internal/bus/ops.go` and `interna
 - The handler tests use `db` and pgx to write states the endpoints cannot produce, per step 3. The 39 handler tests in `internal/api` pin `/v1` through step 13.
 - `internal/platform/config` loads every variable. The readiness ping timeout and the shutdown budget are fields that steps 11 and 12 put to use. `main` already uses the start wait, the pool maximum, the HTTP drain timeout, and the request deadline.
 - `httpserver.New` (`internal/httpserver/server.go`) builds the `http.Server` on a gin engine with the request deadline middleware. It mounts the `api.New` handler on `/v1`, `/s/`, and `/healthz` through `gin.WrapH`, so a new route such as `/livez` registers on the engine. `httpserver.Status` is the kind-to-status function, unused until `/v2`.
-- `pnpm check` needs golangci-lint v2 on the PATH.
+- `pnpm check` needs golangci-lint v2 and helm on the PATH. It lints `charts/savetab/` with the stand-in values of `charts/savetab/ci/lint-values.yaml`.
 
 Orders from the owner that bind later steps:
 

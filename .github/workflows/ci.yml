@@ -42,6 +42,7 @@ jobs:
         with:
           version: v2.15.0
           install-only: true
+      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
       - run: pnpm --filter @savetab/extension exec playwright install --with-deps chromium
       - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
         with:
