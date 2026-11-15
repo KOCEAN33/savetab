@@ -13,7 +13,7 @@ Goal: `apps/server` meets the vault pages under `practices/backend/` and `practi
 
 - Whether `cmd/savetab-e2e` stays as a second main package. The layout page allows one. Step 12 makes it a thin caller of `wire` either way. Removing it needs the fake issuer to run from somewhere else.
 - The `/v2` choices in step 14 that depart from a practice rule.
-- The chart in `KOCEAN33/homelab-workloads` changes with steps 9, 11, and 18. Each of those steps names the change. The deploy is the owner's.
+- The chart in `KOCEAN33/homelab-workloads` changes with steps 9, 11, and 18. Each of those steps names the change, and its form follows how the neighbouring charts in that repo already do the same thing. The deploy is the owner's.
 
 ## Target tree
 

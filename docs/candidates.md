@@ -38,6 +38,7 @@ The user asked for these on 2026-11-12, to be done later.
 - Under a full `pnpm test:e2e:firefox` run, `e2e-firefox/pages.spec.ts` fails about one run in five: the import test once with `StaleElementReferenceError` on the import textarea, the list-page test once with "No links found". Each passes alone. No cause is confirmed.
 - The Firefox GUI check has not covered P2 multi-select, sort, collapse, paging, or keyboard navigation. Chromium e2e covers them.
 
+- Guess, not reproduced: ticked tabs and a ticked group dragged together and dropped outside the origin group raise the mixed-kinds alert, and the origin group then draws without the dragged and carried rows until its data next changes (`GroupView.svelte` `finalize`).
 - Dragging tabs into a group does not update the recent destination list. Only sends and moves through the location dialog do (plan P2 step 10). Counting drags needs `GroupView` to tell a drop from another group apart from a reorder.
 - The default group label `tn('tabCount', n)` is computed separately in `GroupView.svelte`, `LocationDialog.svelte`, `TrashView.svelte`, `lib/menus.ts`, and `entrypoints/send/App.svelte`. One shared helper would replace them.
 - Errors thrown by `@savetab/core`, such as a locked group refusing a change, reach `alert` in English. Core has no locale, so a translation needs error codes mapped to locale keys.
