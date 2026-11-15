@@ -1,0 +1,5 @@
+apiVersion: v2
+name: savetab
+description: The savetab sync server (apps/server).
+type: application
+version: 0.1.0

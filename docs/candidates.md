@@ -69,7 +69,7 @@ The user asked for these on 2026-11-12, to be done later.
 - A background worker stopped between a refresh answer and the write of the new tokens leaves the device with a spent refresh token, so it must log in again.
 
 - The deployed server's Firefox redirect URI is computed as the SHA-1 of the add-on id. No login has checked it against `browser.identity.getRedirectURL()` in a real Firefox.
-- A new server image is deployed by hand: a commit in homelab-workloads sets the tag. saveweb's image workflow bumps the tag itself through the `kocean33-homelab-ci` GitHub App.
+- A new server image is deployed by hand: a commit in homelab-workloads sets the tag and `chartRevision`. saveweb's image workflow bumps the tag itself through the `kocean33-homelab-ci` GitHub App.
 - No login has run end to end against the deployed server and Zitadel. The check so far is the 302 from `/v1/auth/start` to the issuer.
 
 ## Code review findings
@@ -91,5 +91,5 @@ Lint rules not turned on:
 
 - Review the Korean strings in `apps/extension/locales/ko.json` and `public/_locales/ko/messages.json`. Wording and terms are the user's call.
 - P4 (sync server): whether the server gets a public name. It is tailnet-only, so a device syncs only on the tailnet, and a shared page opens only there. `GET /v1/auth/start` has no rate limit, which matters once it is public.
-- Deploy the step 9 server: merge branch `savetab-config-files` of `KOCEAN33/homelab-workloads` together with an `image.tag` built from savetab commit `35780f3` or later. The chart there sets only `DATABASE_URL_FILE` and `LISTEN_ADDR`, which an older image does not read, and an image from `35780f3` on fails to start under the chart on `main`.
+- Deploy the step 10 server: merge branch `savetab-config-files` of `KOCEAN33/homelab-workloads`. It reads the chart from this repository's `charts/savetab/`, moves the database ExternalSecret to `savetab/manifests/prod/`, and pins `chartRevision` and `image.tag` to one savetab commit. The rendered objects match the chart on `main` except for the step 9 config change: the chart sets only `DATABASE_URL_FILE` and `LISTEN_ADDR`, which an image before `35780f3` does not read.
 - P4 (sync server): in the later build where pairing starts by itself after login, what the signed-in device shows for approval. A one-tap approve trusts the server to relay the right key. Comparing the pairing code does not.

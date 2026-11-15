@@ -15,7 +15,7 @@ Goal: `apps/server` meets the vault pages under `practices/backend/` and `practi
 
 ## Waiting on the owner
 
-- The chart in `KOCEAN33/homelab-workloads` changes with steps 9, 11, and 19. Each of those steps names the change, and its form follows how the neighbouring charts in that repo already do the same thing. The deploy is the owner's.
+- The chart is `charts/savetab/` in this repository, and steps 11 and 19 change it in their own commit. The values and the database ExternalSecret stay in `KOCEAN33/homelab-workloads`, where a deploy is one commit that moves `chartRevision` and `image.tag` together, as savetube's does. The deploy is the owner's.
 
 ## Target tree
 
@@ -74,4 +74,4 @@ Each step is one commit that leaves `pnpm test`, `pnpm check`, and `pnpm lint` g
 ### Phase 4: tests and release
 
 18. **Test isolation.** A database per test from pgtestdb, `t.Parallel()` in every test with `paralleltest`, `testpackage`, and a statement-count assertion in each list endpoint's test. `scripts/test-db.sh` stops naming the shared dev cluster: a missing `TEST_DATABASE_URL` fails with the variable's name.
-19. **Release.** Add `releaserc.toml` with the keys of `practices/backend/release-versioning.md`, plus `version_variables` for `apps/extension/package.json`. Check the stamp with `semantic-release --noop version --print` before relying on it. One workflow on push to `main`, with a `concurrency` group, runs the CI checks, the release, then, only when `released` is true, `scripts/package-release.mjs` and the image build tagged with the `version` output through `type=semver`. The image build passes version and commit as link-time variables. `release.yml`'s tag trigger and `image.yml`'s SHA tag go. Add commitlint with the ten types, hadolint, `docker build --check`, and gitleaks to CI. Rewrite `docs/guides/release.md` "Cut a release" and the image line of `apps/server/README.md`. Chart change: `image.tag` holds a version.
+19. **Release.** Add `releaserc.toml` with the keys of `practices/backend/release-versioning.md`, plus `version_variables` for `apps/extension/package.json`. Check the stamp with `semantic-release --noop version --print` before relying on it. One workflow on push to `main`, with a `concurrency` group, runs the CI checks, the release, then, only when `released` is true, `scripts/package-release.mjs` and the image build tagged with the `version` output through `type=semver`. The image build passes version and commit as link-time variables. `release.yml`'s tag trigger and `image.yml`'s SHA tag go. Add commitlint with the ten types, hadolint, `docker build --check`, and gitleaks to CI. Rewrite `docs/guides/release.md` "Cut a release" and the image line of `apps/server/README.md`. Chart change: `image.tag` holds a version, and the deploy commit sets `chartRevision` to the matching `v<version>` tag.

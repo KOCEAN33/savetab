@@ -1,0 +1,43 @@
+# <repository>:<tag>, where <tag> is the full commit sha of the savetab image
+# build. Set per environment, never `latest`.
+image:
+  repository: ghcr.io/kocean33/savetab
+  tag: ""
+
+# The pod's imagePullSecrets entry `ghcr-pull`, for a private package. The
+# deploying repository creates that Secret.
+imagePullSecret:
+  enabled: false
+
+# Served over https through the Gateway's *.lab.hiriri.com certificate.
+# PUBLIC_URL is https://<host>.
+host: ""
+
+oidc:
+  # OIDC_ISSUER.
+  issuer: ""
+  # OIDC_CLIENT_ID. The Zitadel application is a public client on PKCE, so the
+  # server takes no client secret.
+  clientId: ""
+
+# AUTH_REDIRECT_URIS, joined with one space: the redirect URIs the server
+# accepts, one per extension build.
+authRedirectUris: []
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 32Mi
+  limits:
+    memory: 256Mi
+
+database:
+  # The Secret holding the database URL in its `url` key, mounted as the file
+  # DATABASE_URL_FILE names. The chart only reads it: the deploying repository
+  # creates it, as homelab-workloads savetab/manifests/<env>/ does.
+  secretName: savetab-db
+
+httpRoute:
+  parentRefs:
+    - name: homelab
+      namespace: gateway

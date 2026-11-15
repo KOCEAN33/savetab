@@ -1,0 +1,76 @@
+{{- $selector := include "savetab.selector" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- $selector | nindent 4 }}
+  annotations:
+    # The binary reads its environment and the database URL file once at start.
+    secret.reloader.stakater.com/reload: {{ .Values.database.secretName }}
+spec:
+  replicas: 1
+  # Every start applies migrations, so two pods must never start against the
+  # database at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- $selector | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $selector | nindent 8 }}
+    spec:
+      {{- include "savetab.podSecurity" . | nindent 6 }}
+      containers:
+        - name: server
+          image: {{ .Values.image.repository }}:{{ required "image.tag is required: the commit sha of a savetab image build" .Values.image.tag }}
+          env:
+            - name: DATABASE_URL_FILE
+              value: /etc/savetab/db/url
+            - name: LISTEN_ADDR
+              value: ":8080"
+            - name: OIDC_ISSUER
+              value: {{ .Values.oidc.issuer | quote }}
+            - name: OIDC_CLIENT_ID
+              value: {{ required "oidc.clientId is required" .Values.oidc.clientId | quote }}
+            - name: PUBLIC_URL
+              value: https://{{ required "host is required" .Values.host }}
+            - name: AUTH_REDIRECT_URIS
+              value: {{ join " " .Values.authRedirectUris | quote }}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- include "savetab.containerSecurity" . | nindent 10 }}
+          volumeMounts:
+            # The whole Secret as a directory, not a subPath, so the file
+            # follows the Secret.
+            - name: db
+              mountPath: /etc/savetab/db
+              readOnly: true
+      volumes:
+        - name: db
+          secret:
+            secretName: {{ .Values.database.secretName }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- $selector | nindent 4 }}
+spec:
+  selector:
+    {{- $selector | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

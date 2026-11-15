@@ -22,7 +22,7 @@ Orders from the owner that bind later steps:
 - Every finding of the review gets fixed, architecture phase first, in the plan's step order.
 - `/v2` takes the practice's form, and `/v1` goes once the extension has moved.
 - The server and the extension share one version and one `v<version>` tag per merge.
-- A chart change in `KOCEAN33/homelab-workloads` follows how the neighbouring charts there already do the same thing. Steps 11 and 19 commit theirs on a branch there and leave the deploy to the owner.
+- The chart is `charts/savetab/` in this repository. Steps 11 and 19 change it in their own commit. A deploy moves `chartRevision` and `image.tag` together in `KOCEAN33/homelab-workloads` and is the owner's.
 
 ## Next steps
 
