@@ -32,6 +32,61 @@ func (q *Queries) AccessSession(ctx context.Context, tokenHash []byte) (AccessSe
 	return i, err
 }
 
+const createPairing = `-- name: CreatePairing :one
+WITH gone AS (
+  DELETE FROM pairings
+  WHERE user_id = $1::uuid AND (expires_at <= now() OR new_device_id = $2::uuid)
+)
+
+INSERT INTO pairings (user_id, new_device_id, commitment, expires_at)
+VALUES ($1::uuid, $2::uuid, $3::bytea, now() + make_interval(secs => $4::float8))
+RETURNING
+  id, new_device_id,
+  (SELECT d.name FROM devices AS d WHERE d.id = $2::uuid)::text AS new_device_name,
+  commitment, old_public, new_public, wrapped_key, expires_at
+`
+
+type CreatePairingParams struct {
+	UserID      uuid.UUID
+	NewDeviceID uuid.UUID
+	Commitment  []byte
+	TTLSeconds  float64
+}
+
+type CreatePairingRow struct {
+	ID            uuid.UUID
+	NewDeviceID   uuid.UUID
+	NewDeviceName string
+	Commitment    []byte
+	OldPublic     []byte
+	NewPublic     []byte
+	WrappedKey    []byte
+	ExpiresAt     time.Time
+}
+
+// Opens a pairing for the device, which is the new one. It replaces a pairing the device still
+// has open and clears the user's expired ones.
+func (q *Queries) CreatePairing(ctx context.Context, arg CreatePairingParams) (CreatePairingRow, error) {
+	row := q.db.QueryRow(ctx, createPairing,
+		arg.UserID,
+		arg.NewDeviceID,
+		arg.Commitment,
+		arg.TTLSeconds,
+	)
+	var i CreatePairingRow
+	err := row.Scan(
+		&i.ID,
+		&i.NewDeviceID,
+		&i.NewDeviceName,
+		&i.Commitment,
+		&i.OldPublic,
+		&i.NewPublic,
+		&i.WrappedKey,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const deleteOpsThrough = `-- name: DeleteOpsThrough :exec
 DELETE FROM ops WHERE user_id = $1::uuid AND seq <= $2::bigint
 `
@@ -299,6 +354,43 @@ func (q *Queries) LockNextSeq(ctx context.Context, userID uuid.UUID) (int64, err
 	return next_seq, err
 }
 
+const lockPairing = `-- name: LockPairing :one
+SELECT
+  new_device_id,
+  (old_public IS NOT NULL)::bool AS has_old,
+  (new_public IS NOT NULL)::bool AS has_new,
+  (wrapped_key IS NOT NULL)::bool AS has_key
+FROM pairings
+WHERE id = $1::uuid AND user_id = $2::uuid AND expires_at > now()
+FOR UPDATE
+`
+
+type LockPairingParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+type LockPairingRow struct {
+	NewDeviceID uuid.UUID
+	HasOld      bool
+	HasNew      bool
+	HasKey      bool
+}
+
+// Which messages one of the user's unexpired pairings holds. It locks the row until the
+// transaction ends.
+func (q *Queries) LockPairing(ctx context.Context, arg LockPairingParams) (LockPairingRow, error) {
+	row := q.db.QueryRow(ctx, lockPairing, arg.ID, arg.UserID)
+	var i LockPairingRow
+	err := row.Scan(
+		&i.NewDeviceID,
+		&i.HasOld,
+		&i.HasNew,
+		&i.HasKey,
+	)
+	return i, err
+}
+
 const opsAfter = `-- name: OpsAfter :many
 SELECT seq, op_id AS id, device_id, ciphertext, received_at
 FROM ops
@@ -337,6 +429,99 @@ func (q *Queries) OpsAfter(ctx context.Context, arg OpsAfterParams) ([]OpsAfterR
 			&i.DeviceID,
 			&i.Ciphertext,
 			&i.ReceivedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pairing = `-- name: Pairing :one
+SELECT
+  p.id, p.new_device_id, d.name AS new_device_name,
+  p.commitment, p.old_public, p.new_public, p.wrapped_key, p.expires_at
+FROM pairings AS p
+INNER JOIN devices AS d ON p.new_device_id = d.id
+WHERE p.id = $1::uuid AND p.user_id = $2::uuid AND p.expires_at > now()
+`
+
+type PairingParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+type PairingRow struct {
+	ID            uuid.UUID
+	NewDeviceID   uuid.UUID
+	NewDeviceName string
+	Commitment    []byte
+	OldPublic     []byte
+	NewPublic     []byte
+	WrappedKey    []byte
+	ExpiresAt     time.Time
+}
+
+// One of the user's pairings, unless it expired.
+func (q *Queries) Pairing(ctx context.Context, arg PairingParams) (PairingRow, error) {
+	row := q.db.QueryRow(ctx, pairing, arg.ID, arg.UserID)
+	var i PairingRow
+	err := row.Scan(
+		&i.ID,
+		&i.NewDeviceID,
+		&i.NewDeviceName,
+		&i.Commitment,
+		&i.OldPublic,
+		&i.NewPublic,
+		&i.WrappedKey,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const pairings = `-- name: Pairings :many
+SELECT
+  p.id, p.new_device_id, d.name AS new_device_name,
+  p.commitment, p.old_public, p.new_public, p.wrapped_key, p.expires_at
+FROM pairings AS p
+INNER JOIN devices AS d ON p.new_device_id = d.id
+WHERE p.user_id = $1::uuid AND p.expires_at > now()
+ORDER BY p.expires_at, p.id
+`
+
+type PairingsRow struct {
+	ID            uuid.UUID
+	NewDeviceID   uuid.UUID
+	NewDeviceName string
+	Commitment    []byte
+	OldPublic     []byte
+	NewPublic     []byte
+	WrappedKey    []byte
+	ExpiresAt     time.Time
+}
+
+// The user's pairings that have not expired, oldest first.
+func (q *Queries) Pairings(ctx context.Context, userID uuid.UUID) ([]PairingsRow, error) {
+	rows, err := q.db.Query(ctx, pairings, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PairingsRow
+	for rows.Next() {
+		var i PairingsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.NewDeviceID,
+			&i.NewDeviceName,
+			&i.Commitment,
+			&i.OldPublic,
+			&i.NewPublic,
+			&i.WrappedKey,
+			&i.ExpiresAt,
 		); err != nil {
 			return nil, err
 		}

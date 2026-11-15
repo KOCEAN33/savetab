@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/google/uuid"
 )
 
@@ -130,7 +131,9 @@ func TestPairingMessagesAreSetOnceInOrderByTheRightSide(t *testing.T) {
 func TestPairingExpires(t *testing.T) {
 	user := newUser(t)
 	signedIn, joining := newDevice(t, user), newDevice(t, user)
-	expired, err := store.Queries().CreatePairing(context.Background(), uuid.MustParse(user.id), uuid.MustParse(joining.id), commitmentOf("x"), -time.Second)
+	expired, err := store.Queries().CreatePairing(context.Background(), db.CreatePairingParams{
+		UserID: uuid.MustParse(user.id), NewDeviceID: uuid.MustParse(joining.id), Commitment: commitmentOf("x"), TTLSeconds: -1,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

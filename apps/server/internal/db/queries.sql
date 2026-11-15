@@ -133,3 +133,49 @@ WHERE
   s.token_hash = @token_hash::bytea AND s.kind = 'refresh' AND s.expires_at > now()
   AND EXISTS (SELECT 1 FROM devices AS d WHERE d.id = s.device_id AND d.revoked_at IS NULL)
 RETURNING s.device_id, (SELECT d.user_id FROM devices AS d WHERE d.id = s.device_id)::uuid AS user_id;
+
+-- name: CreatePairing :one
+-- Opens a pairing for the device, which is the new one. It replaces a pairing the device still
+-- has open and clears the user's expired ones.
+WITH gone AS (
+  DELETE FROM pairings
+  WHERE user_id = @user_id::uuid AND (expires_at <= now() OR new_device_id = @new_device_id::uuid)
+)
+
+INSERT INTO pairings (user_id, new_device_id, commitment, expires_at)
+VALUES (@user_id::uuid, @new_device_id::uuid, @commitment::bytea, now() + make_interval(secs => @ttl_seconds::float8))
+RETURNING
+  id, new_device_id,
+  (SELECT d.name FROM devices AS d WHERE d.id = @new_device_id::uuid)::text AS new_device_name,
+  commitment, old_public, new_public, wrapped_key, expires_at;
+
+-- name: Pairings :many
+-- The user's pairings that have not expired, oldest first.
+SELECT
+  p.id, p.new_device_id, d.name AS new_device_name,
+  p.commitment, p.old_public, p.new_public, p.wrapped_key, p.expires_at
+FROM pairings AS p
+INNER JOIN devices AS d ON p.new_device_id = d.id
+WHERE p.user_id = @user_id::uuid AND p.expires_at > now()
+ORDER BY p.expires_at, p.id;
+
+-- name: Pairing :one
+-- One of the user's pairings, unless it expired.
+SELECT
+  p.id, p.new_device_id, d.name AS new_device_name,
+  p.commitment, p.old_public, p.new_public, p.wrapped_key, p.expires_at
+FROM pairings AS p
+INNER JOIN devices AS d ON p.new_device_id = d.id
+WHERE p.id = @id::uuid AND p.user_id = @user_id::uuid AND p.expires_at > now();
+
+-- name: LockPairing :one
+-- Which messages one of the user's unexpired pairings holds. It locks the row until the
+-- transaction ends.
+SELECT
+  new_device_id,
+  (old_public IS NOT NULL)::bool AS has_old,
+  (new_public IS NOT NULL)::bool AS has_new,
+  (wrapped_key IS NOT NULL)::bool AS has_key
+FROM pairings
+WHERE id = @id::uuid AND user_id = @user_id::uuid AND expires_at > now()
+FOR UPDATE;

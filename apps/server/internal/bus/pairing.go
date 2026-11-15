@@ -37,7 +37,9 @@ const (
 // StartPairing opens a pairing for the calling device, which is the new one. It replaces a
 // pairing the device still has open and clears the user's expired ones.
 func (b *Bus) StartPairing(ctx context.Context, c Caller, commitment []byte) (Pairing, error) {
-	row, err := b.store.Queries().CreatePairing(ctx, c.UserID, c.DeviceID, commitment, pairingTTL)
+	row, err := b.store.Queries().CreatePairing(ctx, db.CreatePairingParams{
+		UserID: c.UserID, NewDeviceID: c.DeviceID, Commitment: commitment, TTLSeconds: pairingTTL.Seconds(),
+	})
 	return Pairing(row), err
 }
 
@@ -56,7 +58,7 @@ func (b *Bus) Pairings(ctx context.Context, userID uuid.UUID) ([]Pairing, error)
 
 // Pairing returns one of the user's pairings. An expired pairing gives a NotFound error.
 func (b *Bus) Pairing(ctx context.Context, userID, id uuid.UUID) (Pairing, error) {
-	row, err := b.store.Queries().Pairing(ctx, userID, id)
+	row, err := b.store.Queries().Pairing(ctx, db.PairingParams{ID: id, UserID: userID})
 	return Pairing(row), err
 }
 
@@ -66,7 +68,7 @@ func (b *Bus) Pairing(ctx context.Context, userID, id uuid.UUID) (Pairing, error
 func (b *Bus) SetPairingMessage(ctx context.Context, c Caller, id uuid.UUID, message PairingMessage, value []byte) error {
 	return b.store.InTx(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
-		state, err := q.LockPairing(ctx, c.UserID, id)
+		state, err := q.LockPairing(ctx, db.LockPairingParams{ID: id, UserID: c.UserID})
 		if err != nil {
 			return err
 		}
@@ -86,6 +88,6 @@ func (b *Bus) SetPairingMessage(ctx context.Context, c Caller, id uuid.UUID, mes
 		if !ready {
 			return errs.New(errs.Conflict, "set pairing message", "the message is out of order or already set")
 		}
-		return q.SetPairingMessage(ctx, id, db.PairingMessage(message), value)
+		return db.SetPairingMessage(ctx, tx, id, db.PairingMessage(message), value)
 	})
 }
