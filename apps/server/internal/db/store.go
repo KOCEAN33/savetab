@@ -41,6 +41,9 @@ func Open(ctx context.Context, url string, maxConns int32) (*Store, error) {
 	return &Store{pool: pool}, nil
 }
 
+// Queries runs each statement on the pool, outside any transaction.
+func (s *Store) Queries() *Queries { return New(mapped{db: s.pool}) }
+
 func (s *Store) Close() { s.pool.Close() }
 
 func (s *Store) Ping(ctx context.Context) error {

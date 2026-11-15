@@ -43,7 +43,11 @@ jobs:
           version: v2.15.0
           install-only: true
       - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+      - uses: sqlc-dev/setup-sqlc@bac53b7fb28c039a6c7f5736fd1e89744021bdd6 # v5.0.0
+        with:
+          sqlc-version: 1.31.1
       - run: pipx install semgrep==1.185.0
+      - run: pipx install sqlfluff==4.5.0
       - name: Install conftest
         run: |
           curl -sSfLo /tmp/conftest.tgz https://github.com/open-policy-agent/conftest/releases/download/v0.71.1/conftest_0.71.1_Linux_x86_64.tar.gz

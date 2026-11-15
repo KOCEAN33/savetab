@@ -1,0 +1,8 @@
+[sqlfluff]
+dialect = postgres
+rules = AM04,AM09
+templater = placeholder
+
+# A sqlc parameter is @name.
+[sqlfluff:templater:placeholder]
+param_regex = @(?P<param_name>\w+)

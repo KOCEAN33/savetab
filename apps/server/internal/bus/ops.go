@@ -47,11 +47,13 @@ func (b *Bus) PushOps(ctx context.Context, c Caller, ops []NewOp) error {
 		if err != nil {
 			return err
 		}
-		inserted, err := q.InsertOps(ctx, c.UserID, c.DeviceID, next, ids, ciphertexts)
+		inserted, err := q.InsertOps(ctx, db.InsertOpsParams{
+			UserID: c.UserID, DeviceID: c.DeviceID, FirstSeq: next, OpIDs: ids, Ciphertexts: ciphertexts,
+		})
 		if err != nil {
 			return err
 		}
-		return q.SetNextSeq(ctx, c.UserID, next+inserted)
+		return q.SetNextSeq(ctx, db.SetNextSeqParams{UserID: c.UserID, NextSeq: next + inserted})
 	})
 }
 
@@ -62,14 +64,14 @@ func (b *Bus) PullOps(ctx context.Context, userID uuid.UUID, after int64, limit 
 	// One view for both reads, so a snapshot that lands between them cannot hide ops it deleted.
 	err = b.store.InSnapshot(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
-		stale, err := q.SnapshotAbove(ctx, userID, after)
+		stale, err := q.SnapshotAbove(ctx, db.SnapshotAboveParams{UserID: userID, Seq: after})
 		if err != nil {
 			return err
 		}
 		if stale {
 			return errs.New(errs.Conflict, "pull ops", "ops at or below the snapshot are gone")
 		}
-		rows, err := q.OpsAfter(ctx, userID, after, limit+1)
+		rows, err := q.OpsAfter(ctx, db.OpsAfterParams{UserID: userID, AfterSeq: after, MaxOps: int32(limit + 1)})
 		if err != nil {
 			return err
 		}

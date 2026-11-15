@@ -16,7 +16,7 @@ const txAttempts = 3
 // InTx runs fn in one transaction, committed when fn returns nil and rolled back otherwise. A
 // serialization failure or a deadlock reruns fn in a new transaction, so fn reads every value
 // it decides on inside the transaction and changes no state outside it. The error it returns
-// carries a kind.
+// carries a kind, and so does the error of each statement fn runs on tx.
 func (s *Store) InTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	return s.inTx(ctx, pgx.TxOptions{}, fn)
 }
@@ -30,7 +30,10 @@ func (s *Store) InSnapshot(ctx context.Context, fn func(tx pgx.Tx) error) error 
 func (s *Store) inTx(ctx context.Context, opts pgx.TxOptions, fn func(tx pgx.Tx) error) error {
 	var err error
 	for range txAttempts {
-		if err = pgx.BeginTxFunc(ctx, s.pool, opts, fn); !retryable(err) {
+		err = pgx.BeginTxFunc(ctx, s.pool, opts, func(tx pgx.Tx) error {
+			return fn(mappedTx{Tx: tx, mapped: mapped{db: tx}})
+		})
+		if !retryable(err) {
 			break
 		}
 	}

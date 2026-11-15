@@ -33,7 +33,7 @@ Tests run against a real Postgres. Each run creates a database `savetab_test_<ra
 
 `pnpm test` calls `scripts/test.sh`. Without `TEST_DATABASE_URL`, the script uses the homelab dev cluster `pg-dev.lab.hiriri.com` as role `agent` acting as `savetab`, which needs the tailnet and the `proxmox-talos-lab-op` keychain token. CI sets `TEST_DATABASE_URL` to its Postgres service container.
 
-`pnpm check` runs `go vet`, then `golangci-lint` with `.golangci.yml`, so it needs golangci-lint v2 on the PATH (`brew install golangci-lint`). CI installs the version `.github/workflows/ci.yml` pins.
+`pnpm check` runs `go vet`, then `golangci-lint` with `.golangci.yml`, so it needs golangci-lint v2 on the PATH (`brew install golangci-lint`). It then runs `scripts/check-sql.sh`, which needs sqlc and SQLFluff (`brew install sqlc`, `uv tool install sqlfluff`): `sqlc diff` fails when `internal/db/queries.sql` and the generated files disagree, so run `sqlc generate` after a query change. CI installs the version `.github/workflows/ci.yml` pins.
 
 ## Server for the extension's e2e tests
 

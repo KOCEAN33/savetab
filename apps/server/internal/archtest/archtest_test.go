@@ -29,10 +29,6 @@ var (
 	layers      = []string{"api", "job", "cli", "bus", "db"}
 	meaningless = []string{"util", "utils", "common", "misc", "helpers", "shared"}
 
-	// exportedInterfaceFiles declare an exported interface under internal/db by hand. Step 15 of
-	// docs/plans/server-practices.md replaces DBTX with the one sqlc generates.
-	exportedInterfaceFiles = []string{"internal/db/queries.go"}
-
 	// databaseCallFiles call the driver outside generated code. store.go runs the migrations
 	// until step 15, and testdb goes at step 18.
 	databaseCallFiles = []string{"internal/db/store.go", "internal/platform/testdb/testdb.go"}
@@ -195,7 +191,7 @@ func TestPackageClauses(t *testing.T) {
 
 func TestInterfacesAtTheConsumer(t *testing.T) {
 	for _, f := range sources(t) {
-		if !f.under("internal/db") || f.test() || f.generated() || slices.Contains(exportedInterfaceFiles, f.path) {
+		if !f.under("internal/db") || f.test() || f.generated() {
 			continue
 		}
 		ast.Inspect(f.ast, func(n ast.Node) bool {
