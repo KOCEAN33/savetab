@@ -4,4 +4,4 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/test-db.sh
 
-exec go test ./... "$@"
+exec go test -race -count=1 -shuffle=on ./... "$@"
