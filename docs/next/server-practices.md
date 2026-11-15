@@ -6,16 +6,16 @@
 
 ## Start
 
-Step 11 of `docs/plans/server-practices.md`, the lifecycle endpoints, since every later step follows the plan's order. Steps 1 to 10 are committed.
+Step 12 of `docs/plans/server-practices.md`, the composition root, since every later step follows the plan's order. Steps 1 to 11 are committed.
 
 The layers the remaining steps build on, with `internal/bus/ops.go` and `internal/db/ops.go` as the pattern files:
 
 - `db` exports `Queries` over a `DBTX` (`internal/db/queries.go`): `db.New(tx)` inside a transaction, `store.Queries()` outside one. A `Queries` method holds one statement, every error through `MapError`.
 - A `bus` use case opens the transaction with `store.InTx`, holds the rule, and sets the kind of a broken rule with `errs.New`. `bus` declares the types `api` uses and holds token making, hashing, and every lifetime. `api.New` takes a `*bus.Bus`.
 - The handler tests use `db` and pgx to write states the endpoints cannot produce, per step 3. The 39 handler tests in `internal/api` pin `/v1` through step 13.
-- `internal/platform/config` loads every variable. The readiness ping timeout and the shutdown budget are fields that steps 11 and 12 put to use. `main` already uses the start wait, the pool maximum, the HTTP drain timeout, and the request deadline.
-- `httpserver.New` (`internal/httpserver/server.go`) builds the `http.Server` on a gin engine with the request deadline middleware. It mounts the `api.New` handler on `/v1`, `/s/`, and `/healthz` through `gin.WrapH`, so a new route such as `/livez` registers on the engine. `httpserver.Status` is the kind-to-status function, unused until `/v2`.
-- `pnpm check` needs golangci-lint v2 and helm on the PATH. It lints `charts/savetab/` with the stand-in values of `charts/savetab/ci/lint-values.yaml`.
+- `internal/platform/config` loads every variable. The shutdown budget is the field step 12 puts to use. `main` already uses every other config field.
+- `httpserver.New` (`internal/httpserver/server.go`) builds the `http.Server` on a gin engine with the request deadline middleware. It mounts the `api.New` handler on `/v1`, `/s/`, and `/healthz` through `gin.WrapH`, and serves `/livez` and `/readyz`. Its `Serve` marks the listener open for `/readyz`. `httpserver.Status` is the kind-to-status function, unused until `/v2`.
+- `pnpm check` needs golangci-lint v2, helm, and conftest on the PATH. `scripts/check-chart.sh` lints `charts/savetab/` with the stand-in values of `charts/savetab/ci/lint-values.yaml` and runs the Conftest policies of `charts/savetab/policy/` on its render.
 
 Orders from the owner that bind later steps:
 
@@ -26,4 +26,4 @@ Orders from the owner that bind later steps:
 
 ## Next steps
 
-Steps 11 to 19 of the plan, in order, each with the done-when the plan gives.
+Steps 12 to 19 of the plan, in order, each with the done-when the plan gives.
