@@ -6,7 +6,7 @@ Put the built sync server (plan phase P4) to use: every step of `docs/plans/onet
 
 ## Start
 
-Run the first real login against the deployed server. The deployed image is `e750e86a696f` (homelab-workloads `8a44a67`), which serves `/v1/devices`, `/v1/shares`, and the viewer at `/s/`, and no login has run against it and Zitadel yet. Done when the sync page of an installed extension signs in at `https://savetab.lab.hiriri.com`, a second device joins and shows the first one's tabs, and a shared group's URL opens on the tailnet. The login needs the owner at the browser.
+Run the first real login against the deployed server. The deployed image is `3cb56719a024` (homelab-workloads `72a3604`), which serves `/v1/devices`, `/v1/shares`, and the viewer at `/s/`, and no login has run against it and Zitadel yet. Done when the sync page of an installed extension signs in at `https://savetab.lab.hiriri.com`, a second device joins and shows the first one's tabs, and a shared group's URL opens on the tailnet. The login needs the owner at the browser.
 
 Orders from the owner that bind P4:
 

@@ -91,5 +91,4 @@ Lint rules not turned on:
 
 - Review the Korean strings in `apps/extension/locales/ko.json` and `public/_locales/ko/messages.json`. Wording and terms are the user's call.
 - P4 (sync server): whether the server gets a public name. It is tailnet-only, so a device syncs only on the tailnet, and a shared page opens only there. `GET /v1/auth/start` has no rate limit, which matters once it is public.
-- Deploy the step 12 server: merge branch `savetab-config-files` of `KOCEAN33/homelab-workloads`. It reads the chart from this repository's `charts/savetab/`, moves the database ExternalSecret to `savetab/manifests/prod/`, and pins `chartRevision` and `image.tag` to one savetab commit. The rendered objects match the chart on `main` except for the step 9 config change: the chart sets only `DATABASE_URL_FILE` and `LISTEN_ADDR`, which an image before `35780f3` does not read.
 - P4 (sync server): in the later build where pairing starts by itself after login, what the signed-in device shows for approval. A one-tap approve trusts the server to relay the right key. Comparing the pairing code does not.
