@@ -68,7 +68,7 @@ func TestMapErrorOnARealDatabase(t *testing.T) {
 	store, url := openStore(t)
 	ctx := context.Background()
 
-	if _, err := store.Key(ctx, "01900000-0000-7000-8000-000000000001"); errs.KindOf(err) != errs.NotFound {
+	if _, err := store.Queries().Key(ctx, "01900000-0000-7000-8000-000000000001"); errs.KindOf(err) != errs.NotFound {
 		t.Errorf("missing id: kind %d, want NotFound (%v)", errs.KindOf(err), err)
 	}
 

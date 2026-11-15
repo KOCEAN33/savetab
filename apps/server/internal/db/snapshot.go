@@ -1,11 +1,6 @@
 package db
 
-import (
-	"context"
-
-	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
-	"github.com/jackc/pgx/v5"
-)
+import "context"
 
 // Snapshot is the encrypted state of a user's records after every op up to Seq.
 type Snapshot struct {
@@ -13,34 +8,27 @@ type Snapshot struct {
 	Ciphertext []byte
 }
 
-// PutSnapshot replaces the user's snapshot and deletes the ops it covers.
-func (s *Store) PutSnapshot(ctx context.Context, userID string, snap Snapshot) error {
-	return MapError(ctx, "put snapshot", s.InTx(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		// The same row lock a push takes, so no op lands at or below snap.Seq after the check.
-		var next int64
-		if err := tx.QueryRow(ctx, `SELECT next_seq FROM users WHERE id = $1 FOR UPDATE`, userID).Scan(&next); err != nil {
-			return err
-		}
-		if snap.Seq >= next {
-			return errs.New(errs.Invalid, "put snapshot", "the snapshot seq is above the log's last seq")
-		}
-		tag, err := tx.Exec(ctx, `
-			INSERT INTO snapshots (user_id, seq, ciphertext) VALUES ($1, $2, $3)
-			ON CONFLICT (user_id) DO UPDATE SET seq = EXCLUDED.seq, ciphertext = EXCLUDED.ciphertext, created_at = now()
-			WHERE snapshots.seq <= EXCLUDED.seq`,
-			userID, snap.Seq, snap.Ciphertext)
-		if err != nil {
-			return err
-		}
-		if tag.RowsAffected() == 0 {
-			return errs.New(errs.Conflict, "put snapshot", "the user has a snapshot at a higher seq")
-		}
-		_, err = tx.Exec(ctx, `DELETE FROM ops WHERE user_id = $1 AND seq <= $2`, userID, snap.Seq)
-		return err
-	}))
+// UpsertSnapshot replaces the user's snapshot unless the stored one has a higher seq, and
+// reports whether it stored snap.
+func (q *Queries) UpsertSnapshot(ctx context.Context, userID string, snap Snapshot) (bool, error) {
+	tag, err := q.db.Exec(ctx, `
+		INSERT INTO snapshots (user_id, seq, ciphertext) VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE SET seq = EXCLUDED.seq, ciphertext = EXCLUDED.ciphertext, created_at = now()
+		WHERE snapshots.seq <= EXCLUDED.seq`,
+		userID, snap.Seq, snap.Ciphertext)
+	if err != nil {
+		return false, MapError(ctx, "put snapshot", err)
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
-func (s *Store) Snapshot(ctx context.Context, userID string) (snap Snapshot, err error) {
-	err = s.pool.QueryRow(ctx, `SELECT seq, ciphertext FROM snapshots WHERE user_id = $1`, userID).Scan(&snap.Seq, &snap.Ciphertext)
+// DeleteOpsThrough deletes the user's ops at or below seq.
+func (q *Queries) DeleteOpsThrough(ctx context.Context, userID string, seq int64) error {
+	_, err := q.db.Exec(ctx, `DELETE FROM ops WHERE user_id = $1 AND seq <= $2`, userID, seq)
+	return MapError(ctx, "delete ops", err)
+}
+
+func (q *Queries) Snapshot(ctx context.Context, userID string) (snap Snapshot, err error) {
+	err = q.db.QueryRow(ctx, `SELECT seq, ciphertext FROM snapshots WHERE user_id = $1`, userID).Scan(&snap.Seq, &snap.Ciphertext)
 	return snap, MapError(ctx, "get snapshot", err)
 }

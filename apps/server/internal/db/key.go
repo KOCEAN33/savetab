@@ -1,27 +1,20 @@
 package db
 
-import (
-	"context"
+import "context"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
-)
-
-// PutKey stores the user's wrapped data key. A user's key is set once: a second device that
-// replaced it would cut every other device off from the log.
-func (s *Store) PutKey(ctx context.Context, userID string, wrapped []byte) error {
-	tag, err := s.pool.Exec(ctx,
+// InsertKey stores the user's wrapped data key unless the user has one, and reports whether it
+// stored it.
+func (q *Queries) InsertKey(ctx context.Context, userID string, wrapped []byte) (bool, error) {
+	tag, err := q.db.Exec(ctx,
 		`INSERT INTO key_wraps (user_id, wrapped_key) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
 		userID, wrapped)
 	if err != nil {
-		return MapError(ctx, "put key", err)
+		return false, MapError(ctx, "put key", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return errs.New(errs.Conflict, "put key", "the user already has a wrapped key")
-	}
-	return nil
+	return tag.RowsAffected() == 1, nil
 }
 
-func (s *Store) Key(ctx context.Context, userID string) (wrapped []byte, err error) {
-	err = s.pool.QueryRow(ctx, `SELECT wrapped_key FROM key_wraps WHERE user_id = $1`, userID).Scan(&wrapped)
+func (q *Queries) Key(ctx context.Context, userID string) (wrapped []byte, err error) {
+	err = q.db.QueryRow(ctx, `SELECT wrapped_key FROM key_wraps WHERE user_id = $1`, userID).Scan(&wrapped)
 	return wrapped, MapError(ctx, "get key", err)
 }

@@ -12,7 +12,7 @@ type keyBody struct {
 }
 
 func (s *server) getKey(w http.ResponseWriter, r *http.Request, c db.Caller) {
-	wrapped, err := s.store.Key(r.Context(), c.UserID)
+	wrapped, err := s.bus.Key(r.Context(), c.UserID)
 	if errs.KindOf(err) == errs.NotFound {
 		writeError(w, http.StatusNotFound, "no_key")
 		return
@@ -33,7 +33,7 @@ func (s *server) putKey(w http.ResponseWriter, r *http.Request, c db.Caller) {
 		writeError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	err := s.store.PutKey(r.Context(), c.UserID, body.Data)
+	err := s.bus.PutKey(r.Context(), c.UserID, body.Data)
 	if errs.KindOf(err) == errs.Conflict {
 		writeError(w, http.StatusConflict, "key_exists")
 		return
