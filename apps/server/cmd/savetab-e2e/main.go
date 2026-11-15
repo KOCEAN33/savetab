@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -19,6 +18,7 @@ import (
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/httpserver"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/testdb"
 )
@@ -64,7 +64,7 @@ func run() error {
 		return err
 	}
 
-	srv := &http.Server{Handler: api.New(bus.New(store), login), ReadHeaderTimeout: 10 * time.Second}
+	srv := httpserver.New("", 10*time.Second, api.New(bus.New(store), login))
 	failed := make(chan error, 1)
 	go func() { failed <- srv.Serve(listener) }()
 	fmt.Println(url)

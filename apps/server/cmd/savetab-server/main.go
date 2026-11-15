@@ -5,17 +5,16 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/caarlos0/env/v11"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
 	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
+	"github.com/KOCEAN33/savetab/apps/server/internal/httpserver"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/config"
 )
 
@@ -52,7 +51,7 @@ func run() error {
 		return fmt.Errorf("OIDC issuer %s: %w", cfg.OIDCIssuer, err)
 	}
 
-	srv := &http.Server{Addr: cfg.ListenAddr, Handler: api.New(bus.New(store), login), ReadHeaderTimeout: 10 * time.Second}
+	srv := httpserver.New(cfg.ListenAddr, cfg.RequestDeadline, api.New(bus.New(store), login))
 	failed := make(chan error, 1)
 	go func() { failed <- srv.ListenAndServe() }()
 	slog.Info("listening", "addr", cfg.ListenAddr)

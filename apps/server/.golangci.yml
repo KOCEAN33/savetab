@@ -4,8 +4,14 @@ linters:
   default: none
   enable:
     - errorlint
+    - exhaustive
     - forbidigo
   settings:
+    exhaustive:
+      check:
+        - switch
+        - mapliteral
+      default-signifies-exhaustive: false
     forbidigo:
       forbid:
         - pattern: ^(os\.(Getenv|LookupEnv|Environ|ExpandEnv)|syscall\.(Getenv|Environ))$
