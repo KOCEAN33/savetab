@@ -6,30 +6,44 @@ import { activeShare, shareItem, shareLink, stopSharing } from './share';
 import { fromBase64, SyncError } from './sync';
 
 const SERVER = 'https://sync.example';
-const SHARE_ID = '0190a000-0000-4000-8000-0000000000aa';
-const EXPIRES = Date.now() + 30 * 86_400_000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** The expiry the fake server answers, an RFC 3339 string as the /v2 contract writes it. */
+const EXPIRES_AT = new Date(Date.now() + 30 * 86_400_000).toISOString();
+const EXPIRES = Date.parse(EXPIRES_AT);
 const settings = { ...defaultSettings, id: 'settings' };
 const tab = (n: string) => ({ url: `https://${n}.example/`, title: n, favIconUrl: '' });
 
 let calls: { call: string; body: string }[];
 let deleteStatus: number;
+/** The id the client sent in its last POST /v2/shares, which the fake echoes. */
+let shareId: string;
+
+function problem(status: number): Response {
+  const kind = ({ 404: 'not-found', 500: 'internal' } as Record<number, string>)[status] ?? 'invalid';
+  return new Response(JSON.stringify({ type: `/problems/${kind}`, title: kind, status, trace_id: 'trace-1' }), {
+    status,
+    headers: { 'content-type': 'application/problem+json' },
+  });
+}
 
 beforeEach(async () => {
   await db.delete();
   await db.open();
   calls = [];
   deleteStatus = 204;
+  shareId = '';
   vi.stubGlobal('fetch', async (input: string | URL | Request, init: RequestInit = {}) => {
     const url = new URL(String(input));
     const call = `${init.method ?? 'GET'} ${url.pathname}`;
     calls.push({ call, body: typeof init.body === 'string' ? init.body : '' });
-    if (call === 'POST /v1/shares') return Response.json({ id: SHARE_ID, expiresAt: EXPIRES }, { status: 201 });
-    if (call === `DELETE /v1/shares/${SHARE_ID}`) {
-      return deleteStatus === 204
-        ? new Response(null, { status: 204 })
-        : Response.json({ error: 'not_found' }, { status: deleteStatus });
+    if (call === 'POST /v2/shares') {
+      shareId = (JSON.parse(init.body as string) as { id: string }).id;
+      return Response.json({ id: shareId, expires_at: EXPIRES_AT }, { status: 201 });
     }
-    return Response.json({ error: 'internal' }, { status: 500 });
+    if (shareId && call === `DELETE /v2/shares/${shareId}`) {
+      return deleteStatus === 204 ? new Response(null, { status: 204 }) : problem(deleteStatus);
+    }
+    return problem(500);
   });
 });
 
@@ -55,11 +69,12 @@ describe('shareItem', () => {
     const group = await joinedGroup();
     const url = new URL(await shareItem(new ListView(await db.items.toArray()), group));
 
-    expect(`${url.origin}${url.pathname}`).toBe(`${SERVER}/s/${SHARE_ID}`);
+    const sent = JSON.parse(calls.find((c) => c.call === 'POST /v2/shares')!.body) as { id: string; data: string };
+    expect(sent.id).toMatch(UUID);
+    expect(`${url.origin}${url.pathname}`).toBe(`${SERVER}/s/${sent.id}`);
     const keyText = url.hash.slice(1);
     expect(keyText).toMatch(/^[A-Za-z0-9_-]{43}$/);
     const key = fromBase64(keyText.replaceAll('-', '+').replaceAll('_', '/'));
-    const sent = JSON.parse(calls.find((c) => c.call === 'POST /v1/shares')!.body) as { data: string };
     expect(await openShare(key, fromBase64(sent.data))).toEqual({
       v: 1,
       title: '2 tabs',
@@ -78,7 +93,7 @@ describe('shareItem', () => {
     });
 
     const shared = await current(group.id);
-    expect(shared.share).toEqual({ id: SHARE_ID, key: keyText, expiresAt: EXPIRES });
+    expect(shared.share).toEqual({ id: sent.id, key: keyText, expiresAt: EXPIRES });
     expect(shareLink(SERVER, shared.share!)).toBe(url.href);
   });
 
@@ -96,7 +111,8 @@ describe('stopSharing', () => {
     const group = await joinedGroup();
     await shareItem(new ListView(await db.items.toArray()), group);
     await stopSharing(await current(group.id));
-    expect(calls.at(-1)?.call).toBe(`DELETE /v1/shares/${SHARE_ID}`);
+    expect(shareId).toMatch(UUID);
+    expect(calls.at(-1)?.call).toBe(`DELETE /v2/shares/${shareId}`);
     expect((await current(group.id)).share).toBeNull();
   });
 
@@ -105,6 +121,7 @@ describe('stopSharing', () => {
     await shareItem(new ListView(await db.items.toArray()), group);
     deleteStatus = 404;
     await stopSharing(await current(group.id));
+    expect(calls.at(-1)?.call).toBe(`DELETE /v2/shares/${shareId}`);
     expect((await current(group.id)).share).toBeNull();
   });
 
@@ -112,14 +129,19 @@ describe('stopSharing', () => {
     const group = await joinedGroup();
     await shareItem(new ListView(await db.items.toArray()), group);
     deleteStatus = 500;
-    await expect(stopSharing(await current(group.id))).rejects.toBeInstanceOf(SyncError);
-    expect((await current(group.id)).share).toMatchObject({ id: SHARE_ID });
+    const error = await stopSharing(await current(group.id)).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(SyncError);
+    expect(error).toMatchObject({ status: 500, type: '/problems/internal' });
+    expect((await current(group.id)).share).toMatchObject({ id: shareId });
   });
 });
 
 describe('activeShare', () => {
   it('is the share until its expiry time, and nothing after it or without one', async () => {
-    const share = { id: SHARE_ID, key: 'k', expiresAt: 2000 };
+    const share = { id: '0190a000-0000-4000-8000-0000000000aa', key: 'k', expiresAt: 2000 };
     const group = { ...(await joinedGroup()), share };
     expect(activeShare(group, 1999)).toEqual(share);
     expect(activeShare(group, 2000)).toBeUndefined();

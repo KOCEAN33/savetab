@@ -29,7 +29,7 @@ async function load() {
   const id = location.pathname.split('/').pop();
   const fragment = location.hash.slice(1);
   if (!fragment) throw new ShareError(NO_KEY);
-  const res = await fetch('../v1/shares/' + encodeURIComponent(id));
+  const res = await fetch('../v2/shares/' + encodeURIComponent(id));
   if (res.status === 404) throw new ShareError(NOT_FOUND);
   if (!res.ok) throw new ShareError(UNREADABLE);
   const { data } = await res.json();

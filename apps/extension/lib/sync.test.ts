@@ -19,10 +19,25 @@ import {
   type Op,
 } from '@savetab/core';
 import { db, joinSync, leaveSync, saveTokens, source, syncAccount, syncStatus, transact, type SyncAccount } from './db';
-import { client, sync, SyncError, syncOnce } from './sync';
+import { client, listAll, sync, SyncError, syncOnce } from './sync';
 
 const USER = '0196f1c0-0000-7000-8000-000000000001';
 const SERVER = 'https://sync.example';
+const OTHER_DEVICE = '0196f1c0-0000-7000-8000-0000000000d2';
+const SELF_DEVICE = '0196f1c0-0000-7000-8000-0000000000d1';
+
+const KINDS: Record<number, string> = { 400: 'invalid', 401: 'unauthenticated', 404: 'not-found', 409: 'conflict', 500: 'internal' };
+
+/** An RFC 9457 problem as the /v2 contract writes it. */
+function problem(status: number): Response {
+  const kind = KINDS[status] ?? 'internal';
+  return new Response(JSON.stringify({ type: `/problems/${kind}`, title: kind, status, trace_id: 'trace-1' }), {
+    status,
+    headers: { 'content-type': 'application/problem+json' },
+  });
+}
+
+const rfc3339 = (ms: number) => new Date(ms).toISOString();
 const settings = { ...defaultSettings, id: 'settings' };
 const tab = (n: string) => ({ url: `https://${n}.example/`, title: n, favIconUrl: '' });
 
@@ -34,10 +49,10 @@ interface Row {
   receivedAt: number;
 }
 
-/** The plan's HTTP API for one user, held in memory. */
+/** The /v2 HTTP API of apps/server/api/openapi.yaml for one user, held in memory. */
 class FakeServer {
   log: Row[] = [];
-  calls: { call: string; bytes: number }[] = [];
+  calls: { call: string; bytes: number; body: string }[] = [];
   accessToken = 'access-1';
   refreshToken = 'refresh-1';
   pageSize = 500;
@@ -46,6 +61,10 @@ class FakeServer {
   snapshot?: { seq: number; data: string };
   /** Answers every snapshot upload as if another device's newer snapshot landed first. */
   snapshotRace = false;
+  /** When set, answers every snapshot upload with this status as a problem. */
+  snapshotStatus?: number;
+  /** Pages of GET /v2/devices, keyed by the page_token that asks for them ('' for the first). */
+  devicePages = new Map<string, { devices: unknown[]; next_page_token?: string }>();
   now = () => Date.now();
 
   receive(deviceId: string, id: string, data: Uint8Array): void {
@@ -63,53 +82,61 @@ class FakeServer {
     const url = new URL(String(input));
     const method = init.method ?? 'GET';
     const text = typeof init.body === 'string' ? init.body : '';
-    this.calls.push({ call: `${method} ${url.pathname}${url.search}`, bytes: text.length });
+    this.calls.push({ call: `${method} ${url.pathname}${url.search}`, bytes: text.length, body: text });
     if (url.origin !== SERVER) throw new TypeError('fetch failed');
     const route = `${method} ${url.pathname}`;
-    if (route === 'POST /v1/auth/refresh') {
-      if (JSON.parse(text).refreshToken !== this.refreshToken)
-        return Response.json({ error: 'unauthorized' }, { status: 401 });
+    if (route === 'POST /v2/tokens') {
+      const body = JSON.parse(text) as { grant_type?: string; refresh_token?: string };
+      if (body.grant_type !== 'refresh_token' || !body.refresh_token) return problem(400);
+      if (body.refresh_token !== this.refreshToken) return problem(401);
       this.accessToken = 'access-2';
       this.refreshToken = 'refresh-2';
       return Response.json({
-        accessToken: 'access-2',
-        refreshToken: 'refresh-2',
-        expiresIn: 3600,
-        userId: USER,
-        deviceId: 'dev-self',
+        access_token: 'access-2',
+        refresh_token: 'refresh-2',
+        expires_in: 3600,
+        user_id: USER,
+        device_id: SELF_DEVICE,
       });
     }
-    if (new Headers(init.headers).get('authorization') !== `Bearer ${this.accessToken}`) {
-      return Response.json({ error: 'unauthorized' }, { status: 401 });
-    }
-    if (route === 'GET /v1/ops') {
+    if (new Headers(init.headers).get('authorization') !== `Bearer ${this.accessToken}`) return problem(401);
+    if (route === 'GET /v2/ops') {
       const after = Number(url.searchParams.get('after') ?? 0);
-      if (this.snapshot && after < this.snapshot.seq) return Response.json({ error: 'snapshot_required' }, { status: 409 });
+      if (this.snapshot && after < this.snapshot.seq) return problem(409);
       const rest = this.log.filter((row) => row.seq > after);
       return Response.json({
-        ops: rest.slice(0, this.pageSize),
+        ops: rest.slice(0, this.pageSize).map((row) => ({
+          seq: row.seq,
+          id: row.id,
+          device_id: row.deviceId,
+          data: row.data,
+          received_at: rfc3339(row.receivedAt),
+        })),
         more: rest.length > this.pageSize,
-        serverTime: this.now(),
+        server_time: rfc3339(this.now()),
       });
     }
-    if (route === 'POST /v1/ops') {
-      if (this.pushStatus !== 200) return Response.json({ error: 'internal' }, { status: this.pushStatus });
-      for (const op of JSON.parse(text).ops) this.receive('dev-self', op.id, Buffer.from(op.data, 'base64'));
-      return Response.json({ serverTime: this.now() });
+    if (route === 'POST /v2/ops') {
+      if (this.pushStatus !== 200) return problem(this.pushStatus);
+      for (const op of JSON.parse(text).ops) this.receive(SELF_DEVICE, op.id, Buffer.from(op.data, 'base64'));
+      return Response.json({ server_time: rfc3339(this.now()) });
     }
-    if (route === 'GET /v1/snapshot') {
-      return this.snapshot ? Response.json(this.snapshot) : Response.json({ error: 'no_snapshot' }, { status: 404 });
+    if (route === 'GET /v2/snapshot') {
+      return this.snapshot ? Response.json(this.snapshot) : problem(404);
     }
-    if (route === 'PUT /v1/snapshot') {
+    if (route === 'PUT /v2/snapshot') {
+      if (this.snapshotStatus) return problem(this.snapshotStatus);
       const put = JSON.parse(text) as { seq: number; data: string };
-      if (put.seq > this.lastSeq) return Response.json({ error: 'snapshot_ahead' }, { status: 409 });
-      if (this.snapshotRace || (this.snapshot && this.snapshot.seq > put.seq)) {
-        return Response.json({ error: 'stale_snapshot' }, { status: 409 });
-      }
+      if (put.seq > this.lastSeq) return problem(400);
+      if (this.snapshotRace || (this.snapshot && put.seq <= this.snapshot.seq)) return problem(409);
       this.takeSnapshot(put);
       return new Response(null, { status: 204 });
     }
-    return Response.json({ error: 'not_found' }, { status: 404 });
+    if (route === 'GET /v2/devices') {
+      const page = this.devicePages.get(url.searchParams.get('page_token') ?? '');
+      return page ? Response.json(page) : problem(400);
+    }
+    return problem(404);
   };
 
   takeSnapshot(snapshot: { seq: number; data: string }): void {
@@ -118,11 +145,15 @@ class FakeServer {
   }
 
   snapshotPuts() {
-    return this.calls.filter((c) => c.call === 'PUT /v1/snapshot');
+    return this.calls.filter((c) => c.call === 'PUT /v2/snapshot');
   }
 
   pushes() {
-    return this.calls.filter((c) => c.call === 'POST /v1/ops');
+    return this.calls.filter((c) => c.call === 'POST /v2/ops');
+  }
+
+  refreshes() {
+    return this.calls.filter((c) => c.call === 'POST /v2/tokens');
   }
 }
 
@@ -169,7 +200,7 @@ async function otherDeviceStores(names: string[], key = dataKey): Promise<void> 
   const other = new MemoryStore(`other-${names.join('')}`);
   await other.transact((tx) => storeTabs(tx, names.map(tab), settings));
   const sealing = await importDataKey(key);
-  for (const op of other.log) server.receive('dev-other', op.opId, await sealOp(sealing, USER, op));
+  for (const op of other.log) server.receive(OTHER_DEVICE, op.opId, await sealOp(sealing, USER, op));
 }
 
 describe('sync cycle', () => {
@@ -231,7 +262,17 @@ describe('sync cycle', () => {
     expect(await tabTitles(await replica())).toEqual([['a']]);
 
     await syncOnce();
-    expect(server.calls.filter((c) => c.call === 'POST /v1/auth/refresh')).toHaveLength(1);
+    expect(server.calls.filter((c) => c.call === 'POST /v2/tokens')).toHaveLength(1);
+  });
+
+  it('sends one refresh_token grant with the stored refresh token on a 401 and stores the pair it answers', async () => {
+    await joinSync(account);
+    server.accessToken = 'access-expired-on-server';
+    await syncOnce();
+    const refreshes = server.refreshes();
+    expect(refreshes).toHaveLength(1);
+    expect(JSON.parse(refreshes[0]!.body)).toEqual({ grant_type: 'refresh_token', refresh_token: 'refresh-1' });
+    expect(await syncAccount()).toMatchObject({ accessToken: 'access-2', refreshToken: 'refresh-2' });
   });
 
   it('fails the cycle when the refresh token is refused', async () => {
@@ -245,9 +286,9 @@ describe('sync cycle', () => {
     await expect(syncOnce()).rejects.toThrow(CryptoError);
     await expect(syncOnce()).rejects.toThrow(CryptoError);
     expect(await tabTitles(source)).toEqual([]);
-    expect(server.calls.map((c) => c.call).filter((c) => c.startsWith('GET /v1/ops'))).toEqual([
-      'GET /v1/ops?after=0',
-      'GET /v1/ops?after=0',
+    expect(server.calls.map((c) => c.call).filter((c) => c.startsWith('GET /v2/ops'))).toEqual([
+      'GET /v2/ops?after=0',
+      'GET /v2/ops?after=0',
     ]);
   });
 
@@ -259,6 +300,18 @@ describe('sync cycle', () => {
     server.pushStatus = 200;
     await syncOnce();
     expect(await tabTitles(await replica())).toEqual([['a']]);
+  });
+
+  it('rejects with a SyncError that carries the status and type of the problem', async () => {
+    await joinSync(account);
+    await transact((tx) => storeTabs(tx, [tab('a')], settings));
+    server.pushStatus = 500;
+    const error = await syncOnce().then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(SyncError);
+    expect(error).toMatchObject({ status: 500, type: '/problems/internal' });
   });
 
   it('splits a push so no request passes the 8 MiB limit', async () => {
@@ -280,7 +333,7 @@ async function otherDevicePushes(count: number): Promise<void> {
   const g = (await other.transact((tx) => storeTabs(tx, [tab('a')], settings)))!;
   while (other.log.length < count) await other.transact((tx) => updateItem(tx, g, { title: `n${other.log.length}` }));
   const sealing = await importDataKey(dataKey);
-  for (const op of other.log) server.receive('dev-other', op.opId, await sealOp(sealing, USER, op));
+  for (const op of other.log) server.receive(OTHER_DEVICE, op.opId, await sealOp(sealing, USER, op));
 }
 
 /** Another device stores tabs, pushes them, and uploads a snapshot that covers its whole log. */
@@ -288,7 +341,7 @@ async function otherDeviceSnapshots(names: string[]): Promise<void> {
   const other = new MemoryStore('other-snapshot');
   await other.transact((tx) => storeTabs(tx, names.map(tab), settings));
   const sealing = await importDataKey(dataKey);
-  for (const op of other.log) server.receive('dev-other', op.opId, await sealOp(sealing, USER, op));
+  for (const op of other.log) server.receive(OTHER_DEVICE, op.opId, await sealOp(sealing, USER, op));
   const data = await sealSnapshot(sealing, USER, server.lastSeq, other.all());
   server.takeSnapshot({ seq: server.lastSeq, data: Buffer.from(data).toString('base64') });
 }
@@ -341,6 +394,16 @@ describe('snapshots', () => {
     expect(await tabTitles(source)).toEqual([['a', 'b'], ['c'], ['d']]);
   });
 
+  it('reads GET /v2/snapshot when GET /v2/ops answers 409, then pulls from the snapshot seq', async () => {
+    await otherDeviceSnapshots(['a', 'b']);
+    const seq = server.snapshot!.seq;
+    await joinSync(account);
+    await syncOnce();
+    const reads = server.calls.map((c) => c.call).filter((c) => c.startsWith('GET '));
+    expect(reads.slice(0, 3)).toEqual(['GET /v2/ops?after=0', 'GET /v2/snapshot', `GET /v2/ops?after=${seq}`]);
+    expect(await tabTitles(source)).toEqual([['a', 'b']]);
+  });
+
   it('pushes nothing it read from a snapshot', async () => {
     await otherDeviceSnapshots(['a']);
     await joinSync(account);
@@ -366,6 +429,28 @@ describe('snapshots', () => {
     await sync();
     expect((await syncStatus())?.error).toBeUndefined();
     expect(server.snapshotPuts().length).toBe(1);
+  }, HEAVY_MS);
+});
+
+describe('snapshot upload answers', () => {
+  it('resolves the cycle when the upload is answered 409', async () => {
+    await joinSync(account);
+    await otherDevicePushes(5000);
+    server.snapshotStatus = 409;
+    await expect(syncOnce()).resolves.toBeUndefined();
+    expect(server.snapshotPuts()).toHaveLength(1);
+  }, HEAVY_MS);
+
+  it('rejects the cycle with a SyncError of status 400 when the upload is answered 400', async () => {
+    await joinSync(account);
+    await otherDevicePushes(5000);
+    server.snapshotStatus = 400;
+    const error = await syncOnce().then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(SyncError);
+    expect(error).toMatchObject({ status: 400, type: '/problems/invalid' });
   }, HEAVY_MS);
 });
 
@@ -443,7 +528,7 @@ describe('sync status', () => {
 });
 
 describe('client', () => {
-  const refreshes = () => server.calls.filter((c) => c.call === 'POST /v1/auth/refresh');
+  const refreshes = () => server.refreshes();
 
   it('retries with the tokens another context stored instead of refreshing again', async () => {
     await joinSync(account);
@@ -452,11 +537,11 @@ describe('client', () => {
     server.refreshToken = 'refresh-other';
     await saveTokens({ accessToken: 'access-other', refreshToken: 'refresh-other' });
 
-    const page = await api<{ ops: unknown[] }>('/v1/ops?after=0');
+    const page = await api<{ ops: unknown[] }>('/v2/ops?after=0');
 
     expect(page.ops).toEqual([]);
     expect(refreshes()).toEqual([]);
-    expect(server.calls.map((c) => c.call)).toEqual(['GET /v1/ops?after=0', 'GET /v1/ops?after=0']);
+    expect(server.calls.map((c) => c.call)).toEqual(['GET /v2/ops?after=0', 'GET /v2/ops?after=0']);
     expect(await syncAccount()).toMatchObject({ accessToken: 'access-other', refreshToken: 'refresh-other' });
   });
 
@@ -464,10 +549,40 @@ describe('client', () => {
     await joinSync(account);
     server.accessToken = 'access-expired-on-server';
 
-    const page = await client(account)<{ ops: unknown[] }>('/v1/ops?after=0');
+    const page = await client(account)<{ ops: unknown[] }>('/v2/ops?after=0');
 
     expect(page.ops).toEqual([]);
     expect(refreshes()).toHaveLength(1);
     expect(await syncAccount()).toMatchObject({ accessToken: 'access-2', refreshToken: 'refresh-2' });
+  });
+});
+
+describe('listAll', () => {
+  const a = { id: '0196f1c0-0000-7000-8000-0000000000a1', name: 'a', created_at: rfc3339(1000), current: true };
+  const b = { id: '0196f1c0-0000-7000-8000-0000000000b1', name: 'b', created_at: rfc3339(2000), current: false };
+
+  it('follows next_page_token and returns the items of every page in order', async () => {
+    await joinSync(account);
+    server.devicePages.set('', { devices: [a], next_page_token: 't 1' });
+    server.devicePages.set('t 1', { devices: [b] });
+
+    const devices = await listAll(client(account), '/v2/devices', 'devices');
+
+    expect(devices).toEqual([a, b]);
+    const urls = server.calls.map((c) => new URL(c.call.slice('GET '.length), SERVER));
+    expect(server.calls.map((c) => c.call.split(' ')[0])).toEqual(['GET', 'GET']);
+    expect(urls.map((u) => u.pathname)).toEqual(['/v2/devices', '/v2/devices']);
+    expect(urls[0]!.searchParams.has('page_token')).toBe(false);
+    expect(urls[1]!.searchParams.get('page_token')).toBe('t 1');
+  });
+
+  it('sends one request when the first page has no next_page_token', async () => {
+    await joinSync(account);
+    server.devicePages.set('', { devices: [a, b] });
+
+    const devices = await listAll(client(account), '/v2/devices', 'devices');
+
+    expect(devices).toEqual([a, b]);
+    expect(server.calls.map((c) => c.call)).toEqual(['GET /v2/devices']);
   });
 });

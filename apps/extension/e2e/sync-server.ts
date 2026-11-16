@@ -45,20 +45,32 @@ export async function startSyncServer(redirects: string[] = []): Promise<{ url: 
 export async function logIn(server: string, deviceName: string): Promise<Login> {
   const verifier = randomBytes(32).toString('base64url');
   const challenge = createHash('sha256').update(verifier).digest('base64url');
-  let url = `${server}/v1/auth/start?${new URLSearchParams({ redirect_uri: REDIRECT, code_challenge: challenge, state: 'e2e' })}`;
+  let url = `${server}/v2/authorizations?${new URLSearchParams({ redirect_uri: REDIRECT, code_challenge: challenge, state: 'e2e' })}`;
   while (!url.startsWith(REDIRECT)) {
     const res = await fetch(url, { redirect: 'manual' });
     const next = res.headers.get('location');
     if (!next) throw new Error(`login stopped at ${url} with status ${res.status}`);
     url = next;
   }
-  const res = await fetch(`${server}/v1/auth/token`, {
+  const res = await fetch(`${server}/v2/tokens`, {
     method: 'POST',
-    body: JSON.stringify({ code: new URL(url).searchParams.get('code'), codeVerifier: verifier, deviceName }),
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'authorization_code',
+      code: new URL(url).searchParams.get('code'),
+      code_verifier: verifier,
+      device_name: deviceName,
+    }),
   });
   if (!res.ok) throw new Error(`token: status ${res.status}`);
-  const { accessToken, refreshToken, userId, deviceId } = (await res.json()) as Omit<Login, 'serverUrl'>;
-  return { serverUrl: server, userId, deviceId, accessToken, refreshToken };
+  const tokens = (await res.json()) as { access_token: string; refresh_token: string; user_id: string; device_id: string };
+  return {
+    serverUrl: server,
+    userId: tokens.user_id,
+    deviceId: tokens.device_id,
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token,
+  };
 }
 
 /**
@@ -78,9 +90,9 @@ export async function pushOps(login: Login, dataKey: number[], title: string, co
         data: Buffer.from(await sealOp(key, login.userId, op)).toString('base64'),
       })),
     );
-    const res = await fetch(`${login.serverUrl}/v1/ops`, {
+    const res = await fetch(`${login.serverUrl}/v2/ops`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${login.accessToken}` },
+      headers: { authorization: `Bearer ${login.accessToken}`, 'content-type': 'application/json' },
       body: JSON.stringify({ ops }),
     });
     if (!res.ok) throw new Error(`push: status ${res.status}`);
@@ -89,7 +101,7 @@ export async function pushOps(login: Login, dataKey: number[], title: string, co
 
 /** The `seq` of the user's snapshot on the server, or 0 when it holds none. */
 export async function snapshotSeq(login: Login): Promise<number> {
-  const res = await fetch(`${login.serverUrl}/v1/snapshot`, { headers: { authorization: `Bearer ${login.accessToken}` } });
+  const res = await fetch(`${login.serverUrl}/v2/snapshot`, { headers: { authorization: `Bearer ${login.accessToken}` } });
   if (res.status === 404) return 0;
   if (!res.ok) throw new Error(`snapshot: status ${res.status}`);
   return ((await res.json()) as { seq: number }).seq;

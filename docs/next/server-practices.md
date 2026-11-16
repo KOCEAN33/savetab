@@ -6,17 +6,22 @@
 
 ## Start
 
-The Move release of step 17 of `docs/plans/server-practices.md`, since every later step follows the plan's order. Steps 1 to 16 and the Add release are committed: the server serves `/v2` as `apps/server/api/openapi.yaml` declares it, beside `/v1`. Move, in the plan's words: `apps/extension/lib/sync.ts`, `account.ts`, `share.ts`, `apps/server/internal/api/viewer/share.js`, and the e2e helpers `e2e/sync-server.ts` and `e2e-firefox/sync-fixtures.ts` call `/v2`.
+The Remove release of step 17 of `docs/plans/server-practices.md`, since every later step follows the plan's order. Steps 1 to 16 and the Add and Move releases are committed: the server serves `/v2` as `apps/server/api/openapi.yaml` declares it, beside `/v1`, and the extension, the share viewer, and the e2e helpers call only `/v2`.
 
-What `/v2` changes for a caller, beyond the paths and snake_case:
+Remove waits on the owner for two things:
 
-- An error is a problem. The client reads the status and `type`, where `/v1` sent `{"error": code}`. A snapshot ahead of the log is 400 and a stale one 409. A 409 on `GET /v2/ops` means read the snapshot first.
-- `POST /v2/pairings` and `POST /v2/shares` take a client `id`. `GET /v2/devices` and `GET /v2/pairings` page by `page_size` and `next_page_token`. A time is an RFC 3339 string.
-- A login starts at `GET /v2/authorizations`, and the issuer redirects to `<PUBLIC_URL>/v2/authorizations/callback`. The Zitadel application needs that redirect URI before a deploy of the Move release, which is the owner's.
+- The deployed state. The plan removes `/v1` and `/healthz` once the deployed chart probes `/readyz`, and an installed extension older than the Move release still calls `/v1`. The deploy and the extension release are the owner's.
+- The home of the share viewer. `/s/{id}` is HTML outside `/v<N>` and outside the spec, and the `/v1` handler serves it (`internal/api/v1_shares.go`), so Remove has to move it. The plan and the practice pages do not say where. The route test allows `/s/*path` by name.
 
-Open questions for the owner, none of which blocks Move:
+How the extension reads `/v2`:
 
-- The share viewer `/s/{id}` is HTML outside `/v<N>` and outside the spec. Where it lives after the Remove release is open in the plan and the practice pages. The route test allows it by name.
+- `apps/extension/lib/sync.ts` holds the wire boundary: `client` sends a call, `requestTokens` trades a grant at `POST /v2/tokens`, and `listAll` follows `next_page_token`. A caller tells failures apart by status: 409 on `GET /v2/ops` means read the snapshot first, 409 on `PUT /v2/snapshot` means another device's snapshot covers the ops, and 404 on `GET /v2/key` means no key yet. `SyncError.type` carries the problem's `type`.
+- The wire is snake_case with RFC 3339 times. `SyncAccount`, `Pairing`, `Device`, and a stored share stay camelCase with epoch milliseconds, converted where the response is read.
+- `requestPairing` and `shareItem` make the `id` that `POST /v2/pairings` and `POST /v2/shares` take.
+- The Zitadel application has the redirect URI `<PUBLIC_URL>/v2/authorizations/callback`. Its `/v1/auth/callback` URI goes with Remove.
+
+Open questions for the owner, none of which blocks a step:
+
 - The contract states the 1024-byte bound of a key and a pairing message, and the 32-byte commitment, in prose. The schema bounds only the base64 text, so the handlers hold the byte bounds.
 - The contract names 404, 405, 413, 499, 500, and 503 for every operation in prose, not as a response of each operation.
 - The contract is silent on: an unknown refresh token or login code as against a spent one, which failure wins when a request has no token and a bad body, and whether "the same caller" of a page token is the user or the device. The server answers an unknown one as a spent one, checks the token first, and binds a page token to the user.
@@ -51,4 +56,4 @@ Orders from the owner that bind later steps:
 
 ## Next steps
 
-The Move and Remove releases of step 17, then steps 18 and 19 of the plan, in order, each with the done-when the plan gives.
+The Remove release of step 17, then steps 18 and 19 of the plan, in order, each with the done-when the plan gives.

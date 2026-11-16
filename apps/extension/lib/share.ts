@@ -30,12 +30,13 @@ export async function shareItem(view: ListView, item: Item): Promise<string> {
   if (!content) throw new Error('The item no longer exists');
   const key = randomKey();
   const data = toBase64(await sealShare(key, content));
-  const made = await client(acct)<{ id: string; expiresAt: number }>('/v1/shares', {
+  // The id is the request's idempotency key.
+  const made = await client(acct)<{ id: string; expires_at: string }>('/v2/shares', {
     method: 'POST',
-    body: JSON.stringify({ data }),
+    body: JSON.stringify({ id: crypto.randomUUID(), data }),
   });
   const keyText = toBase64(key).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
-  const share: Share = { id: made.id, key: keyText, expiresAt: made.expiresAt };
+  const share: Share = { id: made.id, key: keyText, expiresAt: Date.parse(made.expires_at) };
   await transact((tx) => setShare(tx, item.id, share));
   return shareLink(acct.serverUrl, share);
 }
@@ -44,7 +45,7 @@ export async function shareItem(view: ListView, item: Item): Promise<string> {
 export async function stopSharing(item: Item): Promise<void> {
   if (item.kind === 'tab' || !item.share) return;
   try {
-    await client(await account())(`/v1/shares/${item.share.id}`, { method: 'DELETE' });
+    await client(await account())(`/v2/shares/${item.share.id}`, { method: 'DELETE' });
   } catch (err) {
     if (!(err instanceof SyncError && err.status === 404)) throw err;
   }

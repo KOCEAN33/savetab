@@ -14,7 +14,7 @@ import {
   wrapDataKey,
 } from '@savetab/core';
 import { joinSync, leaveSync, type SyncAccount } from './db';
-import { body, client, fromBase64, send, SyncError, toBase64, type Login } from './sync';
+import { client, fromBase64, listAll, requestTokens, SyncError, toBase64, type Login } from './sync';
 
 /** How often a pairing side asks the server for the other side's message. */
 const PAIRING_POLL_MS = 1000;
@@ -55,8 +55,32 @@ export interface Pairing {
   oldPublic?: string;
   newPublic?: string;
   wrappedKey?: string;
-  expiresAt: number;
 }
+
+/** The `Pairing` and `Device` of `apps/server/api/openapi.yaml`, less the fields no caller reads. */
+interface WirePairing {
+  id: string;
+  new_device_name: string;
+  commitment: string;
+  old_public?: string;
+  new_public?: string;
+  wrapped_key?: string;
+}
+interface WireDevice {
+  id: string;
+  name: string;
+  created_at: string;
+  current: boolean;
+}
+
+const toPairing = (p: WirePairing): Pairing => ({
+  id: p.id,
+  newDeviceName: p.new_device_name,
+  commitment: p.commitment,
+  oldPublic: p.old_public,
+  newPublic: p.new_public,
+  wrappedKey: p.wrapped_key,
+});
 
 const base64Url = (bytes: Uint8Array) => toBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const json = (method: string, value: unknown): RequestInit => ({ method, body: JSON.stringify(value) });
@@ -86,29 +110,21 @@ export async function logIn(deviceName: string): Promise<Login> {
   });
   // It rejects when the user closes the window or the server is not reachable.
   const landed = await browser.identity
-    .launchWebAuthFlow({ url: `${server.serverUrl}/v1/auth/start?${query}`, interactive: true })
+    .launchWebAuthFlow({ url: `${server.serverUrl}/v2/authorizations?${query}`, interactive: true })
     .catch(() => undefined);
   const answer = new URL(landed ?? 'about:blank').searchParams;
   const code = answer.get('code');
   if (!code || answer.get('state') !== state) throw new AccountError('loginFailed');
-  const tokens = await body<Omit<Login, 'serverUrl'>>(
-    await send(server, '/v1/auth/token', json('POST', { code, codeVerifier: verifier, deviceName })),
-  );
-  return {
-    ...server,
-    userId: tokens.userId,
-    deviceId: tokens.deviceId,
-    accessToken: tokens.accessToken,
-    refreshToken: tokens.refreshToken,
-  };
+  const grant = { grant_type: 'authorization_code', code, code_verifier: verifier, device_name: deviceName };
+  return { ...server, ...(await requestTokens(server, grant)) };
 }
 
 /** The account's wrapped data key, or undefined when no device has made one yet. */
 async function wrappedKey(login: Login): Promise<Uint8Array<ArrayBuffer> | undefined> {
   try {
-    return fromBase64((await client(login)<{ data: string }>('/v1/key')).data);
+    return fromBase64((await client(login)<{ data: string }>('/v2/key')).data);
   } catch (err) {
-    if (err instanceof SyncError && err.code === 'no_key') return undefined;
+    if (err instanceof SyncError && err.status === 404) return undefined;
     throw err;
   }
 }
@@ -125,7 +141,7 @@ export async function createAccountKey(login: Login): Promise<string> {
   const dataKey = randomKey();
   const recoveryKey = randomKey();
   const data = toBase64(await wrapDataKey(recoveryKey, login.userId, dataKey));
-  await client(login)('/v1/key', json('PUT', { data }));
+  await client(login)('/v2/key', json('PUT', { data }));
   await joinSync({ ...login, dataKey });
   return encodeRecoveryKey(recoveryKey);
 }
@@ -143,7 +159,7 @@ async function awaitPairing<T>(login: Login, id: string, ready: (p: Pairing) => 
   for (;;) {
     let value: T | undefined;
     try {
-      value = ready(await call<Pairing>(`/v1/pairings/${id}`));
+      value = ready(toPairing(await call<WirePairing>(`/v2/pairings/${id}`)));
     } catch (err) {
       if (err instanceof SyncError && err.status === 404) throw new AccountError('pairingExpired');
       throw err;
@@ -161,9 +177,11 @@ export async function requestPairing(login: Login): Promise<{ code: string; join
   const call = client(login);
   const keys = await makePairingKeys();
   const commitment = toBase64(await pairingCommitment(keys.publicKey));
-  const { id } = await call<Pairing>('/v1/pairings', json('POST', { commitment }));
+  // The id is the request's idempotency key.
+  const id = crypto.randomUUID();
+  await call('/v2/pairings', json('POST', { id, commitment }));
   const oldPublic = fromBase64(await awaitPairing(login, id, (p) => p.oldPublic));
-  await call(`/v1/pairings/${id}`, json('PUT', { newPublic: toBase64(keys.publicKey) }));
+  await call(`/v2/pairings/${id}`, json('PUT', { new_public: toBase64(keys.publicKey) }));
   const secret = await pairingSecret(keys.privateKey, oldPublic);
   return {
     code: await pairingCode(secret, oldPublic, keys.publicKey),
@@ -176,8 +194,8 @@ export async function requestPairing(login: Login): Promise<{ code: string; join
 
 /** The devices waiting for a signed-in device to answer their pairing. */
 export async function waitingPairings(account: SyncAccount): Promise<Pairing[]> {
-  const { pairings } = await client(account)<{ pairings: Pairing[] }>('/v1/pairings');
-  return pairings.filter((p) => p.oldPublic === undefined);
+  const pairings = await listAll<WirePairing>(client(account), '/v2/pairings', 'pairings');
+  return pairings.map(toPairing).filter((p) => p.oldPublic === undefined);
 }
 
 /**
@@ -189,9 +207,9 @@ export async function answerPairing(
   pairing: Pairing,
 ): Promise<{ code: string; approve: () => Promise<void> }> {
   const call = client(account);
-  const path = `/v1/pairings/${pairing.id}`;
+  const path = `/v2/pairings/${pairing.id}`;
   const keys = await makePairingKeys();
-  await call(path, json('PUT', { oldPublic: toBase64(keys.publicKey) }));
+  await call(path, json('PUT', { old_public: toBase64(keys.publicKey) }));
   const newPublic = fromBase64(await awaitPairing(account, pairing.id, (p) => p.newPublic));
   // A key that does not fit the hash sent first was picked after seeing ours, to steer the code.
   if (toBase64(await pairingCommitment(newPublic)) !== pairing.commitment) throw new AccountError('pairingMismatch');
@@ -200,17 +218,18 @@ export async function answerPairing(
     code: await pairingCode(secret, keys.publicKey, newPublic),
     approve: async () => {
       const sealed = await sealPairedKey(secret, account.userId, account.dataKey);
-      await call(path, json('PUT', { wrappedKey: toBase64(sealed) }));
+      await call(path, json('PUT', { wrapped_key: toBase64(sealed) }));
     },
   };
 }
 
 export async function listDevices(account: SyncAccount): Promise<Device[]> {
-  return (await client(account)<{ devices: Device[] }>('/v1/devices')).devices;
+  const devices = await listAll<WireDevice>(client(account), '/v2/devices', 'devices');
+  return devices.map((d) => ({ id: d.id, name: d.name, createdAt: Date.parse(d.created_at), current: d.current }));
 }
 
 export async function revokeDevice(account: SyncAccount, id: string): Promise<void> {
-  await client(account)(`/v1/devices/${id}`, { method: 'DELETE' });
+  await client(account)(`/v2/devices/${id}`, { method: 'DELETE' });
 }
 
 /** Leave the account on this device. The server forgets the device when it is reachable and still knows it. */

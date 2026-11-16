@@ -25,19 +25,20 @@ export const SYNC_ALARM = 'sync';
 export class SyncError extends Error {
   constructor(
     readonly status: number,
-    /** The server's error code, such as `snapshot_required`. */
-    readonly code: string,
+    /** The `type` of the server's problem, such as `/problems/conflict`. */
+    readonly type: string,
   ) {
-    super(`The sync server answered ${status} ${code}`);
+    super(`The sync server answered ${status} ${type}`);
   }
 }
 
+/** The `Op` of `apps/server/api/openapi.yaml`. */
 interface PulledOp {
   seq: number;
   id: string;
-  deviceId: string;
+  device_id: string;
   data: string;
-  receivedAt: number;
+  received_at: string;
 }
 
 type Tokens = Pick<SyncAccount, 'accessToken' | 'refreshToken'>;
@@ -47,16 +48,33 @@ export type Login = Omit<SyncAccount, 'dataKey'>;
 export const toBase64 = (bytes: Uint8Array) => btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
 export const fromBase64 = (text: string) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
 
-export function send(account: Pick<Login, 'serverUrl'>, path: string, init: RequestInit, token?: string): Promise<Response> {
+function send(account: Pick<Login, 'serverUrl'>, path: string, init: RequestInit, token?: string): Promise<Response> {
   const headers = { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) };
   return fetch(account.serverUrl + path, { ...init, headers });
 }
 
-export async function body<T>(res: Response): Promise<T> {
+async function body<T>(res: Response): Promise<T> {
   if (res.status === 204) return undefined as T;
   if (res.ok) return (await res.json()) as T;
-  const answer = (await res.json().catch(() => ({}))) as { error?: string };
-  throw new SyncError(res.status, answer.error ?? '');
+  const problem = (await res.json().catch(() => ({}))) as { type?: string };
+  throw new SyncError(res.status, problem.type ?? '');
+}
+
+/** Trade a login code or a refresh token for a device's tokens, by the grant `POST /v2/tokens` takes. */
+export async function requestTokens(
+  server: Pick<Login, 'serverUrl'>,
+  grant: Record<string, string>,
+): Promise<Omit<Login, 'serverUrl'>> {
+  const init = { method: 'POST', body: JSON.stringify(grant) };
+  const made = await body<{ access_token: string; refresh_token: string; user_id: string; device_id: string }>(
+    await send(server, '/v2/tokens', init),
+  );
+  return {
+    userId: made.user_id,
+    deviceId: made.device_id,
+    accessToken: made.access_token,
+    refreshToken: made.refresh_token,
+  };
 }
 
 /**
@@ -67,10 +85,12 @@ function refresh(login: Login, used: Tokens): Promise<Tokens> {
   return navigator.locks.request('savetab-refresh', async () => {
     const stored = await syncAccount();
     if (stored && stored.refreshToken !== used.refreshToken) return stored;
-    const init = { method: 'POST', body: JSON.stringify({ refreshToken: used.refreshToken }) };
-    const tokens = await body<Tokens>(await send(login, '/v1/auth/refresh', init));
-    await saveTokens(tokens);
-    return tokens;
+    const { accessToken, refreshToken } = await requestTokens(login, {
+      grant_type: 'refresh_token',
+      refresh_token: used.refreshToken,
+    });
+    await saveTokens({ accessToken, refreshToken });
+    return { accessToken, refreshToken };
   });
 }
 
@@ -89,41 +109,53 @@ export function client(login: Login) {
 
 type Call = ReturnType<typeof client>;
 
-type Page = { ops: PulledOp[]; more: boolean; serverTime: number };
+type Page = { ops: PulledOp[]; more: boolean; server_time: string };
+
+/** Every item of a list the server pages by `next_page_token`. `field` is the response's array. */
+export async function listAll<T>(call: Call, path: string, field: string): Promise<T[]> {
+  const items: T[] = [];
+  let token: string | undefined;
+  do {
+    const page = await call<Record<string, unknown>>(token ? `${path}?${new URLSearchParams({ page_token: token })}` : path);
+    items.push(...(page[field] as T[]));
+    token = page.next_page_token as string | undefined;
+  } while (token);
+  return items;
+}
 
 /** Read the server's snapshot, merge it, and return its `seq`, where the pull goes on. */
 async function readSnapshot(call: Call, account: SyncAccount, key: CryptoKey): Promise<number> {
-  const { seq, data } = await call<{ seq: number; data: string }>('/v1/snapshot');
+  const { seq, data } = await call<{ seq: number; data: string }>('/v2/snapshot');
   await mergeSnapshot(await openSnapshot(key, account.userId, seq, fromBase64(data)), seq);
   return seq;
 }
 
 /**
- * Pull and merge every op after the cursor. Returns the server's time. When the server has
- * dropped ops above the cursor, the snapshot that covers them is merged first.
+ * Pull and merge every op after the cursor. Returns the server's time in ms. When the server has
+ * dropped ops above the cursor, which it answers 409, the snapshot that covers them is merged first.
  */
 async function pull(call: Call, account: SyncAccount, key: CryptoKey): Promise<number> {
   let after = await syncCursor();
   for (;;) {
     let page: Page;
     try {
-      page = await call<Page>(`/v1/ops?after=${after}`);
+      page = await call<Page>(`/v2/ops?after=${after}`);
     } catch (err) {
-      if (!(err instanceof SyncError && err.code === 'snapshot_required')) throw err;
+      if (!(err instanceof SyncError && err.status === 409)) throw err;
       after = await readSnapshot(call, account, key);
       continue;
     }
     const remote: RemoteOp[] = [];
     for (const row of page.ops) {
-      if (row.deviceId === account.deviceId) continue;
-      remote.push({ op: await openOp(key, account.userId, row.id, fromBase64(row.data)), receivedAt: row.receivedAt });
+      if (row.device_id === account.deviceId) continue;
+      remote.push({ op: await openOp(key, account.userId, row.id, fromBase64(row.data)), receivedAt: Date.parse(row.received_at) });
     }
     const last = page.ops.at(-1);
     if (last) {
       after = last.seq;
       await mergePulled(remote, after);
     }
-    if (!page.more) return page.serverTime;
+    if (!page.more) return Date.parse(page.server_time);
   }
 }
 
@@ -142,7 +174,7 @@ async function push(call: Call, account: SyncAccount, key: CryptoKey): Promise<v
       sent = row.seq;
     }
     if (sent === undefined) return;
-    await call('/v1/ops', { method: 'POST', body: JSON.stringify({ ops }) });
+    await call('/v2/ops', { method: 'POST', body: JSON.stringify({ ops }) });
     await dropOutbox(sent);
   }
 }
@@ -154,10 +186,10 @@ async function uploadSnapshot(call: Call, account: SyncAccount, key: CryptoKey):
   const { seq, records } = await snapshotSource();
   const data = toBase64(await sealSnapshot(key, account.userId, seq, records));
   try {
-    await call('/v1/snapshot', { method: 'PUT', body: JSON.stringify({ seq, data }) });
+    await call('/v2/snapshot', { method: 'PUT', body: JSON.stringify({ seq, data }) });
   } catch (err) {
-    // Another device's snapshot already covers these ops.
-    if (!(err instanceof SyncError && err.code === 'stale_snapshot')) throw err;
+    // 409: another device's snapshot already covers these ops.
+    if (!(err instanceof SyncError && err.status === 409)) throw err;
   }
   await saveSnapshotSeq(seq);
 }
