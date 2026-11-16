@@ -2,9 +2,11 @@ packages:
   - packages/*
   - apps/*
 
+allowBuilds:
+  esbuild: true
+  spawn-sync: true
+  # Its install script only reports the install to scarf.sh.
+  '@scarf/scarf': false
+
 minimumReleaseAgeExclude:
   - fake-indexeddb@6.2.8
-
-onlyBuiltDependencies:
-  - esbuild
-  - spawn-sync
