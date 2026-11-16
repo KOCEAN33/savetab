@@ -30,7 +30,7 @@ type problemAnswer struct {
 
 // problemServer serves register's routes behind the whole engine.
 func problemServer(deadline time.Duration, register func(gin.IRouter)) http.Handler {
-	return New(Config{RequestDeadline: deadline, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{}, http.NotFoundHandler(), register).Handler
+	return New(Config{RequestDeadline: deadline, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{}, register).Handler
 }
 
 func readProblem(t *testing.T, what string, w *httptest.ResponseRecorder, status int, typ string) problemAnswer {

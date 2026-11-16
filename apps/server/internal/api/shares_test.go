@@ -1,7 +1,13 @@
 package api_test
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"net/http"
+	"regexp"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,4 +88,122 @@ func TestMalformedShareRequestsAreInvalid(t *testing.T) {
 	wantProblem(t, "delete an id that is not a uuid", call(t, "DELETE", "/v2/shares/nope", m.access, nil), http.StatusBadRequest)
 	wantProblem(t, "read an unknown share", call(t, "GET", "/v2/shares/"+uuid.NewString(), "", nil), http.StatusNotFound)
 	wantProblem(t, "delete an unknown share", call(t, "DELETE", "/v2/shares/"+uuid.NewString(), m.access, nil), http.StatusNotFound)
+}
+
+func viewShare(t *testing.T, id string) reply {
+	t.Helper()
+	return call(t, "GET", "/v2/shares/"+id+"/view", "", nil)
+}
+
+// cspDirectives splits a Content-Security-Policy into its directives, name to sources.
+func cspDirectives(policy string) map[string][]string {
+	out := map[string][]string{}
+	for d := range strings.SplitSeq(policy, ";") {
+		fields := strings.Fields(d)
+		if len(fields) == 0 {
+			continue
+		}
+		out[strings.ToLower(fields[0])] = fields[1:]
+	}
+	return out
+}
+
+var (
+	styleElement   = regexp.MustCompile(`(?is)<style\b[^>]*>(.*?)</style\s*>`)
+	scriptElement  = regexp.MustCompile(`(?is)<script\b([^>]*)>(.*?)</script\s*>`)
+	srcAttribute   = regexp.MustCompile(`(?i)(^|\s)src\s*=`)
+	stylesheetLink = regexp.MustCompile(`(?i)<link\b[^>]*\brel\s*=\s*["']?[^"'>]*\bstylesheet`)
+)
+
+func inlineHash(text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+}
+
+func TestShareViewerIsOnePageForEveryShareWithoutAToken(t *testing.T) {
+	m := newMember(t)
+	stored := uuid.NewString()
+	must(t, "create", createShare(t, m, stored, []byte("sealed group")), http.StatusCreated)
+
+	first := must(t, "view a stored share", viewShare(t, stored), http.StatusOK)
+	second := must(t, "view an id no share has", viewShare(t, uuid.NewString()), http.StatusOK)
+	for _, r := range []reply{first, second} {
+		if got := mediaType(r.header); got != "text/html" {
+			t.Errorf("%s: Content-Type %q, want text/html", r, r.header.Get("Content-Type"))
+		}
+	}
+	if !bytes.Equal(first.body, second.body) {
+		t.Errorf("the page for %s differs from the page for another id", stored)
+	}
+	if bytes.Contains(first.body, []byte("sealed group")) {
+		t.Errorf("the page carries the share's data")
+	}
+}
+
+func TestShareViewerHeaders(t *testing.T) {
+	r := must(t, "view", viewShare(t, uuid.NewString()), http.StatusOK)
+	if got := r.header.Get("Referrer-Policy"); got != "no-referrer" {
+		t.Errorf("Referrer-Policy %q, want no-referrer", got)
+	}
+	if got := r.header.Get("X-Robots-Tag"); got != "noindex" {
+		t.Errorf("X-Robots-Tag %q, want noindex", got)
+	}
+	if r.header.Get("Content-Security-Policy") == "" {
+		t.Errorf("no Content-Security-Policy")
+	}
+}
+
+func TestShareViewerPolicyAdmitsOnlyItsInlineStyleAndScript(t *testing.T) {
+	r := must(t, "view", viewShare(t, uuid.NewString()), http.StatusOK)
+	policy := r.header.Get("Content-Security-Policy")
+	csp := cspDirectives(policy)
+	body := string(r.body)
+
+	if !slices.Equal(csp["default-src"], []string{"'none'"}) {
+		t.Errorf("default-src %v in %q, want 'none'", csp["default-src"], policy)
+	}
+	if !slices.Equal(csp["connect-src"], []string{"'self'"}) {
+		t.Errorf("connect-src %v in %q, want 'self'", csp["connect-src"], policy)
+	}
+	if !slices.Equal(csp["frame-ancestors"], []string{"'none'"}) {
+		t.Errorf("frame-ancestors %v in %q, want 'none'", csp["frame-ancestors"], policy)
+	}
+	for _, name := range []string{"script-src", "style-src"} {
+		for _, banned := range []string{"'unsafe-inline'", "'self'"} {
+			if slices.ContainsFunc(csp[name], func(s string) bool { return strings.EqualFold(s, banned) }) {
+				t.Errorf("%s admits %s: %q", name, banned, policy)
+			}
+		}
+	}
+
+	scripts := scriptElement.FindAllStringSubmatch(body, -1)
+	if len(scripts) == 0 {
+		t.Fatalf("the page has no script element: %s", r)
+	}
+	for _, s := range scripts {
+		if srcAttribute.MatchString(s[1]) {
+			t.Errorf("a script element loads a src: <script%s>", s[1])
+		}
+		if h := inlineHash(s[2]); !slices.Contains(csp["script-src"], h) {
+			t.Errorf("script-src %v lacks %s, the hash of an inline script", csp["script-src"], h)
+		}
+	}
+	for _, s := range styleElement.FindAllStringSubmatch(body, -1) {
+		if h := inlineHash(s[1]); !slices.Contains(csp["style-src"], h) {
+			t.Errorf("style-src %v lacks %s, the hash of an inline style", csp["style-src"], h)
+		}
+	}
+	if stylesheetLink.MatchString(body) {
+		t.Errorf("the page links a stylesheet")
+	}
+}
+
+func TestShareViewerOfAnIDThatIsNotAUUIDIsInvalid(t *testing.T) {
+	wantProblem(t, "view", viewShare(t, "nope"), http.StatusBadRequest)
+}
+
+func TestOldShareViewerPathsAreGone(t *testing.T) {
+	for _, path := range []string{"/s/" + uuid.NewString(), "/s/assets/share.js"} {
+		wantProblem(t, path, call(t, "GET", path, "", nil), http.StatusNotFound)
+	}
 }

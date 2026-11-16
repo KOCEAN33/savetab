@@ -14,6 +14,7 @@ Goal: `apps/server` meets the vault pages under `practices/backend/` and `practi
 - A `/v2` time is an RFC 3339 string, where `/v1` sends epoch milliseconds.
 - `POST /v2/pairings` and `POST /v2/shares` take a client `id` as their idempotency key. `GET /v2/devices` and `GET /v2/pairings` page by `page_size` and `page_token`, and `GET /v2/ops` takes `page_size` in place of `limit`.
 - The `/v2` paths are the ones step 17 lists.
+- The share viewer is the operation `GET /v2/shares/{share_id}/view`, one HTML answer with its style and script inline under a hash policy. `/s/{id}` goes with `/v1`, with no redirect: no share link is in use.
 - The server takes no OIDC client secret: the Zitadel application is a public client on PKCE.
 
 ## Waiting on the owner
@@ -68,7 +69,7 @@ Each step is one commit that leaves `pnpm test`, `pnpm check`, and `pnpm lint` g
 17. **/v2, as parallel change.** Three releases.
     - Add: write `api/openapi.yaml`, generate the gin strict server with oapi-codegen, and write the handlers in `internal/api` over the same use cases. Add the validation and size-cap middleware, the 404, 405, and 413 problems, the route-against-spec test, response validation in handler tests, Spectral, and `oasdiff`. The handler tests are written from the spec by an author who has not read the handlers.
     - Move: `apps/extension/lib/sync.ts`, `account.ts`, `share.ts`, `apps/server/internal/api/viewer/share.js`, and the e2e helpers `e2e/sync-server.ts` and `e2e-firefox/sync-fixtures.ts` call `/v2`.
-    - Remove: the `/v1` handlers, their tests, `/healthz`, and the allow-list entries of step 14, once the deployed chart probes `/readyz`. `docs/plans/onetab-parity.md` `### P4` points at `api/openapi.yaml` for the contract.
+    - Remove: the `/v1` handlers, their tests, `/healthz`, the `/s/` viewer routes, and the allow-list entries of step 14. The viewer becomes `GET /v2/shares/{share_id}/view`. `docs/plans/onetab-parity.md` `### P4` points at `api/openapi.yaml` for the contract.
 
     Paths: `GET /v2/authorizations` and `GET /v2/authorizations/callback` for the login redirect pair, `POST /v2/tokens` with `grant_type` `authorization_code` or `refresh_token`, and the other resources under their `/v1` names. A snapshot ahead of the log answers 400, a stale one 409, so the client tells them apart by status.
 

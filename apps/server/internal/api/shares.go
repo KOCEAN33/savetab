@@ -1,6 +1,9 @@
 package api
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 func (h *Handlers) CreateShare(ctx context.Context, req CreateShareRequestObject) (CreateShareResponseObject, error) {
 	sh, err := h.bus.CreateShare(ctx, callerOf(ctx).UserID, req.Body.Id, req.Body.Data)
@@ -18,6 +21,18 @@ func (h *Handlers) GetShare(ctx context.Context, req GetShareRequestObject) (Get
 		return nil, err
 	}
 	return GetShare200JSONResponse{Data: sh.Ciphertext, ExpiresAt: sh.ExpiresAt.UTC()}, nil
+}
+
+// ViewShare answers the viewer page. It reads no share: the page's script does, with the key
+// only the browser holds.
+func (h *Handlers) ViewShare(context.Context, ViewShareRequestObject) (ViewShareResponseObject, error) {
+	return ViewShare200TexthtmlResponse{
+		Body:          strings.NewReader(viewerPage),
+		ContentLength: int64(len(viewerPage)),
+		Headers: ViewShare200ResponseHeaders{
+			ContentSecurityPolicy: viewerCSP, ReferrerPolicy: "no-referrer", XRobotsTag: "noindex",
+		},
+	}, nil
 }
 
 func (h *Handlers) DeleteShare(ctx context.Context, req DeleteShareRequestObject) (DeleteShareResponseObject, error) {

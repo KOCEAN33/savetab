@@ -31,7 +31,7 @@ rules:
   response-is-object:
     description: Every response body is a JSON object at its top level.
     severity: error
-    given: $.paths[*][*].responses[*].content[*].schema
+    given: $.paths[*][*].responses[*].content[?(@property.match(/json$/))].schema
     then:
       field: type
       function: pattern

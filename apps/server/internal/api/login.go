@@ -29,9 +29,7 @@ type LoginConfig struct {
 
 // Login runs the OIDC login against one issuer.
 type Login struct {
-	oauth oauth2.Config
-	// oauthV1 differs in the callback the issuer redirects to.
-	oauthV1      oauth2.Config
+	oauth        oauth2.Config
 	verifier     *oidc.IDTokenVerifier
 	issuer       *http.Client
 	redirectURIs []string
@@ -54,7 +52,6 @@ func NewLogin(ctx context.Context, cfg LoginConfig) (*Login, error) {
 	}
 	return &Login{
 		oauth:        oauth("/v2/authorizations/callback"),
-		oauthV1:      oauth("/v1/auth/callback"),
 		verifier:     provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}),
 		issuer:       issuer,
 		redirectURIs: cfg.RedirectURIs,

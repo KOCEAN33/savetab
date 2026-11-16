@@ -64,6 +64,14 @@ async function joinedGroup(): Promise<Group> {
 
 const current = async (id: string) => new ListView(await db.items.toArray()).get(id) as Group;
 
+describe('shareLink', () => {
+  it('opens the share at its view page with the key in the fragment', () => {
+    expect(shareLink('https://sync.example', { id: '0190a000-0000-4000-8000-000000000001', key: 'a2V5', expiresAt: 1 })).toBe(
+      'https://sync.example/v2/shares/0190a000-0000-4000-8000-000000000001/view#a2V5',
+    );
+  });
+});
+
 describe('shareItem', () => {
   it('uploads a blob that the key in the returned URL opens, and records the share on the group', async () => {
     const group = await joinedGroup();
@@ -71,7 +79,7 @@ describe('shareItem', () => {
 
     const sent = JSON.parse(calls.find((c) => c.call === 'POST /v2/shares')!.body) as { id: string; data: string };
     expect(sent.id).toMatch(UUID);
-    expect(`${url.origin}${url.pathname}`).toBe(`${SERVER}/s/${sent.id}`);
+    expect(`${url.origin}${url.pathname}`).toBe(`${SERVER}/v2/shares/${sent.id}/view`);
     const keyText = url.hash.slice(1);
     expect(keyText).toMatch(/^[A-Za-z0-9_-]{43}$/);
     const key = fromBase64(keyText.replaceAll('-', '+').replaceAll('_', '/'));

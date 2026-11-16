@@ -1,6 +1,6 @@
 # savetab server
 
-The sync server: Go and Postgres. Its contract is the `### P4: sync server` section of `docs/plans/onetab-parity.md`.
+The sync server: Go and Postgres. Its HTTP contract is `api/openapi.yaml`, and its design is the `### P4: sync server` section of `docs/plans/onetab-parity.md`.
 
 ## Run
 
@@ -12,7 +12,7 @@ The server applies its migrations at start, and reads the issuer's discovery doc
 | `LISTEN_ADDR` | Listen address, such as `:8080`. Required. |
 | `OIDC_ISSUER` | Issuer URL of the OIDC provider. Required. |
 | `OIDC_CLIENT_ID` | Client id registered at the issuer. Required. |
-| `PUBLIC_URL` | The server's base URL as browsers reach it. Required. The issuer's redirect URIs are `<PUBLIC_URL>/v2/authorizations/callback` and, while `/v1` serves, `<PUBLIC_URL>/v1/auth/callback`. |
+| `PUBLIC_URL` | The server's base URL as browsers reach it. Required. The issuer's redirect URI is `<PUBLIC_URL>/v2/authorizations/callback`. |
 | `AUTH_REDIRECT_URIS` | Redirect URIs a login may end at, separated by one space. Required. Each extension's is the value of `browser.identity.getRedirectURL()`. |
 | `DB_POOL_MAX` | Most connections the pool opens. Default `10`. |
 | `DB_STATEMENT_TIMEOUT` | `statement_timeout` of every pool connection. Default `5s`. |
@@ -52,5 +52,5 @@ The server runs on the homelab cluster at `https://savetab.lab.hiriri.com`, reac
 - Login: Zitadel at `https://auth.hiriri.com`, project `savetab`, application `savetab`, a public client on PKCE with no client secret. The project admits only users who hold the role `savetab-user`.
 - `AUTH_REDIRECT_URIS` in `savetab/envs/prod.yaml` holds the Firefox add-on's URI, the SHA-1 of `savetab@kocean33` under `extensions.allizom.org`, and the Chrome GitHub Releases build's `https://mjkkpkbgjflhjgdkhhnejpjcdkfcpmkb.chromiumapp.org/`, whose id the manifest `key` fixes (`apps/extension/wxt.config.ts`). A Chrome Web Store item has its own id and needs its URI added.
 - Health: `GET /livez` answers 200 whenever a handler can run. `GET /readyz` answers 200 once the listener is open and a database ping succeeds within `READY_PING_TIMEOUT`, else 503. The chart's startup and liveness probes get `/livez` and its readiness probe `/readyz`. `scripts/check-chart.sh`, run by `pnpm check`, holds the rendered Deployment to the probe and stop rules in `charts/savetab/policy/`.
-- Check: `curl https://savetab.lab.hiriri.com/healthz` answers `{"ok":true}`.
+- Check: `curl -i https://savetab.lab.hiriri.com/readyz` answers 200.
 

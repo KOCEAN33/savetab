@@ -94,7 +94,7 @@ test('a shared group opens as a web page until sharing stops', async ({ ff, serv
 
   await driver.switchTo().newWindow('tab');
   const shared = await driver.getWindowHandle();
-  await driver.get(`${server}/s/${share.id}#${share.key}`);
+  await driver.get(`${server}/v2/shares/${share.id}/view#${share.key}`);
   await expect.poll(() => texts(driver, 'a.link')).toEqual(['Page a', 'Page b']);
 
   await driver.switchTo().window(list);

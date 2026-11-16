@@ -26,8 +26,7 @@ func (b *lockedBuffer) Write(p []byte) (int, error) {
 	return b.buf.Write(p)
 }
 
-// requestLine sends one request through the whole server, the engine around the /v1 handler,
-// and returns the line the request wrote.
+// requestLine sends one request through the whole server, and returns the line the request wrote.
 func requestLine(t *testing.T, method, path, token string) map[string]any {
 	t.Helper()
 	var out lockedBuffer
@@ -71,29 +70,28 @@ func requestLine(t *testing.T, method, path, token string) map[string]any {
 }
 
 func TestRequestLineCountsTheQueriesOfARequest(t *testing.T) {
-	u := newUser(t)
-	d := newDevice(t, u)
+	m := newMember(t)
 	// One query finds the token's session and one lists the devices.
-	line := requestLine(t, http.MethodGet, "/v1/devices", d.token)
+	line := requestLine(t, http.MethodGet, "/v2/devices", m.access)
 	if line["db.query_count"] != float64(2) {
 		t.Errorf("db.query_count = %v, want 2", line["db.query_count"])
 	}
 	if _, ok := line["db.duration_ms"].(float64); !ok {
 		t.Errorf("db.duration_ms = %v, want a number", line["db.duration_ms"])
 	}
-	if line["user.id"] != u.id {
-		t.Errorf("user.id = %v, want %s", line["user.id"], u.id)
+	if line["user.id"] != m.user {
+		t.Errorf("user.id = %v, want %s", line["user.id"], m.user)
 	}
-	if line["http.route"] != "/v1/devices" {
-		t.Errorf("http.route = %v, want /v1/devices", line["http.route"])
+	if line["http.route"] != "/v2/devices" {
+		t.Errorf("http.route = %v, want /v2/devices", line["http.route"])
 	}
 }
 
-func TestRequestLineNamesTheRouteTemplateOfAV1Request(t *testing.T) {
-	d := newDevice(t, newUser(t))
-	line := requestLine(t, http.MethodDelete, "/v1/devices/00000000-0000-4000-8000-000000000000", d.token)
-	if line["http.route"] != "/v1/devices/{id}" {
-		t.Errorf("http.route = %v, want /v1/devices/{id}", line["http.route"])
+func TestRequestLineNamesTheRouteTemplateOfARequest(t *testing.T) {
+	m := newMember(t)
+	line := requestLine(t, http.MethodDelete, "/v2/devices/00000000-0000-4000-8000-000000000000", m.access)
+	if line["http.route"] != "/v2/devices/:device_id" {
+		t.Errorf("http.route = %v, want /v2/devices/:device_id", line["http.route"])
 	}
 	if line["http.response.status_code"] != float64(404) || line["outcome"] != "client_error" {
 		t.Errorf("status %v, outcome %v, want 404 and client_error", line["http.response.status_code"], line["outcome"])
@@ -101,7 +99,7 @@ func TestRequestLineNamesTheRouteTemplateOfAV1Request(t *testing.T) {
 }
 
 func TestRequestLineOfARequestWithoutATokenNamesNoUser(t *testing.T) {
-	line := requestLine(t, http.MethodGet, "/v1/devices", "")
+	line := requestLine(t, http.MethodGet, "/v2/devices", "")
 	if _, ok := line["user.id"]; ok {
 		t.Errorf("user.id = %v on a request with no token", line["user.id"])
 	}

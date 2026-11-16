@@ -95,15 +95,6 @@ func TestRequestLineCarriesTheRequestFields(t *testing.T) {
 	}
 }
 
-func TestRequestLineTakesTheRouteAHandlerRecorded(t *testing.T) {
-	engine, out := logged()
-	engine.Any("/v1/*path", func(c *gin.Context) { logline.SetRoute(c.Request.Context(), "/v1/devices/{id}") })
-	_, line := oneLine(t, engine, out, httptest.NewRequest(http.MethodDelete, "/v1/devices/d1", nil))
-	if line["http.route"] != "/v1/devices/{id}" {
-		t.Errorf("http.route = %v, want /v1/devices/{id}", line["http.route"])
-	}
-}
-
 func TestRequestLineOfAHandlerThatFails(t *testing.T) {
 	engine, out := logged()
 	engine.GET("/down", func(c *gin.Context) {
@@ -255,8 +246,8 @@ func TestTraceIDComesFromTraceparentAndGoesOnOutboundCalls(t *testing.T) {
 
 func TestRequestLineHoldsNoCredentialAndNoBody(t *testing.T) {
 	engine, out := logged()
-	engine.POST("/v1/ops", func(c *gin.Context) { c.Status(http.StatusOK) })
-	r := httptest.NewRequest(http.MethodPost, "/v1/ops?code=qu3ry-c0de", strings.NewReader(`{"data":"b0dy-payload"}`))
+	engine.POST("/v2/ops", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r := httptest.NewRequest(http.MethodPost, "/v2/ops?code=qu3ry-c0de", strings.NewReader(`{"data":"b0dy-payload"}`))
 	r.Header.Set("Authorization", "Bearer t0ken-value")
 	r.Header.Set("Cookie", "session=c00kie-value")
 	oneLine(t, engine, out, r)

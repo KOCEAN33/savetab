@@ -127,8 +127,8 @@ func run(ctx context.Context, cfg config.Config, opts Options, logger *slog.Logg
 	return serve(ctx, stop, srv, l, cfg.HTTPDrainTimeout)
 }
 
-// NewServer builds the HTTP server over the use cases: /v1 as it routes itself, and /v2 as
-// api/openapi.yaml declares it. A /v2 request passes the token check, the body limit, and the
+// NewServer builds the HTTP server over the use cases, as api/openapi.yaml declares it. A /v2
+// request passes the token check, the body limit, and the
 // contract's validator, in that order, before its handler.
 func NewServer(cfg httpserver.Config, logger *slog.Logger, b *bus.Bus, login *api.Login) (*httpserver.Server, error) {
 	spec, err := api.GetSpec()
@@ -146,7 +146,7 @@ func NewServer(cfg httpserver.Config, logger *slog.Logger, b *bus.Bus, login *ap
 		HandlerErrorFunc:         httpserver.Problem,
 		ResponseErrorHandlerFunc: httpserver.Problem,
 	})
-	return httpserver.New(cfg, logger, b, api.New(b, login), func(r gin.IRouter) {
+	return httpserver.New(cfg, logger, b, func(r gin.IRouter) {
 		api.RegisterHandlersWithOptions(r, strict, api.GinServerOptions{
 			Middlewares: []api.MiddlewareFunc{
 				api.Authenticate(b, spec, httpserver.Problem),

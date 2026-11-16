@@ -1,3 +1,4 @@
+// Package api is the server's HTTP surface: /v2 as api/openapi.yaml declares it.
 package api
 
 import (
@@ -17,6 +18,10 @@ import (
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
 )
+
+// maxMessageBytes bounds a wrapped key and a pairing message, which the contract's schema bounds
+// only as base64 text.
+const maxMessageBytes = 1024
 
 // The extensions of api/openapi.yaml this package reads.
 const (

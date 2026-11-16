@@ -359,6 +359,32 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+  /v2/shares/{share_id}/view:
+    parameters:
+      - name: share_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: viewShare
+      tags: [shares]
+      summary: The web page that opens a share in a browser.
+      description: >-
+        The same page for every share, with its style and script inline. The script reads the
+        share and opens it with the key in the URL fragment, which no request carries. The
+        policy admits that style and that script by hash, and nothing else.
+      security: []
+      responses:
+        "200":
+          description: The viewer page.
+          headers:
+            Content-Security-Policy: { required: true, schema: { type: string } }
+            Referrer-Policy: { required: true, schema: { type: string } }
+            X-Robots-Tag: { required: true, schema: { type: string } }
+          content:
+            text/html:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/Problem" }
 
 components:
   securitySchemes:

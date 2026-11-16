@@ -29,7 +29,7 @@ var (
 	// login runs against issuer and redirects the issuer back to srv.
 	login  *api.Login
 	issuer *fakeoidc.Issuer
-	// srv is the whole server as wire builds it: the engine, /v1, and /v2.
+	// srv is the whole server as wire builds it: the engine and /v2.
 	srv   *httptest.Server
 	dbURL string
 )

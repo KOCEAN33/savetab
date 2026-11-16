@@ -11,7 +11,7 @@ export function activeShare(item: Item, now = Date.now()): Share | undefined {
 
 /** The URL of a shared page. The key rides in the fragment, which no request carries. */
 export function shareLink(serverUrl: string, share: Share): string {
-  return `${serverUrl}/s/${share.id}#${share.key}`;
+  return `${serverUrl}/v2/shares/${share.id}/view#${share.key}`;
 }
 
 async function account(): Promise<SyncAccount> {

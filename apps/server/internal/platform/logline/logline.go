@@ -74,7 +74,6 @@ type Fields struct {
 	requestID string
 
 	mu         sync.Mutex
-	route      string
 	userID     string
 	errType    string
 	errMessage string
@@ -135,15 +134,6 @@ func TraceID(ctx context.Context) string {
 	return ""
 }
 
-// SetRoute records the matched route template of the unit in ctx.
-func SetRoute(ctx context.Context, route string) {
-	if f := from(ctx); f != nil {
-		f.mu.Lock()
-		f.route = route
-		f.mu.Unlock()
-	}
-}
-
 // SetUser records the authenticated caller of the unit in ctx.
 func SetUser(ctx context.Context, id string) {
 	if f := from(ctx); f != nil {
@@ -201,7 +191,7 @@ func (f *Fields) addCall(name string, d time.Duration) {
 // Request holds what the middleware knows about a request when it ends.
 type Request struct {
 	Method string
-	// Route is the template the router matched. A route the unit recorded with SetRoute wins.
+	// Route is the template the router matched.
 	Route    string
 	Status   int
 	Duration time.Duration
@@ -214,15 +204,11 @@ type Request struct {
 func (f *Fields) RequestAttrs(r Request) []slog.Attr {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	route := r.Route
-	if f.route != "" {
-		route = f.route
-	}
 	attrs := []slog.Attr{
 		slog.String(keyTraceID, f.traceID),
 		slog.String(keyRequestID, f.requestID),
 		slog.String(keyMethod, r.Method),
-		slog.String(keyRoute, route),
+		slog.String(keyRoute, r.Route),
 		slog.Int(keyStatus, r.Status),
 		durationMS(keyDurationMS, r.Duration),
 		slog.String(keyOutcome, r.Outcome),

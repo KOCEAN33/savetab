@@ -26,16 +26,16 @@ type pingOK struct{}
 
 func (pingOK) Ping(context.Context) error { return nil }
 
-// start serves v1 through serve on a free port and returns its address, a function that
+// start serves handler at GET /work through serve on a free port and returns its address, a function that
 // triggers the stop, and the channel serve's result arrives on.
-func start(t *testing.T, drain time.Duration, v1 http.Handler) (addr string, trigger func(), done <-chan error) {
+func start(t *testing.T, drain time.Duration, handler http.HandlerFunc) (addr string, trigger func(), done <-chan error) {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	srv := httpserver.New(httpserver.Config{RequestDeadline: 10 * time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pingOK{}, v1, func(gin.IRouter) {})
+	srv := httpserver.New(httpserver.Config{RequestDeadline: 10 * time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pingOK{}, func(r gin.IRouter) { r.GET("/work", gin.WrapF(handler)) })
 	result := make(chan error, 1)
 	go func() { result <- serve(ctx, func() {}, srv, l, drain) }()
 	t.Cleanup(cancel)
@@ -56,7 +56,7 @@ func TestStopFinishesASlowRequest(t *testing.T) {
 	}
 	answered := make(chan answer, 1)
 	go func() {
-		resp, err := http.Get("http://" + addr + "/v1/slow")
+		resp, err := http.Get("http://" + addr + "/work")
 		if err != nil {
 			answered <- answer{err: err}
 			return
@@ -92,7 +92,7 @@ func TestStopCancelsARequestPastTheDrain(t *testing.T) {
 		}
 	}))
 	go func() {
-		if resp, err := http.Get("http://" + addr + "/v1/stuck"); err == nil {
+		if resp, err := http.Get("http://" + addr + "/work"); err == nil {
 			resp.Body.Close()
 		}
 	}()

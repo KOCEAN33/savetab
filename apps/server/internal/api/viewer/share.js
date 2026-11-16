@@ -1,4 +1,4 @@
-// The share viewer. The page answers the same for every share: the id comes from the path and
+// The share viewer. The page answers the same for every share: the share comes from the path and
 // the key from the URL fragment, which the browser never sends to the server. Every text from
 // the share goes through textContent, so a title cannot inject markup.
 'use strict';
@@ -26,10 +26,10 @@ async function main() {
 }
 
 async function load() {
-  const id = location.pathname.split('/').pop();
   const fragment = location.hash.slice(1);
   if (!fragment) throw new ShareError(NO_KEY);
-  const res = await fetch('../v2/shares/' + encodeURIComponent(id));
+  // The page is /v2/shares/{id}/view, and the share is the resource above it.
+  const res = await fetch(location.pathname.replace(/\/view$/, ''));
   if (res.status === 404) throw new ShareError(NOT_FOUND);
   if (!res.ok) throw new ShareError(UNREADABLE);
   const { data } = await res.json();

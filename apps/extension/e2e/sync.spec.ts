@@ -64,7 +64,7 @@ test('a shared group opens as a web page until sharing stops', async ({ first, s
   await list.getByRole('menuitem', { name: 'Share as a web page' }).click();
   await expect(list.locator('.group-head .meta')).toContainText('Shared until');
   const url = await list.evaluate(() => navigator.clipboard.readText());
-  expect(url).toMatch(new RegExp(`^${server}/s/[0-9a-f-]{36}#[A-Za-z0-9_-]{43}$`));
+  expect(url).toMatch(new RegExp(`^${server}/v2/shares/[0-9a-f-]{36}/view#[A-Za-z0-9_-]{43}$`));
 
   const shared = await context.newPage();
   await shared.goto(url);

@@ -50,7 +50,7 @@ The user asked for these on 2026-11-12, to be done later.
 ## Sync server follow-ups
 
 - A refresh token used twice answers 401 and nothing else. Revoking the device on a reused token would cut off a thief who refreshed first.
-- `GET /v1/auth/start` stores one `logins` row per request without a bearer token or a rate limit. Rows expire after 10 minutes and the next start deletes them.
+- `GET /v2/authorizations` stores one `logins` row per request without a bearer token or a rate limit. Rows expire after 10 minutes and the next start deletes them.
 - The server logs in through one issuer and gives an account to anyone that issuer logs in. `identities` is keyed by `(issuer, subject)`, so a second issuer or an allow list can join.
 
 - The outbox of a device with no account keeps every op since install and is never trimmed. Joining replaces it, so it could stay empty until the device joins.
@@ -91,5 +91,5 @@ Lint rules not turned on:
 ## Waiting on the user
 
 - Review the Korean strings in `apps/extension/locales/ko.json` and `public/_locales/ko/messages.json`. Wording and terms are the user's call.
-- P4 (sync server): whether the server gets a public name. It is tailnet-only, so a device syncs only on the tailnet, and a shared page opens only there. `GET /v1/auth/start` has no rate limit, which matters once it is public.
+- P4 (sync server): whether the server gets a public name. It is tailnet-only, so a device syncs only on the tailnet, and a shared page opens only there. `GET /v2/authorizations` has no rate limit, which matters once it is public.
 - P4 (sync server): in the later build where pairing starts by itself after login, what the signed-in device shows for approval. A one-tap approve trusts the server to relay the right key. Comparing the pairing code does not.

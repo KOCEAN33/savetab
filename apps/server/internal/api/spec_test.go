@@ -38,6 +38,8 @@ var contract = sync.OnceValues(func() (*openapi3.T, error) {
 		return nil, err
 	}
 	doc.Servers = nil
+	// The contract declares text/html for viewShare, which kin-openapi decodes only once told how.
+	openapi3filter.RegisterBodyDecoder("text/html", openapi3filter.PlainBodyDecoder)
 	return doc, nil
 })
 
