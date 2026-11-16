@@ -1,0 +1,11 @@
+[semantic_release]
+allow_zero_version = true
+major_on_zero = false
+commit_parser = "conventional"
+commit_message = "chore(release): {version}"
+tag_format = "v{version}"
+version_variables = ["apps/extension/package.json:version"]
+
+[semantic_release.commit_parser_options]
+minor_tags = []
+patch_tags = ["feat", "fix", "perf", "build", "chore", "ci", "docs", "style", "refactor", "test"]

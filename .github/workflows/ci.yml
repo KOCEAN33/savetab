@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    # release.yml runs these checks on main.
+    branches-ignore: [main]
   pull_request:
   workflow_call:
 
@@ -31,6 +32,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # commitlint and gitleaks read the history.
+          fetch-depth: 0
           persist-credentials: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
@@ -71,6 +74,26 @@ jobs:
           path: .openapi-base
           sparse-checkout: apps/server/api
           persist-credentials: false
+      - name: Install hadolint
+        run: |
+          curl -sSfLo /tmp/hadolint https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64
+          echo "c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507  /tmp/hadolint" | sha256sum -c
+          sudo install -m 755 /tmp/hadolint /usr/local/bin/hadolint
+      - name: Install gitleaks
+        run: |
+          curl -sSfLo /tmp/gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tgz" | sha256sum -c
+          sudo tar -xzf /tmp/gitleaks.tgz -C /usr/local/bin gitleaks
+      - name: Commit headers
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # A new branch has no commit before its push.
+          case "$BASE" in '' | 0000*) BASE=$(git merge-base origin/main HEAD) ;; esac
+          pnpm exec commitlint --from "$BASE" --to HEAD
+      - run: gitleaks git --redact
+      - run: hadolint apps/server/Dockerfile
+      - run: docker build --check apps/server
       - run: pnpm --filter @savetab/extension exec playwright install --with-deps chromium
       - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
         with:
