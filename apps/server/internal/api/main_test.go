@@ -2,11 +2,9 @@ package api_test
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -15,6 +13,7 @@ import (
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/httpserver"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
+	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/testdb"
 	"github.com/KOCEAN33/savetab/apps/server/internal/wire"
 )
@@ -24,59 +23,46 @@ const (
 	extensionRedirect = "https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/"
 )
 
-var (
-	store *db.Store
-	// login runs against issuer and redirects the issuer back to srv.
-	login  *api.Login
-	issuer *fakeoidc.Issuer
-	// srv is the whole server as wire builds it: the engine and /v2.
-	srv   *httptest.Server
-	dbURL string
-)
-
 var serverConfig = httpserver.Config{RequestDeadline: 10 * time.Second, ReadyPingTimeout: time.Second}
 
-func TestMain(m *testing.M) {
-	os.Exit(run(m))
+// server is the whole server as wire builds it, the engine and /v2, on a database of its own.
+type server struct {
+	URL string
+	// The server's login runs against issuer.
+	issuer *fakeoidc.Issuer
+	dbURL  string
+	// log holds the request lines.
+	log *lockedBuffer
 }
 
-func run(m *testing.M) int {
-	url, stop, err := testdb.Start()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	defer stop()
-	dbURL = url
+func newServer(t *testing.T) *server {
+	t.Helper()
 	ctx := context.Background()
-	if store, err = db.Open(ctx, url, db.Options{MaxConns: 4, StatementTimeout: 5 * time.Second, IdleInTxTimeout: 10 * time.Second}); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+	s := &server{dbURL: testdb.New(t, db.MigrationsHash, db.MigrateURL), log: &lockedBuffer{}}
+	store, err := db.Open(ctx, s.dbURL, db.Options{MaxConns: 4, StatementTimeout: 5 * time.Second, IdleInTxTimeout: 10 * time.Second})
+	if err != nil {
+		t.Fatal(err)
 	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	issuer = fakeoidc.New(clientID)
-	defer issuer.Close()
+	t.Cleanup(store.Close)
+	s.issuer = fakeoidc.New(clientID)
+	t.Cleanup(s.issuer.Close)
 	// The login needs the server's URL, which exists only once the server listens.
 	var handler http.Handler
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r) }))
-	defer srv.Close()
-	login, err = api.NewLogin(ctx, api.LoginConfig{
-		Issuer: issuer.URL, ClientID: clientID,
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r) }))
+	t.Cleanup(srv.Close)
+	s.URL = srv.URL
+	login, err := api.NewLogin(ctx, api.LoginConfig{
+		Issuer: s.issuer.URL, ClientID: clientID,
 		PublicURL: srv.URL, RedirectURIs: []string{extensionRedirect},
 	})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+		t.Fatal(err)
 	}
-	whole, err := wire.NewServer(serverConfig, slog.New(slog.DiscardHandler), bus.New(store), login)
+	logger := logline.NewLogger(s.log, logline.FormatJSON, slog.LevelInfo, logline.Process{})
+	whole, err := wire.NewServer(serverConfig, logger, bus.New(store), login)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+		t.Fatal(err)
 	}
 	handler = whole.Handler
-	return m.Run()
+	return s
 }

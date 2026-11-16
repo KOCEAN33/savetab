@@ -1,4 +1,4 @@
-package wire
+package wire_test
 
 import (
 	"log/slog"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
 	"github.com/KOCEAN33/savetab/apps/server/internal/httpserver"
+	"github.com/KOCEAN33/savetab/apps/server/internal/wire"
 )
 
 // outsideTheSpec are the engine's routes that api/openapi.yaml does not declare: the probes.
@@ -18,7 +19,8 @@ var outsideTheSpec = []string{"GET /livez", "GET /readyz"}
 var specParam = regexp.MustCompile(`\{([^}]+)\}`)
 
 func TestRoutesAreTheOperationsOfTheSpec(t *testing.T) {
-	srv, err := NewServer(httpserver.Config{}, slog.New(slog.DiscardHandler), nil, nil)
+	t.Parallel()
+	srv, err := wire.NewServer(httpserver.Config{}, slog.New(slog.DiscardHandler), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

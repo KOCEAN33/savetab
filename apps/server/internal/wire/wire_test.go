@@ -1,12 +1,10 @@
-package wire
+package wire_test
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -14,104 +12,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
-
-	"github.com/KOCEAN33/savetab/apps/server/internal/httpserver"
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/config"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/testdb"
+	"github.com/KOCEAN33/savetab/apps/server/internal/wire"
 )
 
-type pingOK struct{}
-
-func (pingOK) Ping(context.Context) error { return nil }
-
-// start serves handler at GET /work through serve on a free port and returns its address, a function that
-// triggers the stop, and the channel serve's result arrives on.
-func start(t *testing.T, drain time.Duration, handler http.HandlerFunc) (addr string, trigger func(), done <-chan error) {
-	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	srv := httpserver.New(httpserver.Config{RequestDeadline: 10 * time.Second, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pingOK{}, func(r gin.IRouter) { r.GET("/work", gin.WrapF(handler)) })
-	result := make(chan error, 1)
-	go func() { result <- serve(ctx, func() {}, srv, l, drain) }()
-	t.Cleanup(cancel)
-	return l.Addr().String(), cancel, result
-}
-
-func TestStopFinishesASlowRequest(t *testing.T) {
-	began := make(chan struct{})
-	addr, trigger, done := start(t, 5*time.Second, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		close(began)
-		time.Sleep(300 * time.Millisecond)
-		io.WriteString(w, "done")
-	}))
-	type answer struct {
-		status int
-		body   string
-		err    error
-	}
-	answered := make(chan answer, 1)
-	go func() {
-		resp, err := http.Get("http://" + addr + "/work")
-		if err != nil {
-			answered <- answer{err: err}
-			return
-		}
-		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		answered <- answer{resp.StatusCode, string(body), err}
-	}()
-	<-began
-	trigger()
-	if a := <-answered; a.err != nil || a.status != 200 || a.body != "done" {
-		t.Fatalf("slow request = %d %q %v, want 200 \"done\"", a.status, a.body, a.err)
-	}
-	if err := <-done; err != nil {
-		t.Fatalf("serve = %v, want nil", err)
-	}
-	if conn, err := net.Dial("tcp", addr); err == nil {
-		conn.Close()
-		t.Fatal("a new connection was accepted after the stop")
-	}
-}
-
-func TestStopCancelsARequestPastTheDrain(t *testing.T) {
-	began := make(chan struct{})
-	ended := make(chan error, 1)
-	addr, trigger, done := start(t, 100*time.Millisecond, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		close(began)
-		select {
-		case <-r.Context().Done():
-			ended <- r.Context().Err()
-		case <-time.After(5 * time.Second):
-			ended <- nil
-		}
-	}))
-	go func() {
-		if resp, err := http.Get("http://" + addr + "/work"); err == nil {
-			resp.Body.Close()
-		}
-	}()
-	<-began
-	trigger()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("serve = %v, want nil", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("serve still running 2s after a 100ms drain")
-	}
-	if err := <-ended; !errors.Is(err, context.Canceled) {
-		t.Fatalf("request context ended with %v, want %v", err, context.Canceled)
-	}
-}
-
 func TestRunWithAnUnreachableDatabaseOpensNoListener(t *testing.T) {
+	t.Parallel()
 	probe, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +33,7 @@ func TestRunWithAnUnreachableDatabaseOpensNoListener(t *testing.T) {
 		ListenAddr:  addr,
 		StartWait:   2 * time.Second,
 	}
-	if err := Run(context.Background(), cfg, Options{Log: io.Discard}); err == nil {
+	if err := wire.Run(context.Background(), cfg, wire.Options{Log: io.Discard}); err == nil {
 		t.Fatal("Run with an unreachable database = nil, want an error")
 	}
 	if conn, err := net.Dial("tcp", addr); err == nil {
@@ -167,11 +76,8 @@ func processLines(t *testing.T, out string) []map[string]any {
 }
 
 func TestRunWritesAStartLineAndAStopLine(t *testing.T) {
-	dbURL, drop, err := testdb.Start()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer drop()
+	t.Parallel()
+	dbURL := testdb.New(t, db.MigrationsHash, db.MigrateURL)
 	issuer := fakeoidc.New("savetab")
 	defer issuer.Close()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -189,7 +95,9 @@ func TestRunWritesAStartLineAndAStopLine(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, cfg, Options{Listener: l, Log: &out, Version: "1.2.3", Commit: "abc123"}) }()
+	go func() {
+		done <- wire.Run(ctx, cfg, wire.Options{Listener: l, Log: &out, Version: "1.2.3", Commit: "abc123"})
+	}()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		if resp, err := http.Get("http://" + addr + "/readyz"); err == nil {
@@ -245,6 +153,7 @@ func TestRunWritesAStartLineAndAStopLine(t *testing.T) {
 }
 
 func TestRunThatFailsToStartWritesAStopLineWithTheError(t *testing.T) {
+	t.Parallel()
 	cfg := config.Config{
 		DatabaseURL: "postgres://savetab:hunter2@127.0.0.1:1/savetab?connect_timeout=1",
 		DBPoolMax:   1,
@@ -252,7 +161,7 @@ func TestRunThatFailsToStartWritesAStopLineWithTheError(t *testing.T) {
 		StartWait:   2 * time.Second,
 	}
 	var out lockedBuffer
-	if err := Run(context.Background(), cfg, Options{Log: &out}); err == nil {
+	if err := wire.Run(context.Background(), cfg, wire.Options{Log: &out}); err == nil {
 		t.Fatal("Run with an unreachable database = nil, want an error")
 	}
 	got := processLines(t, out.String())

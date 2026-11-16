@@ -16,20 +16,13 @@ import (
 // openStore gives the test a migrated database of its own and returns the store and its URL.
 func openStore(t *testing.T) (*db.Store, string) {
 	t.Helper()
-	url, stop, err := testdb.Start()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(stop)
+	url := testdb.New(t, db.MigrationsHash, db.MigrateURL)
 	ctx := context.Background()
 	store, err := db.Open(ctx, url, db.Options{MaxConns: 4, StatementTimeout: 5 * time.Second, IdleInTxTimeout: 10 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(store.Close)
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
 	return store, url
 }
 
@@ -39,6 +32,7 @@ func serializationFailure(ctx context.Context) error {
 }
 
 func TestInTxRerunsTheClosureAfterASerializationFailure(t *testing.T) {
+	t.Parallel()
 	store, _ := openStore(t)
 	ctx := context.Background()
 	const id = "01900000-0000-7000-8000-000000000001"
@@ -71,6 +65,7 @@ func TestInTxRerunsTheClosureAfterASerializationFailure(t *testing.T) {
 }
 
 func TestInTxGivesUpAfterItsAttempts(t *testing.T) {
+	t.Parallel()
 	store, _ := openStore(t)
 	ctx := context.Background()
 	runs := 0
@@ -87,6 +82,7 @@ func TestInTxGivesUpAfterItsAttempts(t *testing.T) {
 }
 
 func TestInTxDoesNotRetryOtherErrors(t *testing.T) {
+	t.Parallel()
 	store, _ := openStore(t)
 	ctx := context.Background()
 	runs := 0

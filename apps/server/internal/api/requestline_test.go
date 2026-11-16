@@ -3,16 +3,13 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
-	"log/slog"
 	"net/http"
-	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/KOCEAN33/savetab/apps/server/internal/bus"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
-	"github.com/KOCEAN33/savetab/apps/server/internal/wire"
 )
 
 type lockedBuffer struct {
@@ -26,36 +23,33 @@ func (b *lockedBuffer) Write(p []byte) (int, error) {
 	return b.buf.Write(p)
 }
 
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
 // requestLine sends one request through the whole server, and returns the line the request wrote.
-func requestLine(t *testing.T, method, path, token string) map[string]any {
+func requestLine(t *testing.T, s *server, method, path, token string) map[string]any {
 	t.Helper()
-	var out lockedBuffer
-	logger := logline.NewLogger(&out, logline.FormatJSON, slog.LevelInfo, logline.Process{})
-	logged, err := wire.NewServer(serverConfig, logger, bus.New(store), login)
-	if err != nil {
-		t.Fatal(err)
-	}
-	whole := httptest.NewServer(logged.Handler)
-	defer whole.Close()
-	req, err := http.NewRequest(method, whole.URL+path, nil)
+	req, err := http.NewRequest(method, s.URL+path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
+	// The server shares its log among the requests of the test, and the trace id names this one's line.
+	traceID := logline.NewTraceID()
+	req.Header.Set("traceparent", "00-"+traceID+"-0000000000000001-01")
+	send(t, s, req)
 	// The line is written after the answer, so the client can be ahead of it.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		out.mu.Lock()
-		raw := out.buf.String()
-		out.mu.Unlock()
-		if raw != "" {
+		for raw := range strings.SplitSeq(s.log.String(), "\n") {
+			if !strings.Contains(raw, traceID) {
+				continue
+			}
 			var line map[string]any
 			if err := json.Unmarshal([]byte(raw), &line); err != nil {
 				t.Fatalf("the request wrote %q, want one JSON object: %v", raw, err)
@@ -69,10 +63,21 @@ func requestLine(t *testing.T, method, path, token string) map[string]any {
 	}
 }
 
+// wantQueryCount holds a list request to its exact SQL statement count over the fixture.
+func wantQueryCount(t *testing.T, s *server, path, token string, want int) {
+	t.Helper()
+	line := requestLine(t, s, http.MethodGet, path, token)
+	if line["http.response.status_code"] != float64(http.StatusOK) || line["db.query_count"] != float64(want) {
+		t.Errorf("GET %s: status %v with db.query_count %v, want 200 with %d", path, line["http.response.status_code"], line["db.query_count"], want)
+	}
+}
+
 func TestRequestLineCountsTheQueriesOfARequest(t *testing.T) {
-	m := newMember(t)
+	t.Parallel()
+	s := newServer(t)
+	m := newMember(t, s)
 	// One query finds the token's session and one lists the devices.
-	line := requestLine(t, http.MethodGet, "/v2/devices", m.access)
+	line := requestLine(t, s, http.MethodGet, "/v2/devices", m.access)
 	if line["db.query_count"] != float64(2) {
 		t.Errorf("db.query_count = %v, want 2", line["db.query_count"])
 	}
@@ -88,8 +93,10 @@ func TestRequestLineCountsTheQueriesOfARequest(t *testing.T) {
 }
 
 func TestRequestLineNamesTheRouteTemplateOfARequest(t *testing.T) {
-	m := newMember(t)
-	line := requestLine(t, http.MethodDelete, "/v2/devices/00000000-0000-4000-8000-000000000000", m.access)
+	t.Parallel()
+	s := newServer(t)
+	m := newMember(t, s)
+	line := requestLine(t, s, http.MethodDelete, "/v2/devices/00000000-0000-4000-8000-000000000000", m.access)
 	if line["http.route"] != "/v2/devices/:device_id" {
 		t.Errorf("http.route = %v, want /v2/devices/:device_id", line["http.route"])
 	}
@@ -99,7 +106,9 @@ func TestRequestLineNamesTheRouteTemplateOfARequest(t *testing.T) {
 }
 
 func TestRequestLineOfARequestWithoutATokenNamesNoUser(t *testing.T) {
-	line := requestLine(t, http.MethodGet, "/v2/devices", "")
+	t.Parallel()
+	s := newServer(t)
+	line := requestLine(t, s, http.MethodGet, "/v2/devices", "")
 	if _, ok := line["user.id"]; ok {
 		t.Errorf("user.id = %v on a request with no token", line["user.id"])
 	}

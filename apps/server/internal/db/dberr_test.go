@@ -21,6 +21,7 @@ func cancelled() context.Context {
 }
 
 func TestMapErrorGivesEachDriverErrorItsKind(t *testing.T) {
+	t.Parallel()
 	live := context.Background()
 	pg := func(code string) error { return &pgconn.PgError{Code: code, ConstraintName: "some_constraint"} }
 	for _, c := range []struct {
@@ -56,6 +57,7 @@ func TestMapErrorGivesEachDriverErrorItsKind(t *testing.T) {
 
 // An Internal error carries the driver's text but not its type, so no caller can unwrap to it.
 func TestMapErrorHidesTheDriverTypeOfAnInternalError(t *testing.T) {
+	t.Parallel()
 	got := db.MapError(context.Background(), "do thing", &pgconn.PgError{Code: "42P01", Message: "relation does not exist"})
 	if _, ok := errors.AsType[*pgconn.PgError](got); ok {
 		t.Error("the mapped error unwraps to *pgconn.PgError")
@@ -66,6 +68,7 @@ func TestMapErrorHidesTheDriverTypeOfAnInternalError(t *testing.T) {
 }
 
 func TestMapErrorOnARealDatabase(t *testing.T) {
+	t.Parallel()
 	store, url := openStore(t)
 	ctx := context.Background()
 

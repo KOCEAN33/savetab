@@ -6,7 +6,7 @@
 
 ## Start
 
-Step 18 of `docs/plans/server-practices.md`, test isolation, since every later step follows the plan's order. Steps 1 to 17 are committed: the server serves only `/v2`, as `apps/server/api/openapi.yaml` declares it, plus the probes `/livez` and `/readyz`.
+Step 19 of `docs/plans/server-practices.md`, release, the last step. Steps 1 to 18 are committed: the server serves only `/v2`, as `apps/server/api/openapi.yaml` declares it, plus the probes `/livez` and `/readyz`.
 
 The deploy of this server and the Zitadel cleanup wait on the owner: `docs/candidates.md`.
 
@@ -30,15 +30,17 @@ The layers the remaining steps build on, with `internal/bus/ops.go` and `interna
 - `internal/db/dynamic.go` holds the SQL sqlc cannot compile: the pairing message update, whose column varies, and the migration runner's statements. Its functions take a `DBTX` and call `MapError` themselves.
 - A `bus` use case opens the transaction with `store.InTx(ctx, fn)`, or `store.InSnapshot` for reads that must agree, holds the rule, and sets the kind of a broken rule with `errs.New`. `bus` declares the types `api` uses and holds token making, hashing, and every lifetime. `api.NewHandlers` takes a `*bus.Bus`.
 - `internal/api` holds `/v2`. `api.gen.go` is the oapi-codegen output: after a contract change, run `go generate ./...` in `apps/server`. `handlers.go` holds `Handlers`, the token check, and the page token, and each entity file holds its operations. A handler returns a use case error as it is, and `httpserver.Problem` writes it.
-- The `/v2` tests in `internal/api` were written from the contract by an author who had not read the handlers. They share `main_test.go`, whose `srv` is the whole server from `wire.NewServer`, and the helpers of `spec_test.go`, which hold every response to the contract. A test writes a state the endpoints cannot produce with SQL over pgx, per step 3.
+- The `/v2` tests in `internal/api` were written from the contract by an author who had not read the handlers. Each test calls `newServer(t)` of `main_test.go`: the whole server from `wire.NewServer` on a database of its own, with its own issuer. The helpers of `spec_test.go` take that server and hold every response to the contract. `wantQueryCount` holds a list endpoint to its SQL statement count, read from the request's line by trace id. A test writes a state the endpoints cannot produce with SQL over pgx, per step 3.
 - A snapshot replaces the stored one only at a higher seq.
+- `testdb.New(t, db.MigrationsHash, db.MigrateURL)` gives a test its migrated database. Every test calls `t.Parallel()` and sits in a `_test` package, held by `paralleltest` and `testpackage`. The scripts stop without `TEST_DATABASE_URL`, so a local run needs the Postgres container of `apps/server/README.md`.
+- `httpserver.Server.ServeUntil` holds the drain at stop, and `wire.run` calls it.
 - `internal/platform/config` loads every variable. `cmd/savetab-server` calls `wire.Main`, which loads the configuration and calls `wire.Run`. `wire.Run` (`internal/wire/wire.go`) uses every config field. The shutdown budget goes only to the start line, since the chart's grace period and the config validation are what act on it.
 - `httpserver.New` (`internal/httpserver/server.go`) builds the `http.Server` on a gin engine with the request line middleware first, then the request deadline middleware. It serves `/livez` and `/readyz`, takes the API's routes from its `register` argument, and answers CORS preflights and the 404 and 405 problems. Its `Serve` marks the listener open for `/readyz`. `httpserver.Problem` writes an error as the problem of its kind through `httpserver.Status`, and `httpserver.BodyLimit` is the size cap. `wire.NewServer` registers the generated routes with the token check, the size cap, and the validator, in that order.
 - `db.Open` takes `db.Options` and sets `statement_timeout` and `idle_in_transaction_session_timeout` on every pool connection, since no file sets them on the role.
 - `pnpm check` needs golangci-lint v2, sqlc, sqlfluff, squawk, helm, and conftest on the PATH. `apps/server/scripts/check-sql.sh` runs `sqlc diff`, the parameter and type greps, SQLFluff, and Squawk with `apps/server/.squawk.toml` on the migrations after `0004`. `apps/server/scripts/test.sh` fails a full run when a generated query or a `dynamic.go` function runs in no test. `apps/server/scripts/check-api.sh` needs oasdiff on the PATH: it reruns `go generate`, lints the contract with Spectral and `apps/server/api/.spectral.yaml`, whose `response-is-object` rule holds JSON bodies only since the viewer answers HTML, and runs `oasdiff breaking` against the contract on `origin/main`. `scripts/check-chart.sh` lints `charts/savetab/` with the stand-in values of `charts/savetab/ci/lint-values.yaml` and runs the Conftest policies of `charts/savetab/policy/` on its render.
 - `pnpm lint` needs semgrep on the PATH. `apps/server/scripts/semgrep.sh` tests then runs the rules in `apps/server/_semgrep/`, a name the Go tools and the archtest skip, one rule file with a test file of the same name each.
 - `internal/platform/logline` holds every log key. A request writes one line, from `requestLine` in `internal/httpserver/requestline.go`. Code under a request adds to that line through the context: `logline.SetError`, `SetUser`, and the pgx tracer in `internal/db/tracer.go`. `wire.Run` builds the one logger and writes the start and stop lines. The Semgrep rules `log-through-logline` and `log-an-error-or-return-it` hold this.
-- `internal/archtest` and the depguard rules in `apps/server/.golangci.yml` hold the layout. The allow-list at the top of `archtest_test.go` names what a later step removes: `internal/platform/testdb/testdb.go` at step 18. `internal/wire/routes_test.go` holds the routes to the spec, with only the probes outside it.
+- `internal/archtest` and the depguard rules in `apps/server/.golangci.yml` hold the layout. `internal/wire/routes_test.go` holds the routes to the spec, with only the probes outside it.
 - The image takes its commit from the `COMMIT` build argument, and `version` stays `dev` until step 19 sets `VERSION`.
 
 Orders from the owner that bind later steps:
@@ -53,4 +55,4 @@ Orders from the owner that bind later steps:
 
 ## Next steps
 
-Steps 18 and 19 of the plan, in order, each with the done-when the plan gives.
+Step 19 of the plan, with the done-when the plan gives.

@@ -6,16 +6,12 @@ import (
 	"time"
 
 	"github.com/KOCEAN33/savetab/apps/server/internal/db"
-	"github.com/KOCEAN33/savetab/apps/server/internal/platform/testdb"
 	"github.com/jackc/pgx/v5"
 )
 
 func TestOpenSetsTheTimeoutsOnEveryConnection(t *testing.T) {
-	url, stop, err := testdb.Start()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(stop)
+	t.Parallel()
+	url := emptyDatabase(t)
 	ctx := context.Background()
 	store, err := db.Open(ctx, url, db.Options{MaxConns: 1, StatementTimeout: 3 * time.Second, IdleInTxTimeout: 7 * time.Second})
 	if err != nil {

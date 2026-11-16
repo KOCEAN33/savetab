@@ -10,8 +10,10 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"slices"
 	"time"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/db"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/config"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/fakeoidc"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
@@ -26,12 +28,32 @@ func main() {
 	}
 }
 
-func run() error {
-	dbURL, drop, err := testdb.Start()
-	if err != nil {
-		return err
+// process stands in for the test that testdb.New takes: its cleanups run when the process ends.
+type process struct{ cleanups []func() }
+
+func (p *process) Cleanup(f func()) { p.cleanups = append(p.cleanups, f) }
+func (p *process) Failed() bool     { return false }
+func (p *process) Helper()          {}
+
+// The log of a test database names its URL, password included.
+func (p *process) Logf(string, ...any) {}
+
+func (p *process) Fatalf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+	p.end()
+	os.Exit(1)
+}
+
+func (p *process) end() {
+	for _, f := range slices.Backward(p.cleanups) {
+		f()
 	}
-	defer drop()
+}
+
+func run() error {
+	var p process
+	defer p.end()
+	dbURL := testdb.New(&p, db.MigrationsHash, db.MigrateURL)
 
 	issuer := fakeoidc.New("savetab")
 	defer issuer.Close()

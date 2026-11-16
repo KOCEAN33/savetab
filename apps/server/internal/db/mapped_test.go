@@ -13,6 +13,7 @@ import (
 var nobody = uuid.MustParse("01900000-0000-7000-8000-0000000000aa")
 
 func TestAGeneratedQueryReturnsAKindedError(t *testing.T) {
+	t.Parallel()
 	store, _ := openStore(t)
 	ctx := context.Background()
 
@@ -31,6 +32,7 @@ func TestAGeneratedQueryReturnsAKindedError(t *testing.T) {
 
 // A use case reads the kind inside its closure, before InTx maps what the closure returns.
 func TestAGeneratedQueryInATransactionReturnsAKindedError(t *testing.T) {
+	t.Parallel()
 	store, _ := openStore(t)
 	ctx := context.Background()
 

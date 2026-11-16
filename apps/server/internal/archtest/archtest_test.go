@@ -1,6 +1,6 @@
 // Package archtest holds the layout rules that an import path cannot show. The import rules
 // themselves are the depguard settings in .golangci.yml.
-package archtest
+package archtest_test
 
 import (
 	"go/ast"
@@ -28,10 +28,6 @@ var (
 	topLevel    = []string{"wire", "httpserver", "jobserver", "platform", "archtest", "api", "job", "cli", "bus", "db"}
 	layers      = []string{"api", "job", "cli", "bus", "db"}
 	meaningless = []string{"util", "utils", "common", "misc", "helpers", "shared"}
-
-	// databaseCallFiles call the driver outside generated code. testdb goes at step 18 of
-	// docs/plans/server-practices.md.
-	databaseCallFiles = []string{"internal/platform/testdb/testdb.go"}
 
 	transactionFile = "internal/db/tx.go"
 
@@ -134,6 +130,7 @@ func subdirs(t *testing.T, dir string) []string {
 }
 
 func TestModuleTree(t *testing.T) {
+	t.Parallel()
 	for _, f := range sources(t) {
 		if f.under("internal") {
 			continue
@@ -148,6 +145,7 @@ func TestModuleTree(t *testing.T) {
 }
 
 func TestTopLevelPackages(t *testing.T) {
+	t.Parallel()
 	for _, name := range subdirs(t, "internal") {
 		if !slices.Contains(topLevel, name) {
 			t.Errorf("internal/%s: a directory under internal/ is one of %v", name, topLevel)
@@ -156,6 +154,7 @@ func TestTopLevelPackages(t *testing.T) {
 }
 
 func TestMeaninglessNames(t *testing.T) {
+	t.Parallel()
 	for _, f := range sources(t) {
 		for _, part := range strings.Split(f.dir(), "/") {
 			if slices.Contains(meaningless, part) {
@@ -168,6 +167,7 @@ func TestMeaninglessNames(t *testing.T) {
 // TestOneForm holds the service to the small form: each layer is one package of its own files,
 // and api may hold the generated apigen beside them.
 func TestOneForm(t *testing.T) {
+	t.Parallel()
 	for _, f := range sources(t) {
 		for _, layer := range layers {
 			if f.under("internal/"+layer) && f.dir() != "internal/"+layer && f.dir() != "internal/api/apigen" {
@@ -178,6 +178,7 @@ func TestOneForm(t *testing.T) {
 }
 
 func TestPackageClauses(t *testing.T) {
+	t.Parallel()
 	for _, f := range sources(t) {
 		if !f.under("internal") {
 			continue
@@ -190,6 +191,7 @@ func TestPackageClauses(t *testing.T) {
 }
 
 func TestInterfacesAtTheConsumer(t *testing.T) {
+	t.Parallel()
 	for _, f := range sources(t) {
 		if !f.under("internal/db") || f.test() || f.generated() {
 			continue
@@ -208,6 +210,7 @@ func TestInterfacesAtTheConsumer(t *testing.T) {
 }
 
 func TestAPITypesApart(t *testing.T) {
+	t.Parallel()
 	for _, f := range sources(t) {
 		if !f.under("internal/bus") || f.test() {
 			continue
@@ -274,6 +277,7 @@ func typed(t *testing.T) []typedFile {
 }
 
 func TestDriverUses(t *testing.T) {
+	t.Parallel()
 	for _, f := range typed(t) {
 		if !strings.HasPrefix(f.path, "internal/bus/") && !strings.HasPrefix(f.path, "internal/jobserver/") {
 			continue
@@ -320,8 +324,9 @@ func driverMethod(info *types.Info, call *ast.CallExpr) string {
 }
 
 func TestDatabaseCalls(t *testing.T) {
+	t.Parallel()
 	for _, f := range typed(t) {
-		if ast.IsGenerated(f.ast) || f.path == "internal/db/dynamic.go" || slices.Contains(databaseCallFiles, f.path) {
+		if ast.IsGenerated(f.ast) || f.path == "internal/db/dynamic.go" {
 			continue
 		}
 		ast.Inspect(f.ast, func(n ast.Node) bool {
@@ -336,6 +341,7 @@ func TestDatabaseCalls(t *testing.T) {
 }
 
 func TestTransactionCalls(t *testing.T) {
+	t.Parallel()
 	for _, f := range typed(t) {
 		if f.path == transactionFile {
 			continue

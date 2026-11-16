@@ -78,7 +78,7 @@ var noRedirects = &http.Client{CheckRedirect: func(*http.Request, []*http.Reques
 
 // send does req without following a redirect and, when it is a /v2 request, holds the answer
 // to the contract.
-func send(t *testing.T, req *http.Request) reply {
+func send(t *testing.T, s *server, req *http.Request) reply {
 	t.Helper()
 	res, err := noRedirects.Do(req)
 	if err != nil {
@@ -90,7 +90,7 @@ func send(t *testing.T, req *http.Request) reply {
 		t.Fatal(err)
 	}
 	r := reply{method: req.Method, target: req.URL.RequestURI(), status: res.StatusCode, header: res.Header, body: body}
-	if strings.HasPrefix(req.URL.String(), srv.URL+"/v2/") {
+	if strings.HasPrefix(req.URL.String(), s.URL+"/v2/") {
 		conform(t, req, r)
 	}
 	return r
@@ -98,7 +98,7 @@ func send(t *testing.T, req *http.Request) reply {
 
 // call sends a /v2 request. body is nil for none, []byte for a raw body, and anything else
 // for its JSON.
-func call(t *testing.T, method, path, token string, body any) reply {
+func call(t *testing.T, s *server, method, path, token string, body any) reply {
 	t.Helper()
 	var raw []byte
 	switch b := body.(type) {
@@ -111,7 +111,7 @@ func call(t *testing.T, method, path, token string, body any) reply {
 			t.Fatal(err)
 		}
 	}
-	req, err := http.NewRequest(method, srv.URL+path, bytes.NewReader(raw))
+	req, err := http.NewRequest(method, s.URL+path, bytes.NewReader(raw))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func call(t *testing.T, method, path, token string, body any) reply {
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	return send(t, req)
+	return send(t, s, req)
 }
 
 func conform(t *testing.T, req *http.Request, r reply) {
@@ -274,15 +274,15 @@ func authorizationPath(redirectURI, challenge, state string) string {
 
 // visit follows redirects from path the way the login window does, and returns the first
 // answer that is not a redirect or that redirects to the extension.
-func visit(t *testing.T, path string) reply {
+func visit(t *testing.T, s *server, path string) reply {
 	t.Helper()
-	target := srv.URL + path
+	target := s.URL + path
 	for range 10 {
 		req, err := http.NewRequest("GET", target, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		r := send(t, req)
+		r := send(t, s, req)
 		location := r.header.Get("Location")
 		if r.status != http.StatusFound || strings.HasPrefix(location, extensionRedirect) {
 			return r
@@ -314,11 +314,11 @@ func returned(t *testing.T, r reply) url.Values {
 
 // loginCode runs the login window as subject and returns the code the extension receives with
 // the verifier that redeems it.
-func loginCode(t *testing.T, subject string) (code, verifier string) {
+func loginCode(t *testing.T, s *server, subject string) (code, verifier string) {
 	t.Helper()
-	issuer.Set(fakeoidc.Behavior{Subject: subject})
+	s.issuer.Set(fakeoidc.Behavior{Subject: subject})
 	verifier, state := secret(t), secret(t)
-	got := returned(t, visit(t, authorizationPath(extensionRedirect, challengeOf(verifier), state)))
+	got := returned(t, visit(t, s, authorizationPath(extensionRedirect, challengeOf(verifier), state)))
 	if got.Get("state") != state || got.Get("code") == "" || got.Has("error") {
 		t.Fatalf("the login returned %v, want a code and state %q", got, state)
 	}
@@ -333,9 +333,9 @@ func refreshGrant(token string) map[string]any {
 	return map[string]any{"grant_type": "refresh_token", "refresh_token": token}
 }
 
-func createTokens(t *testing.T, body any) reply {
+func createTokens(t *testing.T, s *server, body any) reply {
 	t.Helper()
-	return call(t, "POST", "/v2/tokens", "", body)
+	return call(t, s, "POST", "/v2/tokens", "", body)
 }
 
 // member is one signed-in device of a user.
@@ -343,30 +343,30 @@ type member struct {
 	subject, user, device, access, refresh string
 }
 
-func signIn(t *testing.T, subject, deviceName string) member {
+func signIn(t *testing.T, s *server, subject, deviceName string) member {
 	t.Helper()
-	code, verifier := loginCode(t, subject)
-	got := readJSON[api.Tokens](t, must(t, "token for a login code", createTokens(t, codeGrant(code, verifier, deviceName)), http.StatusOK))
+	code, verifier := loginCode(t, s, subject)
+	got := readJSON[api.Tokens](t, must(t, "token for a login code", createTokens(t, s, codeGrant(code, verifier, deviceName)), http.StatusOK))
 	return member{subject: subject, user: got.UserId.String(), device: got.DeviceId.String(), access: got.AccessToken, refresh: got.RefreshToken}
 }
 
 // newMember signs a new user in through a subject the issuer has not seen.
-func newMember(t *testing.T) member {
+func newMember(t *testing.T, s *server) member {
 	t.Helper()
-	return signIn(t, "v2-"+secret(t), "first device")
+	return signIn(t, s, "v2-"+secret(t), "first device")
 }
 
 // another signs the same user in on another device.
-func (m member) another(t *testing.T, deviceName string) member {
+func (m member) another(t *testing.T, s *server, deviceName string) member {
 	t.Helper()
-	return signIn(t, m.subject, deviceName)
+	return signIn(t, s, m.subject, deviceName)
 }
 
 // execSQL writes a state no endpoint makes, such as an expired row.
-func execSQL(t *testing.T, query string, args ...any) int64 {
+func execSQL(t *testing.T, s *server, query string, args ...any) int64 {
 	t.Helper()
 	ctx := context.Background()
-	conn, err := pgx.Connect(ctx, dbURL)
+	conn, err := pgx.Connect(ctx, s.dbURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,11 +378,11 @@ func execSQL(t *testing.T, query string, args ...any) int64 {
 	return tag.RowsAffected()
 }
 
-func staleAccessToken(t *testing.T, deviceID string) string {
+func staleAccessToken(t *testing.T, s *server, deviceID string) string {
 	t.Helper()
 	token := secret(t)
 	hash := sha256.Sum256([]byte(token))
-	execSQL(t, `INSERT INTO sessions (token_hash, device_id, kind, expires_at) VALUES ($1, $2, 'access', now() - interval '1 minute')`, hash[:], deviceID)
+	execSQL(t, s, `INSERT INTO sessions (token_hash, device_id, kind, expires_at) VALUES ($1, $2, 'access', now() - interval '1 minute')`, hash[:], deviceID)
 	return token
 }
 

@@ -16,15 +16,17 @@ import (
 	"github.com/KOCEAN33/savetab/apps/server/internal/api"
 )
 
-func createShare(t *testing.T, m member, id string, data []byte) reply {
+func createShare(t *testing.T, s *server, m member, id string, data []byte) reply {
 	t.Helper()
-	return call(t, "POST", "/v2/shares", m.access, map[string]any{"id": id, "data": data})
+	return call(t, s, "POST", "/v2/shares", m.access, map[string]any{"id": id, "data": data})
 }
 
 func TestCreatedShareIsReadWithoutAToken(t *testing.T) {
-	m := newMember(t)
+	t.Parallel()
+	s := newServer(t)
+	m := newMember(t, s)
 	id := uuid.NewString()
-	r := createShare(t, m, id, []byte("sealed group"))
+	r := createShare(t, s, m, id, []byte("sealed group"))
 	if !wantStatus(t, "create", r, http.StatusCreated) {
 		return
 	}
@@ -32,67 +34,75 @@ func TestCreatedShareIsReadWithoutAToken(t *testing.T) {
 	if created.Id.String() != id || !created.ExpiresAt.After(time.Now()) {
 		t.Errorf("created %+v, want id %s and expires_at in the future", created, id)
 	}
-	got := readJSON[api.Share](t, must(t, "read", call(t, "GET", "/v2/shares/"+id, "", nil), http.StatusOK))
+	got := readJSON[api.Share](t, must(t, "read", call(t, s, "GET", "/v2/shares/"+id, "", nil), http.StatusOK))
 	if string(got.Data) != "sealed group" || !got.ExpiresAt.Equal(created.ExpiresAt) {
 		t.Errorf("read %q expiring %v, want %q expiring %v", got.Data, got.ExpiresAt, "sealed group", created.ExpiresAt)
 	}
 }
 
 func TestShareIDInUseIsAConflictAndStoresNoSecondShare(t *testing.T) {
-	m := newMember(t)
-	stranger := newMember(t)
+	t.Parallel()
+	s := newServer(t)
+	m := newMember(t, s)
+	stranger := newMember(t, s)
 	id := uuid.NewString()
-	must(t, "create", createShare(t, m, id, []byte("first")), http.StatusCreated)
+	must(t, "create", createShare(t, s, m, id, []byte("first")), http.StatusCreated)
 
-	wantProblem(t, "the same id again", createShare(t, m, id, []byte("second")), http.StatusConflict)
-	wantProblem(t, "the same id by another user", createShare(t, stranger, id, []byte("stranger's")), http.StatusConflict)
-	if got := readJSON[api.Share](t, must(t, "read", call(t, "GET", "/v2/shares/"+id, "", nil), http.StatusOK)); string(got.Data) != "first" {
+	wantProblem(t, "the same id again", createShare(t, s, m, id, []byte("second")), http.StatusConflict)
+	wantProblem(t, "the same id by another user", createShare(t, s, stranger, id, []byte("stranger's")), http.StatusConflict)
+	if got := readJSON[api.Share](t, must(t, "read", call(t, s, "GET", "/v2/shares/"+id, "", nil), http.StatusOK)); string(got.Data) != "first" {
 		t.Errorf("read %q, want the first share's %q", got.Data, "first")
 	}
-	wantProblem(t, "another user deletes it", call(t, "DELETE", "/v2/shares/"+id, stranger.access, nil), http.StatusNotFound)
-	wantStatus(t, "the owner deletes it", call(t, "DELETE", "/v2/shares/"+id, m.access, nil), http.StatusNoContent)
+	wantProblem(t, "another user deletes it", call(t, s, "DELETE", "/v2/shares/"+id, stranger.access, nil), http.StatusNotFound)
+	wantStatus(t, "the owner deletes it", call(t, s, "DELETE", "/v2/shares/"+id, m.access, nil), http.StatusNoContent)
 }
 
 func TestShareIsDeletedOnlyByItsOwnersDevices(t *testing.T) {
-	owner, other := newMember(t), newMember(t)
+	t.Parallel()
+	s := newServer(t)
+	owner, other := newMember(t, s), newMember(t, s)
 	id := uuid.NewString()
-	must(t, "create", createShare(t, owner, id, []byte("x")), http.StatusCreated)
+	must(t, "create", createShare(t, s, owner, id, []byte("x")), http.StatusCreated)
 
-	wantProblem(t, "another user deletes", call(t, "DELETE", "/v2/shares/"+id, other.access, nil), http.StatusNotFound)
-	wantStatus(t, "read after", call(t, "GET", "/v2/shares/"+id, "", nil), http.StatusOK)
-	wantStatus(t, "another device of the owner deletes", call(t, "DELETE", "/v2/shares/"+id, owner.another(t, "second").access, nil), http.StatusNoContent)
-	wantProblem(t, "read after delete", call(t, "GET", "/v2/shares/"+id, "", nil), http.StatusNotFound)
+	wantProblem(t, "another user deletes", call(t, s, "DELETE", "/v2/shares/"+id, other.access, nil), http.StatusNotFound)
+	wantStatus(t, "read after", call(t, s, "GET", "/v2/shares/"+id, "", nil), http.StatusOK)
+	wantStatus(t, "another device of the owner deletes", call(t, s, "DELETE", "/v2/shares/"+id, owner.another(t, s, "second").access, nil), http.StatusNoContent)
+	wantProblem(t, "read after delete", call(t, s, "GET", "/v2/shares/"+id, "", nil), http.StatusNotFound)
 }
 
 func TestExpiredShareIsNotFound(t *testing.T) {
-	m := newMember(t)
+	t.Parallel()
+	s := newServer(t)
+	m := newMember(t, s)
 	id := uuid.NewString()
-	must(t, "create", createShare(t, m, id, []byte("x")), http.StatusCreated)
-	if n := execSQL(t, `UPDATE shares SET expires_at = now() - interval '1 minute' WHERE id = $1`, id); n != 1 {
+	must(t, "create", createShare(t, s, m, id, []byte("x")), http.StatusCreated)
+	if n := execSQL(t, s, `UPDATE shares SET expires_at = now() - interval '1 minute' WHERE id = $1`, id); n != 1 {
 		t.Fatalf("expired %d shares, want 1", n)
 	}
-	wantProblem(t, "read", call(t, "GET", "/v2/shares/"+id, "", nil), http.StatusNotFound)
+	wantProblem(t, "read", call(t, s, "GET", "/v2/shares/"+id, "", nil), http.StatusNotFound)
 }
 
 func TestMalformedShareRequestsAreInvalid(t *testing.T) {
-	m := newMember(t)
+	t.Parallel()
+	s := newServer(t)
+	m := newMember(t, s)
 	for name, body := range map[string]any{
 		"no id":            map[string]any{"data": []byte("x")},
 		"id is not a uuid": map[string]any{"id": "nope", "data": []byte("x")},
 		"no data":          map[string]any{"id": uuid.NewString()},
 		"empty data":       map[string]any{"id": uuid.NewString(), "data": ""},
 	} {
-		wantProblem(t, name, call(t, "POST", "/v2/shares", m.access, body), http.StatusBadRequest)
+		wantProblem(t, name, call(t, s, "POST", "/v2/shares", m.access, body), http.StatusBadRequest)
 	}
-	wantProblem(t, "read an id that is not a uuid", call(t, "GET", "/v2/shares/nope", "", nil), http.StatusBadRequest)
-	wantProblem(t, "delete an id that is not a uuid", call(t, "DELETE", "/v2/shares/nope", m.access, nil), http.StatusBadRequest)
-	wantProblem(t, "read an unknown share", call(t, "GET", "/v2/shares/"+uuid.NewString(), "", nil), http.StatusNotFound)
-	wantProblem(t, "delete an unknown share", call(t, "DELETE", "/v2/shares/"+uuid.NewString(), m.access, nil), http.StatusNotFound)
+	wantProblem(t, "read an id that is not a uuid", call(t, s, "GET", "/v2/shares/nope", "", nil), http.StatusBadRequest)
+	wantProblem(t, "delete an id that is not a uuid", call(t, s, "DELETE", "/v2/shares/nope", m.access, nil), http.StatusBadRequest)
+	wantProblem(t, "read an unknown share", call(t, s, "GET", "/v2/shares/"+uuid.NewString(), "", nil), http.StatusNotFound)
+	wantProblem(t, "delete an unknown share", call(t, s, "DELETE", "/v2/shares/"+uuid.NewString(), m.access, nil), http.StatusNotFound)
 }
 
-func viewShare(t *testing.T, id string) reply {
+func viewShare(t *testing.T, s *server, id string) reply {
 	t.Helper()
-	return call(t, "GET", "/v2/shares/"+id+"/view", "", nil)
+	return call(t, s, "GET", "/v2/shares/"+id+"/view", "", nil)
 }
 
 // cspDirectives splits a Content-Security-Policy into its directives, name to sources.
@@ -121,12 +131,14 @@ func inlineHash(text string) string {
 }
 
 func TestShareViewerIsOnePageForEveryShareWithoutAToken(t *testing.T) {
-	m := newMember(t)
+	t.Parallel()
+	s := newServer(t)
+	m := newMember(t, s)
 	stored := uuid.NewString()
-	must(t, "create", createShare(t, m, stored, []byte("sealed group")), http.StatusCreated)
+	must(t, "create", createShare(t, s, m, stored, []byte("sealed group")), http.StatusCreated)
 
-	first := must(t, "view a stored share", viewShare(t, stored), http.StatusOK)
-	second := must(t, "view an id no share has", viewShare(t, uuid.NewString()), http.StatusOK)
+	first := must(t, "view a stored share", viewShare(t, s, stored), http.StatusOK)
+	second := must(t, "view an id no share has", viewShare(t, s, uuid.NewString()), http.StatusOK)
 	for _, r := range []reply{first, second} {
 		if got := mediaType(r.header); got != "text/html" {
 			t.Errorf("%s: Content-Type %q, want text/html", r, r.header.Get("Content-Type"))
@@ -141,7 +153,9 @@ func TestShareViewerIsOnePageForEveryShareWithoutAToken(t *testing.T) {
 }
 
 func TestShareViewerHeaders(t *testing.T) {
-	r := must(t, "view", viewShare(t, uuid.NewString()), http.StatusOK)
+	t.Parallel()
+	s := newServer(t)
+	r := must(t, "view", viewShare(t, s, uuid.NewString()), http.StatusOK)
 	if got := r.header.Get("Referrer-Policy"); got != "no-referrer" {
 		t.Errorf("Referrer-Policy %q, want no-referrer", got)
 	}
@@ -154,7 +168,9 @@ func TestShareViewerHeaders(t *testing.T) {
 }
 
 func TestShareViewerPolicyAdmitsOnlyItsInlineStyleAndScript(t *testing.T) {
-	r := must(t, "view", viewShare(t, uuid.NewString()), http.StatusOK)
+	t.Parallel()
+	s := newServer(t)
+	r := must(t, "view", viewShare(t, s, uuid.NewString()), http.StatusOK)
 	policy := r.header.Get("Content-Security-Policy")
 	csp := cspDirectives(policy)
 	body := string(r.body)
@@ -199,11 +215,15 @@ func TestShareViewerPolicyAdmitsOnlyItsInlineStyleAndScript(t *testing.T) {
 }
 
 func TestShareViewerOfAnIDThatIsNotAUUIDIsInvalid(t *testing.T) {
-	wantProblem(t, "view", viewShare(t, "nope"), http.StatusBadRequest)
+	t.Parallel()
+	s := newServer(t)
+	wantProblem(t, "view", viewShare(t, s, "nope"), http.StatusBadRequest)
 }
 
 func TestOldShareViewerPathsAreGone(t *testing.T) {
+	t.Parallel()
+	s := newServer(t)
 	for _, path := range []string{"/s/" + uuid.NewString(), "/s/assets/share.js"} {
-		wantProblem(t, path, call(t, "GET", path, "", nil), http.StatusNotFound)
+		wantProblem(t, path, call(t, s, "GET", path, "", nil), http.StatusNotFound)
 	}
 }

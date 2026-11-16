@@ -13,6 +13,7 @@ require (
 	github.com/lmittmann/tint v1.2.1
 	github.com/oapi-codegen/gin-middleware v1.2.1
 	github.com/oapi-codegen/runtime v1.9.0
+	github.com/peterldowns/pgtestdb v0.1.1
 	golang.org/x/oauth2 v0.38.0
 	golang.org/x/tools v0.52.0
 )

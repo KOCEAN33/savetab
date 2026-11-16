@@ -31,15 +31,20 @@ DATABASE_URL_FILE=/path/to/url LISTEN_ADDR=:8080 OIDC_ISSUER=https://... go run 
 
 ## Test
 
-Tests run against a real Postgres. Each run creates a database `savetab_test_<random>` on the server that `TEST_DATABASE_URL` names and drops it at the end, so the role needs `CREATEDB`.
+Tests run against a real Postgres, the server that `TEST_DATABASE_URL` names. Each test gets a database of its own from pgtestdb (`internal/platform/testdb`): a clone of a template that the migrations filled, dropped when the test passes. The role needs `CREATEDB`. A failed test keeps its database and logs its URL.
 
-`pnpm test` calls `scripts/test.sh`. Without `TEST_DATABASE_URL`, the script uses the homelab dev cluster `pg-dev.lab.hiriri.com` as role `agent` acting as `savetab`, which needs the tailnet and the `proxmox-talos-lab-op` keychain token. CI sets `TEST_DATABASE_URL` to its Postgres service container.
+`pnpm test` calls `scripts/test.sh`, which stops without `TEST_DATABASE_URL`. The variable names a Postgres the tests may fill, such as a local container, never a shared database. CI sets it to its Postgres service container.
+
+```bash
+docker run -d --name savetab-test-pg -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5432:5432 postgres
+export TEST_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable'
+```
 
 `pnpm check` runs `go vet`, then `golangci-lint` with `.golangci.yml`, so it needs golangci-lint v2 on the PATH (`brew install golangci-lint`). It then runs `scripts/check-sql.sh`, which needs sqlc and SQLFluff (`brew install sqlc`, `uv tool install sqlfluff`): `sqlc diff` fails when `internal/db/queries.sql` and the generated files disagree, so run `sqlc generate` after a query change. Last it runs Squawk with `.squawk.toml` on `internal/db/migrations/`, so it needs `squawk` on the PATH, a binary from the releases of `sbdchd/squawk`. A migration file after `0004` that holds DDL starts with `SET LOCAL lock_timeout` and `SET LOCAL statement_timeout`, the lock timeout the lower. The runner applies the pending files in one transaction, so `CREATE INDEX CONCURRENTLY` cannot run in one. Then it runs `scripts/check-api.sh` on the `/v2` contract `api/openapi.yaml`: `go generate` must leave `internal/api/api.gen.go` as it is, so run `go generate ./...` after a contract change. Spectral lints the contract with `api/.spectral.yaml`, and `oasdiff breaking` compares it with the contract on `origin/main`, so it needs `oasdiff` on the PATH (`brew install oasdiff`). CI installs the version `.github/workflows/ci.yml` pins.
 
 ## Server for the extension's e2e tests
 
-`scripts/e2e-server.sh` builds and runs `cmd/savetab-e2e`: the API on a free local port, on a `savetab_test_<random>` database of its own, with an OIDC issuer it runs itself (`internal/platform/fakeoidc`) that logs every visitor in as one user. It prints its URL as the first line of stdout and drops the database on SIGTERM. `AUTH_REDIRECT_URIS` sets the redirect URIs a login may end at, which the script passes to the binary as arguments. It finds the database the way `scripts/test.sh` does, through `scripts/test-db.sh`.
+`scripts/e2e-server.sh` builds and runs `cmd/savetab-e2e`: the API on a free local port, on a test database of its own, with an OIDC issuer it runs itself (`internal/platform/fakeoidc`) that logs every visitor in as one user. It prints its URL as the first line of stdout and drops the database on SIGTERM. `AUTH_REDIRECT_URIS` sets the redirect URIs a login may end at, which the script passes to the binary as arguments. It needs `TEST_DATABASE_URL`, as `scripts/test.sh` does.
 
 ## Deployment
 

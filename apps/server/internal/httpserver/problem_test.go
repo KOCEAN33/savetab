@@ -1,4 +1,4 @@
-package httpserver
+package httpserver_test
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/httpserver"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 )
 
@@ -30,7 +31,7 @@ type problemAnswer struct {
 
 // problemServer serves register's routes behind the whole engine.
 func problemServer(deadline time.Duration, register func(gin.IRouter)) http.Handler {
-	return New(Config{RequestDeadline: deadline, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{}, register).Handler
+	return httpserver.New(httpserver.Config{RequestDeadline: deadline, ReadyPingTimeout: time.Second}, slog.New(slog.DiscardHandler), pinger{}, register).Handler
 }
 
 func readProblem(t *testing.T, what string, w *httptest.ResponseRecorder, status int, typ string) problemAnswer {
@@ -55,6 +56,7 @@ func readProblem(t *testing.T, what string, w *httptest.ResponseRecorder, status
 }
 
 func TestProblemOfEachKind(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		kind   errs.Kind
 		status int
@@ -75,7 +77,7 @@ func TestProblemOfEachKind(t *testing.T) {
 	for _, tc := range cases {
 		handler := problemServer(time.Second, func(r gin.IRouter) {
 			r.GET("/v2/things", func(c *gin.Context) {
-				Problem(c, errs.Wrap(tc.kind, "get thing", "the caller may read this", errors.New("the cause")))
+				httpserver.Problem(c, errs.Wrap(tc.kind, "get thing", "the caller may read this", errors.New("the cause")))
 			})
 		})
 		w := httptest.NewRecorder()
@@ -91,8 +93,9 @@ func TestProblemOfEachKind(t *testing.T) {
 }
 
 func TestProblemOfAnErrorWithoutAKindIsInternal(t *testing.T) {
+	t.Parallel()
 	handler := problemServer(time.Second, func(r gin.IRouter) {
-		r.GET("/v2/things", func(c *gin.Context) { Problem(c, errors.New("a secret of the service")) })
+		r.GET("/v2/things", func(c *gin.Context) { httpserver.Problem(c, errors.New("a secret of the service")) })
 	})
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v2/things", nil))
@@ -103,8 +106,9 @@ func TestProblemOfAnErrorWithoutAKindIsInternal(t *testing.T) {
 }
 
 func TestInvalidProblemListsTheFailure(t *testing.T) {
+	t.Parallel()
 	handler := problemServer(time.Second, func(r gin.IRouter) {
-		r.GET("/v2/things", func(c *gin.Context) { InvalidProblem(c, errors.New("page_size is below 0\nSchema: {...}")) })
+		r.GET("/v2/things", func(c *gin.Context) { httpserver.InvalidProblem(c, errors.New("page_size is below 0\nSchema: {...}")) })
 	})
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v2/things", nil))
@@ -115,6 +119,7 @@ func TestInvalidProblemListsTheFailure(t *testing.T) {
 }
 
 func TestProblemsBeforeAnyHandler(t *testing.T) {
+	t.Parallel()
 	handler := problemServer(time.Second, func(r gin.IRouter) {
 		r.GET("/v2/things", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 	})
@@ -135,6 +140,7 @@ func TestProblemsBeforeAnyHandler(t *testing.T) {
 }
 
 func TestPanicAnswersTheInternalProblem(t *testing.T) {
+	t.Parallel()
 	handler := problemServer(time.Second, func(r gin.IRouter) {
 		r.GET("/v2/things", func(*gin.Context) { panic("a secret of the service") })
 	})
@@ -147,9 +153,10 @@ func TestPanicAnswersTheInternalProblem(t *testing.T) {
 }
 
 func TestBodyLimit(t *testing.T) {
+	t.Parallel()
 	var read string
 	handler := problemServer(time.Second, func(r gin.IRouter) {
-		limit := BodyLimit(map[string]int64{"PUT /v2/things/:id": 8})
+		limit := httpserver.BodyLimit(map[string]int64{"PUT /v2/things/:id": 8})
 		put := func(c *gin.Context) {
 			body, _ := io.ReadAll(c.Request.Body)
 			read = string(body)
@@ -180,6 +187,7 @@ func TestBodyLimit(t *testing.T) {
 
 // A generated handler gets the gin context as its context, so the deadline has to reach it there.
 func TestRequestDeadlineReachesTheGinContext(t *testing.T) {
+	t.Parallel()
 	ended := make(chan error, 1)
 	handler := problemServer(20*time.Millisecond, func(r gin.IRouter) {
 		r.GET("/v2/slow", func(c *gin.Context) {
@@ -199,6 +207,7 @@ func TestRequestDeadlineReachesTheGinContext(t *testing.T) {
 }
 
 func TestPreflightOfAV2RouteIsAnswered(t *testing.T) {
+	t.Parallel()
 	handler := problemServer(time.Second, func(r gin.IRouter) {
 		r.POST("/v2/things", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 	})

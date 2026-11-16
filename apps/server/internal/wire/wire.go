@@ -9,11 +9,9 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -124,7 +122,7 @@ func run(ctx context.Context, cfg config.Config, opts Options, logger *slog.Logg
 		RequestDeadline: cfg.RequestDeadline, ReadyPingTimeout: cfg.ReadyPingTimeout, HTTPDrainTimeout: cfg.HTTPDrainTimeout,
 		ShutdownBudget: cfg.ShutdownBudget, LogFormat: cfg.LogFormat, LogLevel: cfg.LogLevel,
 	})...)
-	return serve(ctx, stop, srv, l, cfg.HTTPDrainTimeout)
+	return srv.ServeUntil(ctx, stop, l, cfg.HTTPDrainTimeout)
 }
 
 // NewServer builds the HTTP server over the use cases, as api/openapi.yaml declares it. A /v2
@@ -156,28 +154,4 @@ func NewServer(cfg httpserver.Config, logger *slog.Logger, b *bus.Bus, login *ap
 			ErrorHandler: func(c *gin.Context, err error, _ int) { httpserver.InvalidProblem(c, err) },
 		})
 	}), nil
-}
-
-// serve serves on l until ctx ends, then calls stop, so a second signal ends the process, and
-// gives running requests the drain timeout before it cancels them.
-func serve(ctx context.Context, stop func(), srv *httpserver.Server, l net.Listener, drain time.Duration) error {
-	failed := make(chan error, 1)
-	go func() { failed <- srv.Serve(l) }()
-	select {
-	case err := <-failed:
-		return err
-	case <-ctx.Done():
-	}
-	stop()
-	drained, cancel := context.WithTimeout(context.Background(), drain)
-	defer cancel()
-	err := srv.Shutdown(drained)
-	if errors.Is(err, context.DeadlineExceeded) {
-		// Closing the connections cancels the contexts of the requests still running.
-		err = srv.Close()
-	}
-	if errors.Is(err, http.ErrServerClosed) {
-		return nil
-	}
-	return err
 }

@@ -2,9 +2,12 @@ package db
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"io/fs"
 	"sort"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -41,4 +44,35 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 		return nil
 	})
+}
+
+// MigrationsHash changes when the name or the text of an embedded migration does.
+func MigrationsHash() (string, error) {
+	names, err := fs.Glob(migrations, "migrations/*.sql")
+	if err != nil {
+		return "", err
+	}
+	sort.Strings(names)
+	h := sha256.New()
+	for _, name := range names {
+		sql, err := migrations.ReadFile(name)
+		if err != nil {
+			return "", err
+		}
+		h.Write([]byte(name))
+		h.Write([]byte{0})
+		h.Write(sql)
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// MigrateURL applies the embedded migrations to the database at url, which no server is using.
+func MigrateURL(ctx context.Context, url string) error {
+	store, err := Open(ctx, url, Options{MaxConns: 1, StatementTimeout: time.Minute, IdleInTxTimeout: time.Minute})
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	return store.Migrate(ctx)
 }

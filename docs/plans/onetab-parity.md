@@ -230,7 +230,7 @@ HTTP API: `apps/server/api/openapi.yaml` is the contract, JSON under `/v2` with 
 - Login. The server talks to one issuer, set by `OIDC_ISSUER` *(savetab choice)*. Anyone the issuer logs in gets an account. `GET /v2/authorizations` is the URL the extension opens in its login window, with the S256 challenge of a verifier the extension keeps. The server redirects to the issuer with its own state, nonce, and PKCE pair, and a state older than 10 minutes counts as unknown.
 - An access token lives 1 hour, a refresh token 90 days and is replaced on each use.
 
-Steps run in this order. Each step is done when its check passes plus the five commands in `CLAUDE.md`. `pnpm test` and `pnpm check` include the server through `apps/server/package.json`. Server tests run against a real Postgres named by `TEST_DATABASE_URL`, in a database each run creates and drops (`apps/server/README.md`).
+Steps run in this order. Each step is done when its check passes plus the five commands in `CLAUDE.md`. `pnpm test` and `pnpm check` include the server through `apps/server/package.json`. Server tests run against a real Postgres named by `TEST_DATABASE_URL`, in a database each test creates and drops (`apps/server/README.md`).
 
 1. **Server skeleton and op log.** `apps/server`: Go module, embedded SQL migrations, the `users`, `devices`, `sessions`, and `ops` tables, bearer-token auth against `sessions`, `POST` and `GET /v2/ops`, `GET /livez` and `GET /readyz`.
    - Check: Go tests show a push read back in `seq` order by a second device, a repeated push stored once, one user unable to read another's ops, a request without a valid token answered 401, and concurrent pushes giving gapless `seq`.

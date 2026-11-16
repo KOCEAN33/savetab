@@ -1,4 +1,4 @@
-package httpserver
+package httpserver_test
 
 import (
 	"bytes"
@@ -14,21 +14,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/KOCEAN33/savetab/apps/server/internal/httpserver"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/errs"
 	"github.com/KOCEAN33/savetab/apps/server/internal/platform/logline"
 )
 
 var traceIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
-// logged returns an engine whose first middleware is requestLine, and the buffer its lines go to.
-func logged() (*gin.Engine, *bytes.Buffer) {
+// logged returns the whole engine with register's routes, and the buffer its lines go to.
+func logged(register func(gin.IRouter)) (http.Handler, *bytes.Buffer) {
 	var out bytes.Buffer
 	logger := logline.NewLogger(&out, logline.FormatJSON, slog.LevelInfo, logline.Process{
 		Service: "savetab-server", Version: "1.2.3", Commit: "abc123", Instance: "pod-1",
 	})
-	engine := gin.New()
-	engine.Use(requestLine(logger))
-	return engine, &out
+	return httpserver.New(serverConfig, logger, pinger{}, register).Handler, &out
 }
 
 // lines parses out as one JSON object per line.
@@ -49,7 +48,7 @@ func lines(t *testing.T, out *bytes.Buffer) []map[string]any {
 }
 
 // oneLine serves r and returns the answer and the single line the request wrote.
-func oneLine(t *testing.T, engine *gin.Engine, out *bytes.Buffer, r *http.Request) (*httptest.ResponseRecorder, map[string]any) {
+func oneLine(t *testing.T, engine http.Handler, out *bytes.Buffer, r *http.Request) (*httptest.ResponseRecorder, map[string]any) {
 	t.Helper()
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, r)
@@ -61,10 +60,12 @@ func oneLine(t *testing.T, engine *gin.Engine, out *bytes.Buffer, r *http.Reques
 }
 
 func TestRequestLineCarriesTheRequestFields(t *testing.T) {
-	engine, out := logged()
-	engine.GET("/users/:id", func(c *gin.Context) {
-		logline.SetUser(c.Request.Context(), "user-7")
-		c.Status(http.StatusCreated)
+	t.Parallel()
+	engine, out := logged(func(r gin.IRouter) {
+		r.GET("/users/:id", func(c *gin.Context) {
+			logline.SetUser(c.Request.Context(), "user-7")
+			c.Status(http.StatusCreated)
+		})
 	})
 	_, line := oneLine(t, engine, out, httptest.NewRequest(http.MethodGet, "/users/42", nil))
 	for key, want := range map[string]any{
@@ -96,10 +97,12 @@ func TestRequestLineCarriesTheRequestFields(t *testing.T) {
 }
 
 func TestRequestLineOfAHandlerThatFails(t *testing.T) {
-	engine, out := logged()
-	engine.GET("/down", func(c *gin.Context) {
-		logline.SetError(c.Request.Context(), errs.Wrap(errs.Unavailable, "list devices", "", errors.New("connection refused")))
-		c.Status(http.StatusServiceUnavailable)
+	t.Parallel()
+	engine, out := logged(func(r gin.IRouter) {
+		r.GET("/down", func(c *gin.Context) {
+			logline.SetError(c.Request.Context(), errs.Wrap(errs.Unavailable, "list devices", "", errors.New("connection refused")))
+			c.Status(http.StatusServiceUnavailable)
+		})
 	})
 	_, line := oneLine(t, engine, out, httptest.NewRequest(http.MethodGet, "/down", nil))
 	if line["outcome"] != "error" || line["error.type"] != "unavailable" || line["level"] != "ERROR" {
@@ -111,8 +114,10 @@ func TestRequestLineOfAHandlerThatFails(t *testing.T) {
 }
 
 func TestRequestLineOfAHandlerThatPanics(t *testing.T) {
-	engine, out := logged()
-	engine.GET("/boom", func(*gin.Context) { panic("boom at the handler") })
+	t.Parallel()
+	engine, out := logged(func(r gin.IRouter) {
+		r.GET("/boom", func(*gin.Context) { panic("boom at the handler") })
+	})
 	w, line := oneLine(t, engine, out, httptest.NewRequest(http.MethodGet, "/boom", nil))
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", w.Code)
@@ -137,9 +142,10 @@ func (brokenHandler) Enabled(context.Context, slog.Level) bool  { return true }
 func (brokenHandler) Handle(context.Context, slog.Record) error { panic("the log sink is gone") }
 
 func TestAFailingLineLeavesTheAnswer(t *testing.T) {
-	engine := gin.New()
-	engine.Use(requestLine(slog.New(brokenHandler{slog.DiscardHandler})))
-	engine.GET("/ok", func(c *gin.Context) { c.String(http.StatusOK, "fine") })
+	t.Parallel()
+	engine := httpserver.New(serverConfig, slog.New(brokenHandler{slog.DiscardHandler}), pinger{}, func(r gin.IRouter) {
+		r.GET("/ok", func(c *gin.Context) { c.String(http.StatusOK, "fine") })
+	}).Handler
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/ok", nil))
 	if w.Code != http.StatusOK || w.Body.String() != "fine" {
@@ -148,6 +154,7 @@ func TestAFailingLineLeavesTheAnswer(t *testing.T) {
 }
 
 func TestRequestLineLevelAndOutcome(t *testing.T) {
+	t.Parallel()
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
 	cases := []struct {
@@ -168,8 +175,10 @@ func TestRequestLineLevelAndOutcome(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			engine, out := logged()
-			engine.GET("/x", tc.handler)
+			t.Parallel()
+			engine, out := logged(func(r gin.IRouter) {
+				r.GET("/x", tc.handler)
+			})
 			_, line := oneLine(t, engine, out, httptest.NewRequest(http.MethodGet, "/x", nil).WithContext(tc.ctx))
 			if line["level"] != tc.level || line["outcome"] != tc.outcome {
 				t.Errorf("level %v, outcome %v, want %s, %s", line["level"], line["outcome"], tc.level, tc.outcome)
@@ -177,8 +186,10 @@ func TestRequestLineLevelAndOutcome(t *testing.T) {
 		})
 	}
 	t.Run("a recovered failure keeps its error fields", func(t *testing.T) {
-		engine, out := logged()
-		engine.GET("/x", cases[3].handler)
+		t.Parallel()
+		engine, out := logged(func(r gin.IRouter) {
+			r.GET("/x", cases[3].handler)
+		})
 		_, line := oneLine(t, engine, out, httptest.NewRequest(http.MethodGet, "/x", nil))
 		if line["error.type"] != "internal" || line["error.message"] != "the issuer refused the code" {
 			t.Errorf("error.type %v, error.message %v, want internal and the error's text", line["error.type"], line["error.message"])
@@ -187,6 +198,7 @@ func TestRequestLineLevelAndOutcome(t *testing.T) {
 }
 
 func TestTraceIDComesFromTraceparentAndGoesOnOutboundCalls(t *testing.T) {
+	t.Parallel()
 	const sent = "4bf92f3577b34da6a3ce929d0e0e4736"
 	cases := []struct {
 		name, traceparent string
@@ -200,24 +212,26 @@ func TestTraceIDComesFromTraceparentAndGoesOnOutboundCalls(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var received string
 			callee := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { received = r.Header.Get("traceparent") }))
 			defer callee.Close()
 			client := &http.Client{Transport: logline.Transport(http.DefaultTransport, "oidc")}
 
-			engine, out := logged()
-			engine.GET("/x", func(c *gin.Context) {
-				req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, callee.URL, nil)
-				if err != nil {
-					t.Error(err)
-					return
-				}
-				resp, err := client.Do(req)
-				if err != nil {
-					t.Error(err)
-					return
-				}
-				resp.Body.Close()
+			engine, out := logged(func(r gin.IRouter) {
+				r.GET("/x", func(c *gin.Context) {
+					req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, callee.URL, nil)
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					resp, err := client.Do(req)
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					resp.Body.Close()
+				})
 			})
 			r := httptest.NewRequest(http.MethodGet, "/x", nil)
 			if tc.traceparent != "" {
@@ -245,8 +259,10 @@ func TestTraceIDComesFromTraceparentAndGoesOnOutboundCalls(t *testing.T) {
 }
 
 func TestRequestLineHoldsNoCredentialAndNoBody(t *testing.T) {
-	engine, out := logged()
-	engine.POST("/v2/ops", func(c *gin.Context) { c.Status(http.StatusOK) })
+	t.Parallel()
+	engine, out := logged(func(r gin.IRouter) {
+		r.POST("/v2/ops", func(c *gin.Context) { c.Status(http.StatusOK) })
+	})
 	r := httptest.NewRequest(http.MethodPost, "/v2/ops?code=qu3ry-c0de", strings.NewReader(`{"data":"b0dy-payload"}`))
 	r.Header.Set("Authorization", "Bearer t0ken-value")
 	r.Header.Set("Cookie", "session=c00kie-value")
@@ -259,7 +275,8 @@ func TestRequestLineHoldsNoCredentialAndNoBody(t *testing.T) {
 }
 
 func TestAnUnmatchedRouteLogsNoPath(t *testing.T) {
-	engine, out := logged()
+	t.Parallel()
+	engine, out := logged(func(gin.IRouter) {})
 	_, line := oneLine(t, engine, out, httptest.NewRequest(http.MethodGet, "/no/such/place", nil))
 	if line["http.route"] != "" || line["outcome"] != "client_error" {
 		t.Errorf("http.route %q, outcome %v, want an empty route and client_error", line["http.route"], line["outcome"])

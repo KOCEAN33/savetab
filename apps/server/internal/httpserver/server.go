@@ -4,6 +4,7 @@ package httpserver
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -65,6 +66,30 @@ func New(cfg Config, logger *slog.Logger, db Pinger, register func(gin.IRouter))
 func (s *Server) Serve(l net.Listener) error {
 	s.listening.Store(true)
 	return s.Server.Serve(l)
+}
+
+// ServeUntil serves on l until ctx ends, then calls stop, so a second signal ends the process,
+// and gives running requests the drain timeout before it cancels them.
+func (s *Server) ServeUntil(ctx context.Context, stop func(), l net.Listener, drain time.Duration) error {
+	failed := make(chan error, 1)
+	go func() { failed <- s.Serve(l) }()
+	select {
+	case err := <-failed:
+		return err
+	case <-ctx.Done():
+	}
+	stop()
+	drained, cancel := context.WithTimeout(context.Background(), drain)
+	defer cancel()
+	err := s.Shutdown(drained)
+	if errors.Is(err, context.DeadlineExceeded) {
+		// Closing the connections cancels the contexts of the requests still running.
+		err = s.Close()
+	}
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
 }
 
 func (s *Server) ready(db Pinger, timeout time.Duration) gin.HandlerFunc {

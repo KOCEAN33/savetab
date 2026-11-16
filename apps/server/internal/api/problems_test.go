@@ -24,13 +24,15 @@ func fillPath(path string) string {
 }
 
 func TestMalformedJSONIsAnInvalidProblemListingItsErrors(t *testing.T) {
-	m := newMember(t)
+	t.Parallel()
+	s := newServer(t)
+	m := newMember(t, s)
 	for name, c := range map[string]struct{ method, path, token, body string }{
 		"POST /v2/ops":    {"POST", "/v2/ops", m.access, `{"ops": [`},
 		"PUT /v2/key":     {"PUT", "/v2/key", m.access, "not json"},
 		"POST /v2/tokens": {"POST", "/v2/tokens", "", "{"},
 	} {
-		p := wantProblem(t, name, call(t, c.method, c.path, c.token, []byte(c.body)), http.StatusBadRequest)
+		p := wantProblem(t, name, call(t, s, c.method, c.path, c.token, []byte(c.body)), http.StatusBadRequest)
 		if p.Errors == nil || len(*p.Errors) == 0 {
 			t.Errorf("%s: problem without errors, want each failure listed", name)
 			continue
@@ -44,26 +46,32 @@ func TestMalformedJSONIsAnInvalidProblemListingItsErrors(t *testing.T) {
 }
 
 func TestUnknownRouteUnderV2IsANotFoundProblem(t *testing.T) {
-	m := newMember(t)
+	t.Parallel()
+	s := newServer(t)
+	m := newMember(t, s)
 	for _, path := range []string{"/v2/nope", "/v2/ops/extra", "/v2/"} {
-		wantProblem(t, "GET "+path, call(t, "GET", path, m.access, nil), http.StatusNotFound)
+		wantProblem(t, "GET "+path, call(t, s, "GET", path, m.access, nil), http.StatusNotFound)
 	}
 }
 
 func TestWrongMethodOnAKnownPathIsAMethodNotAllowedProblem(t *testing.T) {
-	m := newMember(t)
+	t.Parallel()
+	s := newServer(t)
+	m := newMember(t, s)
 	for _, route := range []string{"DELETE /v2/ops", "POST /v2/key", "PUT /v2/devices", "GET /v2/tokens", "POST /v2/shares/" + uuid.NewString()} {
 		method, path, _ := strings.Cut(route, " ")
-		wantProblem(t, route, call(t, method, path, m.access, nil), http.StatusMethodNotAllowed)
+		wantProblem(t, route, call(t, s, method, path, m.access, nil), http.StatusMethodNotAllowed)
 	}
 }
 
 func TestBodyOneByteOverItsOperationsLimitIsAContentTooLargeProblem(t *testing.T) {
+	t.Parallel()
+	s := newServer(t)
 	doc, err := contract()
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := newMember(t)
+	m := newMember(t, s)
 	tested := 0
 	for path, item := range doc.Paths.Map() {
 		for method, op := range item.Operations() {
@@ -72,7 +80,7 @@ func TestBodyOneByteOverItsOperationsLimitIsAContentTooLargeProblem(t *testing.T
 				continue
 			}
 			tested++
-			r := call(t, method, fillPath(path), m.access, padTo(t, map[string]any{}, limit+1))
+			r := call(t, s, method, fillPath(path), m.access, padTo(t, map[string]any{}, limit+1))
 			wantProblem(t, method+" "+path+" with a body of its limit plus one byte", r, http.StatusRequestEntityTooLarge)
 		}
 	}
@@ -82,6 +90,8 @@ func TestBodyOneByteOverItsOperationsLimitIsAContentTooLargeProblem(t *testing.T
 }
 
 func TestBodyExactlyAtItsLimitIsNotRefusedForItsSize(t *testing.T) {
+	t.Parallel()
+	s := newServer(t)
 	doc, err := contract()
 	if err != nil {
 		t.Fatal(err)
@@ -95,22 +105,24 @@ func TestBodyExactlyAtItsLimitIsNotRefusedForItsSize(t *testing.T) {
 		t.Fatal("POST /v2/tokens has no x-body-limit-bytes")
 	}
 
-	m := newMember(t)
+	m := newMember(t, s)
 	wrapped := sealedBytes(1024, 'k')
-	wantStatus(t, "a valid key padded to the limit", call(t, "PUT", "/v2/key", m.access, padTo(t, api.Key{Data: wrapped}, keyLimit)), http.StatusNoContent)
-	if got := readKey(t, m); string(got) != string(wrapped) {
+	wantStatus(t, "a valid key padded to the limit", call(t, s, "PUT", "/v2/key", m.access, padTo(t, api.Key{Data: wrapped}, keyLimit)), http.StatusNoContent)
+	if got := readKey(t, s, m); string(got) != string(wrapped) {
 		t.Errorf("read a key of %d bytes, want the 1024 stored", len(got))
 	}
 	wantProblem(t, "a token request without its refresh_token padded to the limit",
-		call(t, "POST", "/v2/tokens", "", padTo(t, map[string]any{"grant_type": "refresh_token"}, tokensLimit)), http.StatusBadRequest)
+		call(t, s, "POST", "/v2/tokens", "", padTo(t, map[string]any{"grant_type": "refresh_token"}, tokensLimit)), http.StatusBadRequest)
 }
 
 func TestBearerOperationsRefuseAMissingGarbageExpiredOrRefreshToken(t *testing.T) {
+	t.Parallel()
+	s := newServer(t)
 	doc, err := contract()
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := newMember(t)
+	m := newMember(t, s)
 	bodies := map[string]any{
 		"pushOps":           map[string]any{"ops": []opIn{{uuid.NewString(), []byte("x")}}},
 		"putKey":            api.Key{Data: []byte("k")},
@@ -122,7 +134,7 @@ func TestBearerOperationsRefuseAMissingGarbageExpiredOrRefreshToken(t *testing.T
 	tokens := map[string]string{
 		"no token":             "",
 		"garbage token":        "garbage",
-		"expired access token": staleAccessToken(t, m.device),
+		"expired access token": staleAccessToken(t, s, m.device),
 		"refresh token":        m.refresh,
 	}
 	tested := 0
@@ -140,25 +152,27 @@ func TestBearerOperationsRefuseAMissingGarbageExpiredOrRefreshToken(t *testing.T
 			}
 			tested++
 			for name, token := range tokens {
-				wantProblem(t, name+", "+method+" "+path, call(t, method, fillPath(path), token, body), http.StatusUnauthorized)
+				wantProblem(t, name+", "+method+" "+path, call(t, s, method, fillPath(path), token, body), http.StatusUnauthorized)
 			}
 		}
 	}
 	if tested == 0 {
 		t.Fatal("no operation of the contract takes a bearer token")
 	}
-	if got := listOps(t, m, "").Ops; len(got) != 0 {
+	if got := listOps(t, s, m, "").Ops; len(got) != 0 {
 		t.Errorf("refused pushes stored %d ops", len(got))
 	}
-	wantProblem(t, "the key after refused stores", call(t, "GET", "/v2/key", m.access, nil), http.StatusNotFound)
-	wantProblem(t, "the snapshot after refused stores", call(t, "GET", "/v2/snapshot", m.access, nil), http.StatusNotFound)
-	if got := listPairingIDs(t, m); len(got) != 0 {
+	wantProblem(t, "the key after refused stores", call(t, s, "GET", "/v2/key", m.access, nil), http.StatusNotFound)
+	wantProblem(t, "the snapshot after refused stores", call(t, s, "GET", "/v2/snapshot", m.access, nil), http.StatusNotFound)
+	if got := listPairingIDs(t, s, m); len(got) != 0 {
 		t.Errorf("refused requests opened pairings %v", got)
 	}
 }
 
 func TestEveryTimeIsAnRFC3339StringInUTC(t *testing.T) {
-	m := newMember(t)
+	t.Parallel()
+	s := newServer(t)
+	m := newMember(t, s)
 	type times map[string]json.RawMessage
 	check := func(what string, r reply, keys ...string) {
 		t.Helper()
@@ -183,15 +197,15 @@ func TestEveryTimeIsAnRFC3339StringInUTC(t *testing.T) {
 		return reply{body: items[0]}
 	}
 
-	check("push", must(t, "push", pushOps(t, m, opIn{uuid.NewString(), []byte("x")}), http.StatusOK), "server_time")
-	listed := must(t, "list ops", call(t, "GET", "/v2/ops", m.access, nil), http.StatusOK)
+	check("push", must(t, "push", pushOps(t, s, m, opIn{uuid.NewString(), []byte("x")}), http.StatusOK), "server_time")
+	listed := must(t, "list ops", call(t, s, "GET", "/v2/ops", m.access, nil), http.StatusOK)
 	check("list ops", listed, "server_time")
 	check("listed op", first("list ops", listed, "ops"), "received_at")
-	check("devices", first("list devices", must(t, "list devices", call(t, "GET", "/v2/devices", m.access, nil), http.StatusOK), "devices"), "created_at")
+	check("devices", first("list devices", must(t, "list devices", call(t, s, "GET", "/v2/devices", m.access, nil), http.StatusOK), "devices"), "created_at")
 	id := uuid.NewString()
-	check("open pairing", must(t, "open pairing", openPairing(t, m, id, sha256Of(id)), http.StatusCreated), "expires_at")
-	check("read pairing", must(t, "read pairing", call(t, "GET", "/v2/pairings/"+id, m.access, nil), http.StatusOK), "expires_at")
-	check("listed pairing", first("list pairings", must(t, "list pairings", call(t, "GET", "/v2/pairings", m.access, nil), http.StatusOK), "pairings"), "expires_at")
-	check("create share", must(t, "create share", createShare(t, m, id, []byte("x")), http.StatusCreated), "expires_at")
-	check("read share", must(t, "read share", call(t, "GET", "/v2/shares/"+id, "", nil), http.StatusOK), "expires_at")
+	check("open pairing", must(t, "open pairing", openPairing(t, s, m, id, sha256Of(id)), http.StatusCreated), "expires_at")
+	check("read pairing", must(t, "read pairing", call(t, s, "GET", "/v2/pairings/"+id, m.access, nil), http.StatusOK), "expires_at")
+	check("listed pairing", first("list pairings", must(t, "list pairings", call(t, s, "GET", "/v2/pairings", m.access, nil), http.StatusOK), "pairings"), "expires_at")
+	check("create share", must(t, "create share", createShare(t, s, m, id, []byte("x")), http.StatusCreated), "expires_at")
+	check("read share", must(t, "read share", call(t, s, "GET", "/v2/shares/"+id, "", nil), http.StatusOK), "expires_at")
 }
