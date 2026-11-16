@@ -8,10 +8,7 @@
 
 Step 18 of `docs/plans/server-practices.md`, test isolation, since every later step follows the plan's order. Steps 1 to 17 are committed: the server serves only `/v2`, as `apps/server/api/openapi.yaml` declares it, plus the probes `/livez` and `/readyz`.
 
-Waiting on the owner, none of which blocks a step:
-
-- The deploy of the `/v2`-only server, with the extension build that calls `/v2`. The deployed image still serves `/v1`.
-- The Zitadel application's `/v1/auth/callback` redirect URI has no use after that deploy.
+The deploy of this server and the Zitadel cleanup wait on the owner: `docs/candidates.md`.
 
 How the extension reads `/v2`:
 

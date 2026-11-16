@@ -92,4 +92,6 @@ Lint rules not turned on:
 
 - Review the Korean strings in `apps/extension/locales/ko.json` and `public/_locales/ko/messages.json`. Wording and terms are the user's call.
 - P4 (sync server): whether the server gets a public name. It is tailnet-only, so a device syncs only on the tailnet, and a shared page opens only there. `GET /v2/authorizations` has no rate limit, which matters once it is public.
+- Server deploy after the `/v1` removal: the deployed image still serves `/v1`, and the extension on `main` calls only `/v2`. A deploy moves `chartRevision` and `image.tag` in `KOCEAN33/homelab-workloads` to a commit at or after `af07c76`, together with installing an extension build from the same commit.
+- After that deploy, the Zitadel application's `<PUBLIC_URL>/v1/auth/callback` redirect URI has no use.
 - P4 (sync server): in the later build where pairing starts by itself after login, what the signed-in device shows for approval. A one-tap approve trusts the server to relay the right key. Comparing the pairing code does not.
