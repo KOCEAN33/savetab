@@ -7,13 +7,12 @@ Goal: before P4 starts, the code is reviewed, lint holds the rules the review fo
 - `pnpm test:e2e:firefox` (root and `apps/extension`): builds `wxt build -b firefox --mode e2e`, then drives Firefox headless. Specs live in `apps/extension/e2e-firefox/`.
 - Firefox driver: `selenium-webdriver` with geckodriver (classic WebDriver). geckodriver runs with `--allow-system-access`, which lets WebDriver open `moz-extension://` pages. Without the flag Firefox refuses them, as it does for Playwright and puppeteer BiDi (`docs/guides/firefox-check.md`).
 - `.github/workflows/ci.yml`: on push and pull request, runs `pnpm test`, `pnpm check`, `pnpm lint`, `pnpm test:e2e`, `pnpm test:e2e:firefox`.
-- `.github/workflows/release.yml`: on tag `v<semver>`, runs the same checks, then publishes a GitHub Release with these assets:
+- `.github/workflows/release.yml`: on a push to `main`, runs the same checks, makes the version and its tag (`docs/guides/release.md`), then publishes a GitHub Release with these assets:
   - `savetab-<version>-chrome.zip`: unzip, then load unpacked from `chrome://extensions`.
   - `savetab-<version>-firefox.xpi`: signed through AMO on the unlisted channel, so release Firefox installs it from the download link. Needs repo secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`. Without them the workflow uploads the unsigned zip and says so in the release notes.
   - `savetab-<version>-sources.zip`: the source archive AMO review asks for.
   - `updates.json`: the Firefox update manifest.
 - Self-distributed Firefox builds set `browser_specific_settings.gecko.update_url` to `https://github.com/KOCEAN33/savetab/releases/latest/download/updates.json`, so an installed xpi updates itself. The build sets it only when `SAVETAB_SELF_DISTRIBUTED=1`, so the store build has none and Firefox updates a listed add-on from AMO.
-- The tag version must equal `apps/extension/package.json` `version`. The workflow fails otherwise.
 - Install and release steps: `docs/guides/release.md`. Store registration: `docs/guides/store-registration.md`, with the general part in the vault page `wiki/extension-store-publishing.md`.
 
 ## Order

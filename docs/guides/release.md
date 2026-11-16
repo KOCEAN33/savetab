@@ -1,12 +1,15 @@
 # Release
 
-A pushed tag `v<version>` runs `.github/workflows/release.yml`. It runs the CI checks, then `scripts/package-release.mjs`, then publishes a GitHub Release on `KOCEAN33/savetab`.
+A push to `main` runs `.github/workflows/release.yml`. It runs the CI checks, then python-semantic-release with `releaserc.toml`. When a commit since the last tag calls for a release, it publishes a GitHub Release on `KOCEAN33/savetab` with the assets of `scripts/package-release.mjs`, and pushes the sync server image `ghcr.io/kocean33/savetab:<version>`. The extension and the server share the version.
 
 ## Cut a release
 
-1. Set `version` in `apps/extension/package.json`. The manifest version comes from this field. Use `<major>.<minor>.<patch>` digits only, since Chrome and Firefox reject other version strings.
-2. Commit, then tag that commit `v<version>` and push the tag: `git tag v0.2.0 && git push origin v0.2.0`.
-3. The workflow fails when the tag differs from the `package.json` version. Fix the version, move the tag, and push again.
+Push Conventional Commits to `main`. No version or tag is set by hand.
+
+- The release job writes the version into `apps/extension/package.json`, which the manifest version comes from, commits it as `chore(release): <version>`, and tags that commit `v<version>`.
+- A commit typed `feat`, `fix`, `perf`, `build`, `chore`, `ci`, `docs`, `style`, `refactor`, or `test` raises the patch. A breaking commit, with `!` after its type or scope or a `BREAKING CHANGE:` footer, raises the minor. The major stays 0.
+- CI holds every commit header to those ten types with commitlint (`commitlint.config.mjs`).
+- To see the version the next push would get: `uvx --from python-semantic-release semantic-release -c releaserc.toml --noop version --print`.
 
 To build the same assets locally, run `node scripts/package-release.mjs` from the repo root. The assets land in `apps/extension/.output/release/`. Without the AMO env variables it skips signing.
 
@@ -49,7 +52,7 @@ Firefox xpi 서명에 쓰는 AMO API 자격증명을 발급해 repo secret으로
      ```
 6. 확인: `gh secret list --repo KOCEAN33/savetab` 출력에 두 이름이 보인다.
 
-secret을 넣은 뒤 처음 push하는 태그에서 AMO에 unlisted add-on `savetab@kocean33`이 만들어진다. unlisted 버전은 AMO가 자동으로 서명한다. 리뷰어가 나중에 소스 업로드와 대조해 볼 수 있다.
+secret을 넣은 뒤 처음 나는 릴리즈에서 AMO에 unlisted add-on `savetab@kocean33`이 만들어진다. unlisted 버전은 AMO가 자동으로 서명한다. 리뷰어가 나중에 소스 업로드와 대조해 볼 수 있다.
 
 secret이 유출되면 같은 페이지에서 "Revoke and regenerate credentials"로 폐기하고 5번을 다시 한다.
 
