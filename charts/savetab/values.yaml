@@ -1,4 +1,4 @@
-# <repository>:<tag>, where <tag> is the full commit sha of the savetab image
+# <repository>:<tag>, where <tag> is the version of a savetab release, such as 0.5.0
 # build. Set per environment, never `latest`.
 image:
   repository: ghcr.io/kocean33/savetab

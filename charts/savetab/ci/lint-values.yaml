@@ -1,7 +1,7 @@
 # Values for checking the chart in CI: the defaults of values.yaml plus a
 # stand-in for each value it requires.
 image:
-  tag: 0000000000000000000000000000000000000000
+  tag: 0.0.0
 host: savetab.example.com
 oidc:
   issuer: https://auth.example.com

@@ -26,7 +26,7 @@ spec:
       terminationGracePeriodSeconds: {{ add .Values.lifecycle.preStopSleepSeconds .Values.lifecycle.shutdownBudgetSeconds }}
       containers:
         - name: server
-          image: {{ .Values.image.repository }}:{{ required "image.tag is required: the commit sha of a savetab image build" .Values.image.tag }}
+          image: {{ .Values.image.repository }}:{{ required "image.tag is required: the version of a savetab release" .Values.image.tag }}
           env:
             - name: DATABASE_URL_FILE
               value: /etc/savetab/db/url
