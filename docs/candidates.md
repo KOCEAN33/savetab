@@ -75,8 +75,7 @@ Open questions for the owner about the `/v2` contract (`apps/server/api/openapi.
 - A background worker stopped between a refresh answer and the write of the new tokens leaves the device with a spent refresh token, so it must log in again.
 
 - The deployed server's Firefox redirect URI is computed as the SHA-1 of the add-on id. No login has checked it against `browser.identity.getRedirectURL()` in a real Firefox.
-- A new server image is deployed by hand: a commit in homelab-workloads sets `image.tag` and `chartRevision`. saveweb's image workflow bumps the tag itself through the `kocean33-homelab-ci` GitHub App.
-- No login has run end to end against the deployed server and Zitadel. The check so far is the 302 from `/v1/auth/start` to the issuer.
+- No login has run end to end against the deployed server and Zitadel. The check so far is the 302 from `GET /v2/authorizations` to the issuer.
 
 ## Code review findings
 
@@ -98,6 +97,5 @@ Lint rules not turned on:
 
 - Review the Korean strings in `apps/extension/locales/ko.json` and `public/_locales/ko/messages.json`. Wording and terms are the user's call.
 - P4 (sync server): whether the server gets a public name. It is tailnet-only, so a device syncs only on the tailnet, and a shared page opens only there. `GET /v2/authorizations` has no rate limit, which matters once it is public.
-- Server deploy after the `/v1` removal: the deployed image still serves `/v1`, and the extension on `main` calls only `/v2`. A deploy sets `image.tag` in `KOCEAN33/homelab-workloads` to a version from `0.5.0` on and `chartRevision` to its tag, together with installing the extension build of the same release.
-- After that deploy, the Zitadel application's `<PUBLIC_URL>/v1/auth/callback` redirect URI has no use.
+- The Zitadel application `savetab` lacks the redirect URI `https://savetab.lab.hiriri.com/v2/authorizations/callback`, so a login stops at Zitadel with "The requested redirect_uri is missing in the client configuration". Its `<PUBLIC_URL>/v1/auth/callback` URI has no use.
 - P4 (sync server): in the later build where pairing starts by itself after login, what the signed-in device shows for approval. A one-tap approve trusts the server to relay the right key. Comparing the pairing code does not.

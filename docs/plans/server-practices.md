@@ -19,7 +19,7 @@ Goal: `apps/server` meets the vault pages under `practices/backend/` and `practi
 
 ## Waiting on the owner
 
-- The chart is `charts/savetab/` in this repository, and steps 11 and 19 change it in their own commit. The values and the database ExternalSecret stay in `KOCEAN33/homelab-workloads`, where a deploy is one commit that moves `chartRevision` and `image.tag` together, as savetube's does. The deploy is the owner's.
+- The chart is `charts/savetab/` in this repository, and steps 11 and 19 change it in their own commit. The values and the database ExternalSecret stay in `KOCEAN33/homelab-workloads`, where a deploy is one commit that moves `chartRevision` and `image.tag` together, as savetube's does. The release workflow makes the deploy commit.
 
 ## Target tree
 

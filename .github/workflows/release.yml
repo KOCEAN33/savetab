@@ -133,3 +133,50 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Points homelab-workloads' prod at the release: image.tag names the image and chartRevision
+  # the chart of the same version. Argo CD rolls it out. Pushes as the kocean33-homelab-ci
+  # GitHub App, whose token is scoped here to homelab-workloads.
+  deploy:
+    needs: [release, image]
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency: deploy-prod
+    permissions: {}
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.HOMELAB_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOMELAB_APP_PRIVATE_KEY }}
+          repositories: homelab-workloads
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: KOCEAN33/homelab-workloads
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Set image.tag and chartRevision
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          BOT: ${{ steps.app.outputs.app-slug }}[bot]
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          values=savetab/envs/prod.yaml
+          appset=savetab/appset.yaml
+          sed -i -E "s/^(  tag: ).*/\1${VERSION}/" "$values"
+          sed -i -E "s/^(            chartRevision: ).*/\1v${VERSION}/" "$appset"
+          grep -q "^  tag: ${VERSION}$" "$values"
+          grep -q "^            chartRevision: v${VERSION}$" "$appset"
+          git diff --quiet && exit 0
+          git config user.name "$BOT"
+          git config user.email "$(gh api "/users/${BOT}" --jq .id)+${BOT}@users.noreply.github.com"
+          git commit -am "chore(savetab): deploy ${VERSION}"
+          # Another repo's deploy can push between our checkout and push. Rebase and retry.
+          for i in 1 2 3 4 5; do
+            git push && exit 0
+            sleep $((i * 2))
+            git pull --rebase
+          done
+          exit 1

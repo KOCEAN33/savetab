@@ -1,6 +1,6 @@
 # Release
 
-A push to `main` runs `.github/workflows/release.yml`. It runs the CI checks, then python-semantic-release with `releaserc.toml`. When a commit since the last tag calls for a release, it publishes a GitHub Release on `KOCEAN33/savetab` with the assets of `scripts/package-release.mjs`, and pushes the sync server image `ghcr.io/kocean33/savetab:<version>`. The extension and the server share the version.
+A push to `main` runs `.github/workflows/release.yml`. It runs the CI checks, then python-semantic-release with `releaserc.toml`. When a commit since the last tag calls for a release, it publishes a GitHub Release on `KOCEAN33/savetab` with the assets of `scripts/package-release.mjs`, and pushes the sync server image `ghcr.io/kocean33/savetab:<version>`, and deploys that image to the homelab (`apps/server/README.md` § Deployment). The extension and the server share the version.
 
 ## Cut a release
 
