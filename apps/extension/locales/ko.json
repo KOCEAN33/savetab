@@ -301,6 +301,8 @@
   "syncStatusOk": "마지막 동기화: {date}",
   "syncStatusNever": "아직 동기화하지 않았습니다",
   "syncStatusFailed": "{date}에 동기화가 실패했습니다. 1분마다 다시 시도합니다.",
+  "syncStatusUnreachable": "{date}에 서버에 연결하지 못했습니다. 1분마다 다시 시도합니다.",
+  "syncStatusServerError": "{date}에 서버가 오류 {status}(으)로 응답했습니다. 1분마다 다시 시도합니다.",
   "syncStatusSignedOut": "서버가 이 기기를 로그아웃시켰습니다. 여기서 로그아웃한 뒤 다시 로그인하세요.",
   "syncDevices": "기기",
   "syncThisDevice": "이 기기",

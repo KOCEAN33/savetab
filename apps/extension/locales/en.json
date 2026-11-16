@@ -301,6 +301,8 @@
   "syncStatusOk": "Last synced {date}",
   "syncStatusNever": "Not synced yet",
   "syncStatusFailed": "The last sync failed at {date}. savetab tries again every minute.",
+  "syncStatusUnreachable": "savetab could not reach the server at {date}. It tries again every minute.",
+  "syncStatusServerError": "The server answered with error {status} at {date}. savetab tries again every minute.",
   "syncStatusSignedOut": "The server signed this device out. Sign out here, then sign in again.",
   "syncDevices": "Devices",
   "syncThisDevice": "This device",

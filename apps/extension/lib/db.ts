@@ -170,10 +170,14 @@ export async function leaveSync(): Promise<void> {
   await db.meta.bulkDelete(['sync', 'syncCursor', 'syncStatus', 'snapshotSeq']);
 }
 
-/** How the last sync cycle ended. `signedOut` means the server refused this device's tokens. */
+/**
+ * How the last sync cycle ended. `signedOut` means the server refused this device's tokens, and
+ * `unreachable` that no server answered. `status` is the HTTP status of the answer that failed the cycle.
+ */
 export interface SyncStatus {
   at: number;
-  error?: 'signedOut' | 'failed';
+  error?: 'signedOut' | 'unreachable' | 'failed';
+  status?: number;
 }
 
 export async function syncStatus(): Promise<SyncStatus | undefined> {

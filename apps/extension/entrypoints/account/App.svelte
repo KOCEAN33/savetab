@@ -161,6 +161,10 @@
         {t('syncStatusNever')}
       {:else if $status.error === 'signedOut'}
         {t('syncStatusSignedOut')}
+      {:else if $status.error === 'unreachable'}
+        {t('syncStatusUnreachable', { date: time($status.at) })}
+      {:else if $status.error && $status.status}
+        {t('syncStatusServerError', { date: time($status.at), status: $status.status })}
       {:else if $status.error}
         {t('syncStatusFailed', { date: time($status.at) })}
       {:else}

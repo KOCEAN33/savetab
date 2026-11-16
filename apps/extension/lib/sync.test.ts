@@ -512,6 +512,22 @@ describe('sync status', () => {
     expect((await syncStatus())?.error).toBe('failed');
   });
 
+  it('records the status the server answered when a push is answered 500', async () => {
+    await joinSync(account);
+    await transact((tx) => storeTabs(tx, [tab('a')], settings));
+    server.pushStatus = 500;
+    await sync();
+    expect((await syncStatus())?.status).toBe(500);
+  });
+
+  it('records unreachable when no server answers', async () => {
+    await joinSync({ ...account, serverUrl: 'https://down.example' });
+    await sync();
+    const status = await syncStatus();
+    expect(status?.error).toBe('unreachable');
+    expect(status?.status).toBeUndefined();
+  });
+
   it('records nothing on a device that joined no account', async () => {
     await transact((tx) => storeTabs(tx, [tab('a')], settings));
     await sync();

@@ -224,8 +224,12 @@ export function sync(): Promise<void> {
       () => saveSyncStatus({ at: Date.now() }),
       (err: unknown) => {
         console.warn('sync failed', err);
-        const signedOut = err instanceof SyncError && err.status === 401;
-        return saveSyncStatus({ at: Date.now(), error: signedOut ? 'signedOut' : 'failed' });
+        const at = Date.now();
+        if (err instanceof SyncError) {
+          return saveSyncStatus({ at, error: err.status === 401 ? 'signedOut' : 'failed', status: err.status });
+        }
+        // fetch rejects with a TypeError when the request got no answer.
+        return saveSyncStatus({ at, error: err instanceof TypeError ? 'unreachable' : 'failed' });
       },
     )
     .finally(() => {
