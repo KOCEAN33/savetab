@@ -9,6 +9,7 @@ Push Conventional Commits to `main`. No version or tag is set by hand.
 - The release job writes the version into `apps/extension/package.json`, which the manifest version comes from, commits it as `chore(release): <version>`, and tags that commit `v<version>`.
 - A commit typed `feat`, `fix`, `perf`, `build`, `chore`, `ci`, `docs`, `style`, `refactor`, or `test` raises the patch. A breaking commit, with `!` after its type or scope or a `BREAKING CHANGE:` footer, raises the minor. The major stays 0.
 - CI holds every commit header to those ten types with commitlint (`commitlint.config.mjs`).
+- A failed `publish` job is safe to run again: AMO takes a version once, so `scripts/package-release.mjs` reads the signed xpi back from AMO when the submission fails.
 - To see the version the next push would get: `uvx --from python-semantic-release semantic-release -c releaserc.toml --noop version --print`.
 
 To build the same assets locally, run `node scripts/package-release.mjs` from the repo root. The assets land in `apps/extension/.output/release/`. Without the AMO env variables it skips signing.

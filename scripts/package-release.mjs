@@ -7,6 +7,7 @@
 //   AMO_JWT_SECRET
 //   GITHUB_OUTPUT     set by GitHub Actions, receives `dir` and `signed`
 import { execFileSync } from 'node:child_process';
+import { createHmac, randomUUID } from 'node:crypto';
 import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -50,27 +51,61 @@ run('git', ['archive', '--format=zip', `--prefix=savetab-${version}/`, '-o', ass
   cwd: root,
 });
 
+// AMO API: https://mozilla.github.io/addons-server/topics/api/auth.html
+const amoAuth = (issuer, secret) => {
+  const part = (v) => Buffer.from(JSON.stringify(v)).toString('base64url');
+  const iat = Math.floor(Date.now() / 1000);
+  const body = `${part({ alg: 'HS256', typ: 'JWT' })}.${part({ iss: issuer, jti: randomUUID(), iat, exp: iat + 60 })}`;
+  return { Authorization: `JWT ${body}.${createHmac('sha256', secret).update(body).digest('base64url')}` };
+};
+
+// The xpi of a version AMO already holds. AMO takes a version once, so a run that follows a
+// submission whose wait failed reads the signed file back.
+const SIGN_WAIT_MS = 10 * 60_000;
+const fetchSigned = async (issuer, secret, dest) => {
+  const url = `https://addons.mozilla.org/api/v5/addons/addon/${GECKO_ID}/versions/${version}/`;
+  for (const end = Date.now() + SIGN_WAIT_MS; ; ) {
+    const res = await fetch(url, { headers: amoAuth(issuer, secret) });
+    if (!res.ok) throw new Error(`AMO holds no version ${version} of ${GECKO_ID}: ${res.status}`);
+    const { file } = await res.json();
+    if (file.status === 'public') {
+      const xpi = await fetch(file.url, { headers: amoAuth(issuer, secret) });
+      if (!xpi.ok) throw new Error(`AMO refused the download of ${file.url}: ${xpi.status}`);
+      writeFileSync(dest, Buffer.from(await xpi.arrayBuffer()));
+      return;
+    }
+    if (file.status === 'disabled') throw new Error(`AMO rejected version ${version}`);
+    if (Date.now() > end) throw new Error(`AMO did not sign version ${version} within ${SIGN_WAIT_MS / 60_000} minutes`);
+    await new Promise((r) => setTimeout(r, 10_000));
+  }
+};
+
 const { AMO_JWT_ISSUER, AMO_JWT_SECRET } = process.env;
 const signed = Boolean(AMO_JWT_ISSUER && AMO_JWT_SECRET);
 if (signed) {
   const artifacts = mkdtempSync(join(tmpdir(), 'savetab-sign-'));
   // web-ext reads the credentials from env, which keeps them out of the process list.
-  run(
-    'pnpm',
-    [
-      'exec',
-      'web-ext',
-      'sign',
-      '--channel=unlisted',
-      `--source-dir=${join(outDir, 'firefox-mv3')}`,
-      `--artifacts-dir=${artifacts}`,
-      `--upload-source-code=${asset('sources.zip')}`,
-    ],
-    { cwd: ext, env: { ...process.env, WEB_EXT_API_KEY: AMO_JWT_ISSUER, WEB_EXT_API_SECRET: AMO_JWT_SECRET } },
-  );
-  const xpis = readdirSync(artifacts).filter((f) => f.endsWith('.xpi'));
-  if (xpis.length !== 1) throw new Error(`expected one signed xpi in ${artifacts}, found ${xpis.length}`);
-  copyFileSync(join(artifacts, xpis[0]), asset('firefox.xpi'));
+  try {
+    run(
+      'pnpm',
+      [
+        'exec',
+        'web-ext',
+        'sign',
+        '--channel=unlisted',
+        `--source-dir=${join(outDir, 'firefox-mv3')}`,
+        `--artifacts-dir=${artifacts}`,
+        `--upload-source-code=${asset('sources.zip')}`,
+      ],
+      { cwd: ext, env: { ...process.env, WEB_EXT_API_KEY: AMO_JWT_ISSUER, WEB_EXT_API_SECRET: AMO_JWT_SECRET } },
+    );
+    const xpis = readdirSync(artifacts).filter((f) => f.endsWith('.xpi'));
+    if (xpis.length !== 1) throw new Error(`expected one signed xpi in ${artifacts}, found ${xpis.length}`);
+    copyFileSync(join(artifacts, xpis[0]), asset('firefox.xpi'));
+  } catch (err) {
+    console.error(`web-ext sign failed (${err.message}). Reading version ${version} back from AMO.`);
+    await fetchSigned(AMO_JWT_ISSUER, AMO_JWT_SECRET, asset('firefox.xpi'));
+  }
 } else {
   copyFileSync(wxtZip('firefox'), asset('firefox.zip'));
 }
